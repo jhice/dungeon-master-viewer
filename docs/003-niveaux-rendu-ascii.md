@@ -96,7 +96,7 @@ src/
 │   └── ascii/
 │       └── ascii-renderer.js   renderLevelAscii() (fonction pure) + createAsciiRenderer() (DOM)
 ├── ui/
-│   └── level-keys.js       navigation au clavier, indépendante du renderer
+│   └── level-keys.js       navigation au clavier, indépendante du renderer (remplacé par keyboard.js en 004)
 └── main.js                 point d'entrée du navigateur
 index.html, styles/main.css
 tools/render-ascii.mjs      rendu ASCII en ligne de commande (réutilise src/)

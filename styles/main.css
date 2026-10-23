@@ -46,15 +46,43 @@ body {
   overflow: auto;
 }
 
+.status {
+  padding: 0.4rem 1rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-bottom: 1px solid #222;
+}
+
+/* Wide ASCII: 2 characters (about 1.2em) per tile, rows as tall as --cell. */
 .ascii-view {
   margin: 0;
   font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
-  font-size: 14px;
-  line-height: 1;
+  font-size: calc(var(--cell, 16px) / 1.2);
+  line-height: var(--cell, 16px);
 }
 
 .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
   padding: 0 1rem 1rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  --cell: 18px;
+  display: inline-block;
+  width: var(--cell);
+  height: var(--cell);
+}
+
+.legend-ascii {
   font-family: ui-monospace, monospace;
-  white-space: pre;
+  color: var(--fg);
 }
