@@ -18,6 +18,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - les 14 niveaux/maps
 - un rendu ASCII des 14 niveaux
   - utiliser l'offset de chaque niveau : certains "pits" ou "stairs" doivent se superposer correctement
+  - important : dans un premier temps ne rendre que les types de tuiles (wall, teleporter, door, etc.), pas leur contenu.
 - idéalement, le moteur de rendu est interchangeable
   - ASCII
   - 2D (sprites)

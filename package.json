@@ -1,0 +1,8 @@
+{
+  "name": "dm-clone",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:data": "node tools/build-dungeon.mjs"
+  }
+}
