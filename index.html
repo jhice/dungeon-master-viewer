@@ -6,12 +6,21 @@
     <title>Dungeon Master Viewer</title>
     <link rel="stylesheet" href="styles/main.css" />
     <link rel="stylesheet" href="styles/tiles-2d.css" />
+    <!-- Three.js is only loaded when the 3D renderer is selected. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
   </head>
   <body>
     <header class="toolbar">
       <h1>Dungeon Master</h1>
       <span id="level-label" class="level-label"></span>
-      <span class="hint">↑/↓ niveau · Début/Fin · R renderer · G repère · +/− zoom · 0 ajuster</span>
+      <span id="hint" class="hint"></span>
     </header>
     <div id="status" class="status">&nbsp;</div>
     <main id="view"></main>

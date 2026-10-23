@@ -1,10 +1,12 @@
 // Keyboard shortcuts, independent of the active renderer.
-// `bindings` maps a KeyboardEvent.key to an action; returns an unbind function.
+// `bindings` is either a map KeyboardEvent.key -> action, or a function
+// key -> action|undefined (to resolve keys dynamically). Returns an unbind function.
 
 export function bindKeys(bindings) {
+  const resolve = typeof bindings === 'function' ? bindings : (key) => bindings[key];
   const onKey = (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const action = bindings[event.key];
+    const action = resolve(event.key);
     if (!action) return;
     event.preventDefault();
     action(event);

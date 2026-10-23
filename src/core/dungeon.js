@@ -6,6 +6,9 @@
 
 import { tileTypeOfChar } from './tile-types.js';
 
+// North is towards y - 1 (rows grow southwards).
+export const SIDE_DELTAS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+
 export class Dungeon {
   constructor(data) {
     this.data = data;
@@ -36,6 +39,20 @@ export class Dungeon {
   globalTileAt(levelIndex, gx, gy) {
     const map = this.levels[levelIndex];
     return map ? this.tileAt(levelIndex, gx - map.offset.x, gy - map.offset.y) : null;
+  }
+
+  /**
+   * Side ('N'|'E'|'S'|'W') from which a stairs tile is entered: the walkable
+   * neighbour on its passage axis. Null if none (2 stairs in DM).
+   */
+  accessSide(levelIndex, x, y) {
+    const tile = this.tileAt(levelIndex, x, y);
+    const sides = tile?.detail?.orientation === 'WE' ? ['W', 'E'] : ['N', 'S'];
+    return sides.find((side) => {
+      const [dx, dy] = SIDE_DELTAS[side];
+      const neighbour = this.tileAt(levelIndex, x + dx, y + dy);
+      return neighbour && !tileTypeOfChar(neighbour.char).solid;
+    }) ?? null;
   }
 
   /** Iterates the non-trivial tiles of a level (anything listed in `tiles`), with global coordinates. */
