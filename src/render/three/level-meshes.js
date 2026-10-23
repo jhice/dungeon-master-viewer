@@ -101,21 +101,24 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center) {
   return { group, meshes };
 }
 
-// Stairs model: STEPS boxes along +z. Up stairs rise from the floor; down stairs
-// sink below it. Both start at the access side (z = -0.5 before rotation).
+// Stairs model: STEPS boxes along +z, starting at the access side (z = -0.5 before rotation).
+// Up stairs: step tops rise from the floor, boxes stand on the floor (y = 0).
+// Down stairs: step tops sink below the floor, boxes share a base at y = -WALL_HEIGHT,
+// so the walking surface (seen from above) goes down.
 function addStairs(add, info, px, pz, accessSide) {
   const goingUp = info.detail.direction === 'up';
   const rotation = STAIRS_ROTATION[accessSide ?? (info.detail.orientation === 'WE' ? 'W' : 'N')];
   const sin = Math.sin(rotation);
   const cos = Math.cos(rotation);
+  const stepHeight = WALL_HEIGHT / (STEPS + 1);
   for (let i = 0; i < STEPS; i++) {
-    const height = (WALL_HEIGHT * (i + 1)) / (STEPS + 1);
+    const top = goingUp ? (i + 1) * stepHeight : -(i + 1) * stepHeight;
+    const bottom = goingUp ? 0 : -WALL_HEIGHT;
     const localZ = -0.5 + (i + 0.5) / STEPS;
     // Rotate the step offset (0, localZ) around y.
     const dx = localZ * sin;
     const dz = localZ * cos;
-    const yCenter = goingUp ? height / 2 : -height / 2;
-    add(goingUp ? 'stepUp' : 'stepDown', info, [px + dx, yCenter, pz + dz], [1, height, 1], rotation);
+    add(goingUp ? 'stepUp' : 'stepDown', info, [px + dx, (top + bottom) / 2, pz + dz], [1, top - bottom, 1], rotation);
   }
 }
 

@@ -96,13 +96,20 @@ Correctif après retour utilisateur : **le panoramique (clic droit) partait d'un
   et chaque image le tirait en arrière.
 - **Correction :** le glissement n'est actif que pendant une transition de niveau. `targetGoal` vaut `null` le reste du temps ;
   il s'arrête à l'arrivée, sur `resetView()`, et dès que l'utilisateur agit sur la caméra (événement `start` d'OrbitControls).
-- **Vérification :** le panoramique n'a pas pu être simulé dans le navigateur de test (ni clic droit ni Maj + glisser),
-  il reste à confirmer à la main.
+- **Vérification :** le panoramique n'a pas pu être simulé dans le navigateur de test (ni clic droit ni Maj + glisser).
+  L'utilisateur l'a confirmé à la main.
+
+Correctif après retour utilisateur : **le maillage de l'escalier descendant était inversé.** On voyait sa base par-dessus
+et ses marches par-dessous.
+
+- **Cause :** les 3 marches avaient leur dessus au niveau du sol (y = 0) et seule leur hauteur variait vers le bas.
+  La surface vue de dessus était donc plate, et le profil en escalier n'apparaissait que par en dessous.
+- **Correction :** les dessus des marches descendent (−0,2, −0,4, −0,6) et toutes les marches partagent une base
+  à `y = −WALL_HEIGHT`. C'est le miroir exact de l'escalier montant, qui pose ses marches sur le sol.
+  Vérifié dans Chrome : vu de dessus, l'escalier du niveau 0 en (3,15) montre des marches qui s'enfoncent.
 
 Limites constatées :
 
-- **Escaliers descendants :** ils sont creusés sous le sol, donc peu lisibles en vue plongeante (on voit surtout une case claire
-  traversée par le lien doré). Piste d'amélioration : les dessiner en relief avec une flèche, ou ouvrir le sol autour.
 - **Mode `all` :** les niveaux opaques se masquent mutuellement vus de dessus. C'est voulu, ce mode est fait pour les vues de biais ou de profil.
 
 ## 5. Suite possible
