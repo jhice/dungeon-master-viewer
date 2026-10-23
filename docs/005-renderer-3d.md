@@ -89,6 +89,16 @@ src/render/three/
 - ↓ vers le niveau 1 : la caméra glisse et les trappes du niveau 1 montrent leurs liens rouges vers le niveau 2.
 - Survol : « niveau 7 · (6, 29) local · [26, 40] global · wall ».
 
+Correctif après retour utilisateur : **le panoramique (clic droit) partait d'un côté puis revenait.**
+
+- **Cause :** la boucle de rendu ramenait en permanence `controls.target` vers le centre du niveau courant
+  (l'effet de glissement entre niveaux). Or le panoramique d'OrbitControls déplace justement `controls.target`,
+  et chaque image le tirait en arrière.
+- **Correction :** le glissement n'est actif que pendant une transition de niveau. `targetGoal` vaut `null` le reste du temps ;
+  il s'arrête à l'arrivée, sur `resetView()`, et dès que l'utilisateur agit sur la caméra (événement `start` d'OrbitControls).
+- **Vérification :** le panoramique n'a pas pu être simulé dans le navigateur de test (ni clic droit ni Maj + glisser),
+  il reste à confirmer à la main.
+
 Limites constatées :
 
 - **Escaliers descendants :** ils sont creusés sous le sol, donc peu lisibles en vue plongeante (on voit surtout une case claire

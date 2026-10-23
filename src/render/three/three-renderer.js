@@ -74,7 +74,13 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
   // --- State ------------------------------------------------------------------
   let currentLevel = 0;
   let mode = 'focus';
-  const targetGoal = new THREE.Vector3();
+  // Destination of the glide towards a newly focused level; null when no glide is running,
+  // so the user's own pan (which moves controls.target) is never pulled back.
+  let targetGoal = null;
+  const stopGlide = () => {
+    targetGoal = null;
+  };
+  controls.addEventListener('start', stopGlide);
 
   function applyDisplayMode() {
     levels.forEach(({ group, meshes }, i) => {
@@ -99,7 +105,7 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
     const m = dungeon.level(currentLevel);
     const span = Math.max(m.width, m.height);
     controls.target.copy(target);
-    targetGoal.copy(target);
+    stopGlide();
     camera.position.set(target.x, target.y + span * 1.1, target.z + span * 1.0);
     controls.update();
   }
@@ -119,10 +125,13 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
   const loop = () => {
     frame = requestAnimationFrame(loop);
     // Glide towards the focused level: move target and camera by the same delta.
-    const delta = targetGoal.clone().sub(controls.target).multiplyScalar(0.15);
-    if (delta.lengthSq() > 1e-6) {
+    if (targetGoal) {
+      const remaining = targetGoal.clone().sub(controls.target);
+      // Snap and stop once close enough, otherwise move 15 % of the remaining distance.
+      const delta = remaining.lengthSq() < 1e-4 ? remaining : remaining.multiplyScalar(0.15);
       controls.target.add(delta);
       camera.position.add(delta);
+      if (delta === remaining) stopGlide();
     }
     controls.update();
     renderer.render(scene, camera);
@@ -161,7 +170,7 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
     },
     showLevel(level) {
       currentLevel = level;
-      targetGoal.copy(levelCenter(level));
+      targetGoal = levelCenter(level);
       applyDisplayMode();
     },
     zoom(step) {
@@ -188,6 +197,7 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      controls.removeEventListener('start', stopGlide);
       controls.dispose();
       for (const { meshes } of levels) disposeLevelMeshes(meshes);
       for (const lines of linesByLevel.values()) {
