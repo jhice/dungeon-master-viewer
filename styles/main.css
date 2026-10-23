@@ -1,0 +1,60 @@
+:root {
+  --bg: #111;
+  --fg: #d8d0b8;
+  --muted: #8a826e;
+  --accent: #e0b050;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.level-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.hint,
+.legend {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+#view {
+  padding: 1rem;
+  overflow: auto;
+}
+
+.ascii-view {
+  margin: 0;
+  font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.legend {
+  padding: 0 1rem 1rem;
+  font-family: ui-monospace, monospace;
+  white-space: pre;
+}
