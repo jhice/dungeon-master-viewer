@@ -13,10 +13,12 @@
 import * as THREE from 'three';
 import { tileState } from '../../core/tile-states.js';
 
-export const WALL_HEIGHT = 0.8;
+// Wall height is a setting (fraction of a tile, 1 = cube); doors and
+// teleporters are 90 % of it, stairs span it.
+export const DEFAULT_WALL_HEIGHT = 0.7;
 const FLOOR_THICKNESS = 0.05;
 const STEPS = 3;
-const DOOR_HEIGHT = WALL_HEIGHT * 0.9;
+const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight * 0.9 });
 // Part of the leaf still visible when an open door is raised into the lintel.
 const RAISED_DOOR_VISIBLE = 0.25;
 const HIDDEN_OPACITY = 0.4; // invisible pits, imaginary walls: faded but visible
@@ -28,21 +30,21 @@ const STAIRS_ROTATION = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 };
  * Part definitions: geometry, colour key in the theme, and a function that
  * pushes instance matrices for a tile.
  */
-function partDefinitions(theme) {
+function partDefinitions(theme, h) {
   return {
-    wall: { geometry: new THREE.BoxGeometry(1, WALL_HEIGHT, 1), color: theme.wall },
-    fakewall: { geometry: new THREE.BoxGeometry(1, WALL_HEIGHT, 1), color: theme.fakewall },
+    wall: { geometry: new THREE.BoxGeometry(1, h.wall, 1), color: theme.wall },
+    fakewall: { geometry: new THREE.BoxGeometry(1, h.wall, 1), color: theme.fakewall },
     floor: { geometry: new THREE.BoxGeometry(1, FLOOR_THICKNESS, 1), color: theme.floor },
-    fakewallImaginary: { geometry: new THREE.BoxGeometry(1, WALL_HEIGHT, 1), color: theme.fakewall, opacity: HIDDEN_OPACITY },
+    fakewallImaginary: { geometry: new THREE.BoxGeometry(1, h.wall, 1), color: theme.fakewall, opacity: HIDDEN_OPACITY },
     pit: { geometry: new THREE.CylinderGeometry(0.38, 0.38, 0.02, 24), color: theme.pit },
     pitHidden: { geometry: new THREE.CylinderGeometry(0.38, 0.38, 0.02, 24), color: theme.pit, opacity: HIDDEN_OPACITY },
     pitLid: { geometry: new THREE.CylinderGeometry(0.38, 0.38, 0.02, 24), color: theme.pitLid },
     pitLidHidden: { geometry: new THREE.CylinderGeometry(0.38, 0.38, 0.02, 24), color: theme.pitLid, opacity: HIDDEN_OPACITY },
     stepUp: { geometry: new THREE.BoxGeometry(1, 1, 1 / STEPS), color: theme.stairsUp },
     stepDown: { geometry: new THREE.BoxGeometry(1, 1, 1 / STEPS), color: theme.stairsDown },
-    door: { geometry: new THREE.BoxGeometry(1, DOOR_HEIGHT, 0.12), color: theme.door },
+    door: { geometry: new THREE.BoxGeometry(1, h.door, 0.12), color: theme.door },
     teleporter: {
-      geometry: new THREE.BoxGeometry(0.7, DOOR_HEIGHT, 0.7),
+      geometry: new THREE.BoxGeometry(0.7, h.door, 0.7),
       color: theme.teleporter,
       emissive: true,
       opacity: 0.45,
@@ -55,9 +57,10 @@ function partDefinitions(theme) {
  * Each mesh has userData.part, userData.variant, userData.baseOpacity and, for
  * instanced meshes, userData.tiles[instanceId] = tile info (for hovering).
  */
-export function buildLevelMeshes(dungeon, levelIndex, theme, center) {
+export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeight = DEFAULT_WALL_HEIGHT } = {}) {
   const map = dungeon.level(levelIndex);
-  const parts = partDefinitions(theme);
+  const h = dimensions(wallHeight);
+  const parts = partDefinitions(theme, h);
   const instances = new Map(); // "part:variant" -> [{ matrix, info }]
   const openWallCenters = []; // vanished fake walls, drawn as wireframe outlines
   const m4 = new THREE.Matrix4();
@@ -87,21 +90,21 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center) {
       const pz = gy + 0.5 - center.z;
 
       if (tile.type === 'wall') {
-        add('wall', info, [px, WALL_HEIGHT / 2, pz]);
+        add('wall', info, [px, h.wall / 2, pz]);
         continue;
       }
       if (tile.type === 'fakewall') {
-        addFakewall(add, addVariants, openWallCenters, info, px, pz);
+        addFakewall(add, openWallCenters, info, px, pz, h);
         continue;
       }
       if (tile.type === 'stairs') {
-        addStairs(add, info, px, pz, dungeon.accessSide(levelIndex, x, y));
+        addStairs(add, info, px, pz, dungeon.accessSide(levelIndex, x, y), h);
         continue;
       }
       add('floor', info, [px, -FLOOR_THICKNESS / 2, pz]);
       if (tile.type === 'pit') addVariants('pit', pitPart(tile.detail), info, [px, 0.011, pz]);
-      if (tile.type === 'teleporter') add('teleporter', info, [px, DOOR_HEIGHT / 2, pz]);
-      if (tile.type === 'door') addDoor(add, info, px, pz);
+      if (tile.type === 'teleporter') add('teleporter', info, [px, h.door / 2, pz]);
+      if (tile.type === 'door') addDoor(add, info, px, pz, h);
     }
   }
 
@@ -126,7 +129,7 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center) {
     meshes.push(mesh);
   }
   if (openWallCenters.length) {
-    const outlines = buildOutlines(openWallCenters, theme.fakewall);
+    const outlines = buildOutlines(openWallCenters, theme.fakewall, h);
     outlines.name = `${group.name}-fakewallOpen-states`;
     group.add(outlines);
     meshes.push(outlines);
@@ -146,31 +149,31 @@ function pitPart(detail) {
 // With states, an open door is raised like a portcullis: only its lower edge stays
 // in the doorway, the rest sticks out above the walls (there is no ceiling), so it
 // can be told apart from a closed door at any camera angle but straight down.
-function addDoor(add, info, px, pz) {
+function addDoor(add, info, px, pz, h) {
   const rotation = info.detail.orientation === 'NS' ? 0 : Math.PI / 2;
-  const closed = [px, DOOR_HEIGHT / 2, pz];
+  const closed = [px, h.door / 2, pz];
   if (!info.detail.open) return add('door', info, closed, [1, 1, 1], rotation, 'all');
   add('door', info, closed, [1, 1, 1], rotation, 'types');
-  const bottom = WALL_HEIGHT - DOOR_HEIGHT * RAISED_DOOR_VISIBLE;
-  add('door', info, [px, bottom + DOOR_HEIGHT / 2, pz], [1, 1, 1], rotation, 'states');
+  const bottom = h.wall - h.door * RAISED_DOOR_VISIBLE;
+  add('door', info, [px, bottom + h.door / 2, pz], [1, 1, 1], rotation, 'states');
 }
 
 // Fake wall: a block (types only). With states: block if closed, faded block if
 // imaginary (passable illusion), wireframe outline if open (vanished). The last
 // two stand on a floor slab.
-function addFakewall(add, addVariants, openWallCenters, info, px, pz) {
+function addFakewall(add, openWallCenters, info, px, pz, h) {
   const { open, imaginary } = tileState('fakewall', info.detail);
-  const block = [px, WALL_HEIGHT / 2, pz];
+  const block = [px, h.wall / 2, pz];
   if (!open && !imaginary) return add('fakewall', info, block, [1, 1, 1], 0, 'all');
   add('fakewall', info, block, [1, 1, 1], 0, 'types');
   add('floor', info, [px, -FLOOR_THICKNESS / 2, pz], [1, 1, 1], 0, 'states');
-  if (open) openWallCenters.push([px, WALL_HEIGHT / 2, pz]);
+  if (open) openWallCenters.push([px, h.wall / 2, pz]);
   else add('fakewallImaginary', info, block, [1, 1, 1], 0, 'states');
 }
 
 // Edges of unit wall boxes centred on `centers`, merged into one LineSegments.
-function buildOutlines(centers, color) {
-  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, WALL_HEIGHT, 1));
+function buildOutlines(centers, color, h) {
+  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, h.wall, 1));
   const src = edges.attributes.position.array;
   const positions = new Float32Array(src.length * centers.length);
   centers.forEach(([cx, cy, cz], k) => {
@@ -190,17 +193,17 @@ function buildOutlines(centers, color) {
 
 // Stairs model: STEPS boxes along +z, starting at the access side (z = -0.5 before rotation).
 // Up stairs: step tops rise from the floor, boxes stand on the floor (y = 0).
-// Down stairs: step tops sink below the floor, boxes share a base at y = -WALL_HEIGHT,
+// Down stairs: step tops sink below the floor, boxes share a base at y = -wall height,
 // so the walking surface (seen from above) goes down.
-function addStairs(add, info, px, pz, accessSide) {
+function addStairs(add, info, px, pz, accessSide, h) {
   const goingUp = info.detail.direction === 'up';
   const rotation = STAIRS_ROTATION[accessSide ?? (info.detail.orientation === 'WE' ? 'W' : 'N')];
   const sin = Math.sin(rotation);
   const cos = Math.cos(rotation);
-  const stepHeight = WALL_HEIGHT / (STEPS + 1);
+  const stepHeight = h.wall / (STEPS + 1);
   for (let i = 0; i < STEPS; i++) {
     const top = goingUp ? (i + 1) * stepHeight : -(i + 1) * stepHeight;
-    const bottom = goingUp ? 0 : -WALL_HEIGHT;
+    const bottom = goingUp ? 0 : -h.wall;
     const localZ = -0.5 + (i + 0.5) / STEPS;
     // Rotate the step offset (0, localZ) around y.
     const dx = localZ * sin;

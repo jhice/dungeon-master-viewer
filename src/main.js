@@ -4,6 +4,7 @@ import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
 import { renderLegend } from './ui/legend.js';
+import { createControlPanel } from './ui/control-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
@@ -20,6 +21,7 @@ const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · S états';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
+const viewWrap = document.getElementById('view-wrap'); // holds the view and the control panel
 const view = document.getElementById('view');
 const label = document.getElementById('level-label');
 const hint = document.getElementById('hint');
@@ -27,17 +29,20 @@ const status = document.getElementById('status');
 const legend = document.getElementById('legend');
 
 const dungeon = await loadDungeon('./data/dungeon.json');
-const prefs = loadPreferences({ renderer: 'dom', level: 0, frame: 'global', cell: null, showStates: true });
+const prefs = loadPreferences({ renderer: 'dom', level: 0, frame: 'global', cell: null, showStates: true, panelOpen: true });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
 
 let renderer = null;
 let mounting = null; // pending async creation, to ignore keys meanwhile
+let panel = null; // control panel, rebuilt for each renderer
 
 async function mountRenderer() {
   const level = renderer?.currentLevel ?? prefs.level;
   renderer?.dispose();
   renderer = null;
+  panel?.dispose();
+  panel = null;
   const id = prefs.renderer;
   view.dataset.renderer = id;
   status.textContent = `Chargement du renderer ${RENDERERS[id].label}…`;
@@ -46,8 +51,10 @@ async function mountRenderer() {
       return await RENDERERS[id].create(view, dungeon, {
         frame: prefs.frame,
         showStates: prefs.showStates,
+        settings: prefs.settings?.[id],
         onHover: showHover,
         onInfo: showInfo,
+        onRequestLevel: showLevel,
       });
     } catch (error) {
       console.error(error);
@@ -66,6 +73,13 @@ async function mountRenderer() {
     return;
   }
   renderer = created;
+  panel = createControlPanel(viewWrap, panelSchema(), panelValues(), onPanelChange, {
+    open: prefs.panelOpen,
+    onToggle: (open) => {
+      prefs.panelOpen = open;
+      savePreferences(prefs);
+    },
+  });
   renderLegend(legend, id === 'ascii' ? 'ascii' : 'dom', { showStates: prefs.showStates });
   hint.textContent = renderer.keyHint ? `${BASE_HINT} · ${renderer.keyHint}` : `${BASE_HINT} · G repère · +/− zoom · 0 ajuster`;
   showLevel(level);
@@ -82,6 +96,7 @@ function showLevel(level) {
     `Niveau ${level} / ${dungeon.levelCount - 1} — ${m.width}×${m.height}, offset (${m.offset.x}, ${m.offset.y})` +
     ` — ${RENDERERS[prefs.renderer].label}${frameLabel}`;
   showHover(null);
+  panel?.refresh();
 }
 
 function showHover(info) {
@@ -132,20 +147,67 @@ function nextRenderer() {
   mountRenderer();
 }
 
-function toggleStates() {
-  // ASCII renders types only: the key does nothing there.
+function setShowStates(enabled) {
+  // ASCII renders types only: no states there.
   if (!renderer.setShowStates) return;
-  prefs.showStates = !prefs.showStates;
+  prefs.showStates = enabled;
   savePreferences(prefs);
-  renderer.setShowStates(prefs.showStates);
-  renderLegend(legend, prefs.renderer, { showStates: prefs.showStates });
-  showInfo(`États des tuiles : ${prefs.showStates ? 'affichés' : 'masqués'}`);
+  renderer.setShowStates(enabled);
+  renderLegend(legend, prefs.renderer, { showStates: enabled });
+  panel?.setValues({ showStates: enabled });
+  showInfo(`États des tuiles : ${enabled ? 'affichés' : 'masqués'}`);
 }
 
-function toggleFrame() {
+// Settings of the active renderer, saved per renderer id (prefs.settings.three…).
+function changeSettings(changes) {
+  if (!renderer?.applySettings) return;
+  renderer.applySettings(changes);
+  prefs.settings = { ...prefs.settings, [prefs.renderer]: renderer.settings };
+  savePreferences(prefs);
+  panel?.setValues(changes);
+}
+
+function setFrame(global) {
   if (RENDERERS[prefs.renderer].frameless) return;
-  prefs.frame = prefs.frame === 'global' ? 'local' : 'global';
-  mountRenderer();
+  prefs.frame = global ? 'global' : 'local';
+  mountRenderer(); // the panel is rebuilt with the new value
+}
+
+// --- Control panel -------------------------------------------------------------
+// Common controls first, then the renderer's own settings.
+function panelSchema() {
+  const schema = [
+    {
+      type: 'buttons',
+      items: [
+        { label: '▲ Haut', title: 'Niveau précédent (↑)', action: () => go(-1), disabled: () => renderer.currentLevel === 0 },
+        { label: '▼ Bas', title: 'Niveau suivant (↓)', action: () => go(+1), disabled: () => renderer.currentLevel === dungeon.levelCount - 1 },
+      ],
+    },
+  ];
+  if (renderer.setShowStates) schema.push({ type: 'checkbox', key: 'showStates', label: 'États des tuiles', shortcut: 'S' });
+  if (!RENDERERS[prefs.renderer].frameless) schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
+  return [...schema, ...(renderer.settingsSchema ?? [])];
+}
+
+const panelValues = () => ({ showStates: prefs.showStates, frameGlobal: prefs.frame === 'global', ...renderer.settings });
+
+function onPanelChange(changes) {
+  const { showStates, frameGlobal, ...settings } = changes;
+  if (showStates !== undefined) setShowStates(showStates);
+  if (frameGlobal !== undefined) setFrame(frameGlobal);
+  if (Object.keys(settings).length) changeSettings(settings);
+}
+
+// Key -> toggle of a renderer checkbox setting declaring that shortcut (L, E in 3D).
+function settingShortcut(key) {
+  const field = renderer.settingsSchema?.find((f) => f.type === 'checkbox' && f.shortcut?.toLowerCase() === key);
+  if (!field) return undefined;
+  return () => {
+    const enabled = !renderer.settings[field.key];
+    changeSettings({ [field.key]: enabled });
+    showInfo(`${field.label} : ${enabled ? 'oui' : 'non'}`);
+  };
 }
 
 const GLOBAL_KEYS = {
@@ -156,8 +218,8 @@ const GLOBAL_KEYS = {
   Home: () => showLevel(0),
   End: () => showLevel(dungeon.levelCount - 1),
   r: nextRenderer,
-  g: toggleFrame,
-  s: toggleStates,
+  g: () => setFrame(prefs.frame !== 'global'),
+  s: () => setShowStates(!prefs.showStates),
   '+': () => zoom(+1),
   '=': () => zoom(+1),
   '-': () => zoom(-1),
@@ -167,7 +229,7 @@ const GLOBAL_KEYS = {
 bindKeys((key) => {
   if (mounting || !renderer) return undefined;
   const k = key.length === 1 ? key.toLowerCase() : key;
-  return renderer.keys?.[k] ?? GLOBAL_KEYS[k];
+  return renderer.keys?.[k] ?? settingShortcut(k) ?? GLOBAL_KEYS[k];
 });
 window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell === null && setCell(null));
 

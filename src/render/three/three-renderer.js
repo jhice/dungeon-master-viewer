@@ -1,15 +1,27 @@
 // 3D renderer: the 14 levels stacked at their global offsets, orbit camera.
 // Same contract as the other renderers (src/render/renderer.js), plus optional
-// zoom(step), resetView() and per-renderer key actions (`keys`, `keyHint`).
+// zoom(step), resetView(), per-renderer key actions (`keys`, `keyHint`) and
+// settings (`settingsSchema`, `settings`, `applySettings()`).
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { assertRenderer } from '../renderer.js';
 import { findConnections } from '../../core/connections.js';
-import { buildLevelMeshes, disposeLevelMeshes, WALL_HEIGHT } from './level-meshes.js';
+import { buildLevelMeshes, disposeLevelMeshes, DEFAULT_WALL_HEIGHT } from './level-meshes.js';
 import { readTheme } from './theme.js';
 
-const LEVEL_GAP = 3; // vertical distance between two level floors
+export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, links: true, labels: true };
+
+// Shown in the control panel; checkboxes with a `shortcut` are toggled by that key (main.js).
+const SETTINGS_SCHEMA = [
+  { key: 'links', label: 'Liens escaliers / trappes', type: 'checkbox', shortcut: 'L' },
+  { key: 'labels', label: 'Étiquettes de niveau', type: 'checkbox', shortcut: 'E' },
+  { key: 'levelGap', label: 'Espacement des niveaux', type: 'range', min: 1.5, max: 10, step: 0.5, format: (v) => v.toFixed(1) },
+  // 1 = a full cube; the original game is a corridor of tall walls.
+  { key: 'wallHeight', label: 'Hauteur des murs', type: 'range', min: 0.1, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)} %` },
+];
+
 const FADED_OPACITY = 0.12;
 // How non-focused levels are shown.
 const DISPLAY_MODES = ['focus', 'all', 'solo'];
@@ -20,14 +32,17 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
  * @param {object} [options]
  * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
+ * @param {object} [options.settings] { levelGap, wallHeight, links, labels }, see DEFAULT_SETTINGS
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
+ * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
  */
-export function createThreeRenderer(container, dungeon, { showStates = true, onHover, onInfo } = {}) {
+export function createThreeRenderer(container, dungeon, { showStates = true, settings: initial, onHover, onInfo, onRequestLevel } = {}) {
+  const settings = { ...DEFAULT_SETTINGS, ...initial };
   const theme = readTheme();
   const b = dungeon.bounds;
   const center = { x: (b.minX + b.maxX) / 2, z: (b.minY + b.maxY) / 2 };
-  const levelY = (level) => -level * LEVEL_GAP;
+  const levelY = (level) => -level * settings.levelGap;
   // Scene-space centre of a level's own rectangle (where the camera aims).
   const levelCenter = (level) => {
     const m = dungeon.level(level);
@@ -43,6 +58,11 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   canvasHost.append(renderer.domElement);
 
+  // HTML overlay for the level labels (crisp text, CSS-styled, clickable).
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.domElement.className = 'three-labels';
+  canvasHost.append(labelRenderer.domElement);
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.frame);
   scene.add(new THREE.HemisphereLight(0xfff4e0, 0x202030, 1.1));
@@ -56,21 +76,60 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
   controls.minDistance = 5;
   controls.maxDistance = 250;
 
-  // --- Levels -----------------------------------------------------------------
-  const levels = [];
-  for (let i = 0; i < dungeon.levelCount; i++) {
-    const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center);
-    group.position.y = levelY(i);
-    scene.add(group);
-    levels.push({ group, meshes });
+  // --- Levels, links, labels ------------------------------------------------------
+  // Levels are rebuilt when the wall height changes; only moved when the gap changes.
+  let levels = [];
+  function buildLevels() {
+    for (const { group, meshes } of levels) {
+      scene.remove(group);
+      disposeLevelMeshes(meshes);
+    }
+    levels = [];
+    for (let i = 0; i < dungeon.levelCount; i++) {
+      const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center, { wallHeight: settings.wallHeight });
+      scene.add(group);
+      levels.push({ group, meshes });
+    }
   }
 
   // One LineSegments per departure level, so solo mode can keep only the links of the shown level.
   const links = new THREE.Group();
   links.name = 'connections';
-  const linesByLevel = buildConnectionLines(dungeon, center, levelY);
-  for (const lines of linesByLevel.values()) links.add(lines);
   scene.add(links);
+  let linesByLevel = new Map();
+  function buildLinks() {
+    for (const lines of linesByLevel.values()) {
+      links.remove(lines);
+      lines.geometry.dispose();
+      lines.material.dispose();
+    }
+    linesByLevel = buildConnectionLines(dungeon, center, levelY, settings.wallHeight);
+    for (const lines of linesByLevel.values()) links.add(lines);
+  }
+
+  // One label per level, at the north-west corner of its rectangle, above the walls.
+  const labels = Array.from({ length: dungeon.levelCount }, (_, i) => {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.className = 'level-tag';
+    element.textContent = `Niveau ${i}`;
+    element.title = `Aller au niveau ${i}`;
+    element.addEventListener('pointerdown', (event) => event.stopPropagation());
+    element.addEventListener('click', () => onRequestLevel?.(i));
+    const object = new CSS2DObject(element);
+    object.center.set(0, 1); // anchor: bottom-left of the label
+    scene.add(object);
+    return object;
+  });
+
+  function layoutLevels() {
+    levels.forEach(({ group }, i) => {
+      group.position.y = levelY(i);
+      const m = dungeon.level(i);
+      labels[i].position.set(m.offset.x - center.x, levelY(i) + settings.wallHeight + 0.2, m.offset.y - center.z);
+    });
+    buildLinks();
+  }
 
   // --- State ------------------------------------------------------------------
   let currentLevel = 0;
@@ -84,12 +143,16 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
   controls.addEventListener('start', stopGlide);
 
   function applyDisplayMode() {
+    links.visible = settings.links;
     levels.forEach(({ group, meshes }, i) => {
       const focused = i === currentLevel;
       group.visible = mode !== 'solo' || focused;
       // In solo mode, keep the links leaving this level and those arriving on it.
       const lines = linesByLevel.get(i);
       if (lines) lines.visible = mode !== 'solo' || i === currentLevel || i === currentLevel - 1;
+      labels[i].visible = settings.labels && group.visible;
+      labels[i].element.classList.toggle('is-current', focused);
+      labels[i].element.classList.toggle('is-faded', mode === 'focus' && !focused);
       for (const mesh of meshes) {
         // Meshes specific to the types-only or the with-states rendering (see level-meshes.js).
         const { variant } = mesh.userData;
@@ -114,11 +177,28 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
     controls.update();
   }
 
+  /** Applies a partial settings change, rebuilding only what depends on it. */
+  function applySettings(changes) {
+    const previousY = levelY(currentLevel);
+    Object.assign(settings, changes);
+    if ('wallHeight' in changes) buildLevels();
+    if ('wallHeight' in changes || 'levelGap' in changes) {
+      layoutLevels();
+      // Keep the camera on the current level: shift it with the level.
+      const shift = new THREE.Vector3(0, levelY(currentLevel) - previousY, 0);
+      controls.target.add(shift);
+      camera.position.add(shift);
+      if (targetGoal) targetGoal.add(shift);
+    }
+    applyDisplayMode();
+  }
+
   // --- Resize & render loop -----------------------------------------------------
   function resize() {
     const { clientWidth: w, clientHeight: h } = canvasHost;
     if (!w || !h) return;
     renderer.setSize(w, h, false);
+    labelRenderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
@@ -139,6 +219,7 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
     }
     controls.update();
     renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
   };
 
   // --- Hover (raycasting on instanced meshes) ---------------------------------------
@@ -166,6 +247,8 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
+  buildLevels();
+  layoutLevels();
   resize();
   resetView();
   applyDisplayMode();
@@ -184,6 +267,11 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
       showStates = enabled;
       applyDisplayMode();
     },
+    settingsSchema: SETTINGS_SCHEMA,
+    get settings() {
+      return { ...settings };
+    },
+    applySettings,
     zoom(step) {
       // step > 0: closer. Dolly along the view direction.
       const offset = camera.position.clone().sub(controls.target);
@@ -191,16 +279,12 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
       camera.position.copy(controls.target).add(offset.setLength(length));
     },
     resetView,
-    keyHint: 'souris : orbite / zoom / clic droit déplacer · F mode · L liens',
+    keyHint: 'souris : orbite / zoom / clic droit déplacer · F mode',
     keys: {
       f: () => {
         mode = DISPLAY_MODES[(DISPLAY_MODES.indexOf(mode) + 1) % DISPLAY_MODES.length];
         applyDisplayMode();
         onInfo?.(`Mode : ${DISPLAY_MODE_LABELS[mode]}`);
-      },
-      l: () => {
-        links.visible = !links.visible;
-        onInfo?.(`Liens escaliers / trappes : ${links.visible ? 'affichés' : 'masqués'}`);
       },
     },
     dispose() {
@@ -215,6 +299,7 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
         lines.geometry.dispose();
         lines.material.dispose();
       }
+      for (const label of labels) label.element.remove();
       renderer.dispose();
       canvasHost.remove();
     },
@@ -223,7 +308,7 @@ export function createThreeRenderer(container, dungeon, { showStates = true, onH
 
 // Vertical segments between connected tiles (stairs in gold, pits in red),
 // grouped by departure level: Map<level, LineSegments>.
-function buildConnectionLines(dungeon, center, levelY) {
+function buildConnectionLines(dungeon, center, levelY, wallHeight) {
   const gold = new THREE.Color(0xffd060);
   const red = new THREE.Color(0xff4040);
   const byLevel = new Map();
@@ -234,7 +319,7 @@ function buildConnectionLines(dungeon, center, levelY) {
     byLevel.set(link.level, entry);
     const x = link.gx + 0.5 - center.x;
     const z = link.gy + 0.5 - center.z;
-    entry.positions.push(x, levelY(link.level) + WALL_HEIGHT * 0.5, z, x, levelY(link.toLevel) + 0.05, z);
+    entry.positions.push(x, levelY(link.level) + wallHeight * 0.5, z, x, levelY(link.toLevel) + 0.05, z);
     const color = link.kind === 'stairs' ? gold : red;
     entry.colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
   }
