@@ -9,6 +9,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { assertRenderer } from '../renderer.js';
 import { findConnections } from '../../core/connections.js';
 import { buildLevelMeshes, disposeLevelMeshes, DEFAULT_WALL_HEIGHT } from './level-meshes.js';
+import { buildLevelContents } from './level-contents.js';
 import { readTheme } from './theme.js';
 
 export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, links: true, labels: true };
@@ -33,12 +34,21 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {object} [options]
  * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
  * @param {object} [options.settings] { levelGap, wallHeight, links, labels }, see DEFAULT_SETTINGS
+ * @param {{ items?: boolean, creatures?: boolean }} [options.layers] contents layers shown (default: both)
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
  */
-export function createThreeRenderer(container, dungeon, { showStates = true, settings: initial, onHover, onInfo, onRequestLevel } = {}) {
+export function createThreeRenderer(
+  container,
+  dungeon,
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel } = {},
+) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
+  const layers = { items: true, creatures: true, ...initialLayers };
+  // Mesh layer -> visible. Markers of chests/possessions ('contents') follow either layer.
+  const layerVisible = (layer) =>
+    layer === undefined || (layer === 'contents' ? layers.items || layers.creatures : layers[layer]);
   const theme = readTheme();
   const b = dungeon.bounds;
   const center = { x: (b.minX + b.maxX) / 2, z: (b.minY + b.maxY) / 2 };
@@ -87,6 +97,10 @@ export function createThreeRenderer(container, dungeon, { showStates = true, set
     levels = [];
     for (let i = 0; i < dungeon.levelCount; i++) {
       const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center, { wallHeight: settings.wallHeight });
+      for (const mesh of buildLevelContents(dungeon, i, center, { wallHeight: settings.wallHeight })) {
+        group.add(mesh);
+        meshes.push(mesh);
+      }
       scene.add(group);
       levels.push({ group, meshes });
     }
@@ -155,8 +169,8 @@ export function createThreeRenderer(container, dungeon, { showStates = true, set
       labels[i].element.classList.toggle('is-faded', mode === 'focus' && !focused);
       for (const mesh of meshes) {
         // Meshes specific to the types-only or the with-states rendering (see level-meshes.js).
-        const { variant } = mesh.userData;
-        mesh.visible = variant === 'all' || (variant === 'states') === showStates;
+        const { variant, layer } = mesh.userData;
+        mesh.visible = (variant === 'all' || (variant === 'states') === showStates) && layerVisible(layer);
         const opacity = mode === 'focus' && !focused ? FADED_OPACITY * mesh.userData.baseOpacity : mesh.userData.baseOpacity;
         mesh.material.opacity = opacity;
         mesh.material.transparent = opacity < 1;
@@ -165,6 +179,23 @@ export function createThreeRenderer(container, dungeon, { showStates = true, set
         mesh.material.needsUpdate = true;
       }
     });
+  }
+
+  // Outline of the tile located from the inventory (one at a time).
+  const highlight = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.1, 1, 1.1)),
+    new THREE.LineBasicMaterial({ color: 0xe0b050 }),
+  );
+  highlight.visible = false;
+  scene.add(highlight);
+
+  function highlightTile(x, y) {
+    const m = dungeon.level(currentLevel);
+    const position = new THREE.Vector3(m.offset.x + x + 0.5 - center.x, levelY(currentLevel), m.offset.y + y + 0.5 - center.z);
+    highlight.scale.set(1, settings.wallHeight + 0.2, 1);
+    highlight.position.copy(position).setY(position.y + (settings.wallHeight + 0.2) / 2);
+    highlight.visible = true;
+    targetGoal = position; // glide to the tile
   }
 
   function resetView() {
@@ -261,8 +292,14 @@ export function createThreeRenderer(container, dungeon, { showStates = true, set
     showLevel(level) {
       currentLevel = level;
       targetGoal = levelCenter(level);
+      highlight.visible = false;
       applyDisplayMode();
     },
+    setLayers(changes) {
+      Object.assign(layers, changes);
+      applyDisplayMode();
+    },
+    highlightTile,
     setShowStates(enabled) {
       showStates = enabled;
       applyDisplayMode();
@@ -300,6 +337,8 @@ export function createThreeRenderer(container, dungeon, { showStates = true, set
         lines.material.dispose();
       }
       for (const label of labels) label.element.remove();
+      highlight.geometry.dispose();
+      highlight.material.dispose();
       renderer.dispose();
       canvasHost.remove();
     },

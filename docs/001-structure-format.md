@@ -193,7 +193,8 @@ Ce sont des listes ordonnées, dans l'ordre de la chaîne d'objets du jeu. Conte
 - Sur un **mur**, c'est la **face** : 0 = north, 1 = east, 2 = south, 3 = west.
 - Sur un **sol**, c'est le **quart de case** : 0 = North/TopLeft, 1 = East/TopRight, 2 = South/BottomLeft, 3 = West/BottomRight.
 
-Les commentaires suivent cet ordre. Attention : `TopRight` et `BottomLeft` ne sont pas dans l'ordre horaire.
+> **Correction (008, vérifié dans le jeu) :** ces annotations du dump sont trompeuses pour 2 et 3. L'ordre réel est
+> celui du moteur, dans le sens horaire : 0 = nord-ouest, 1 = nord-est, **2 = sud-est**, **3 = sud-ouest**.
 
 **Actuators décodés** : sous-éléments `type`, `data`, `graphic`, `action_target` (local/remote),
 `delay`, `has_sound`, `has_revert`, `action_type` (Set/Clear/Toggle/Hold), `once_only`, plus des champs

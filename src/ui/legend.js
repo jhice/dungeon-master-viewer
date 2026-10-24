@@ -2,6 +2,8 @@
 
 import { ASCII_SYMBOLS } from '../render/ascii/ascii-renderer.js';
 import { tileClasses } from '../render/dom/dom-renderer.js';
+import { CATEGORY_LABELS } from '../core/contents.js';
+import { CATEGORY_COLORS, HAS_CONTENTS_COLOR } from '../render/palette.js';
 
 const ENTRIES = [
   { label: 'wall', tile: { type: 'wall' }, ascii: ASCII_SYMBOLS.wall },
@@ -27,19 +29,37 @@ export function renderLegend(container, rendererId, { showStates = false } = {})
   const graphic = rendererId !== 'ascii';
   container.classList.toggle('show-states', graphic && showStates);
   const entries = graphic && showStates ? [...ENTRIES, ...STATE_ENTRIES] : ENTRIES;
-  container.replaceChildren(
-    ...entries.map(({ label, tile, ascii }) => {
-      const item = document.createElement('span');
-      item.className = 'legend-item';
-      const swatch = document.createElement('span');
-      if (graphic) {
-        swatch.className = `${tileClasses(tile)} legend-swatch`;
-      } else {
-        swatch.className = 'legend-ascii';
-        swatch.textContent = ascii;
-      }
-      item.append(swatch, label);
-      return item;
-    }),
-  );
+  const tileItems = entries.map(({ label, tile, ascii }) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    const swatch = document.createElement('span');
+    if (graphic) {
+      swatch.className = `${tileClasses(tile)} legend-swatch`;
+    } else {
+      swatch.className = 'legend-ascii';
+      swatch.textContent = ascii;
+    }
+    item.append(swatch, label);
+    return item;
+  });
+  container.replaceChildren(...tileItems, ...(graphic ? contentItems() : []));
+}
+
+// Item categories, creatures (one colour per species) and the "has contents" ring.
+function contentItems() {
+  const dot = (label, color, round = false, ring = false) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    const swatch = document.createElement('span');
+    swatch.className = `legend-dot${round ? ' round' : ''}`;
+    swatch.style.background = color;
+    if (ring) swatch.style.boxShadow = `0 0 0 1.5px ${HAS_CONTENTS_COLOR}`;
+    item.append(swatch, label);
+    return item;
+  };
+  return [
+    ...Object.entries(CATEGORY_COLORS).map(([category, color]) => dot(CATEGORY_LABELS[category].toLowerCase(), color)),
+    dot('créature (couleur par espèce)', 'linear-gradient(90deg, #7aa83a, #e4e0d0, #3878e0)', true),
+    dot('contient des objets', CATEGORY_COLORS.container, false, true),
+  ];
 }

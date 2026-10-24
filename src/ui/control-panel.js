@@ -90,8 +90,10 @@ export function createControlPanel(container, schema, values, onChange, { open =
     panel.append(row);
   }
 
-  // Keys typed in the panel must not drive the viewer (arrows move sliders).
-  panel.addEventListener('keydown', (event) => event.stopPropagation());
+  // Arrows on a focused slider move it instead of changing level.
+  panel.addEventListener('keydown', (event) => {
+    if (event.target.matches('input[type=range]')) event.stopPropagation();
+  });
   container.append(panel);
 
   const refresh = () => {

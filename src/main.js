@@ -1,10 +1,13 @@
 import { loadDungeon } from './core/dungeon.js';
 import { describeState } from './core/tile-states.js';
+import { tileContents, buildInventory } from './core/contents.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
 import { renderLegend } from './ui/legend.js';
 import { createControlPanel } from './ui/control-panel.js';
+import { createInventoryPanel } from './ui/inventory-panel.js';
+import { createTooltip } from './ui/tooltip.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
@@ -17,7 +20,7 @@ const RENDERERS = {
   },
   ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · S états';
+const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · S états · O objets · C créatures · I inventaire';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -29,13 +32,45 @@ const status = document.getElementById('status');
 const legend = document.getElementById('legend');
 
 const dungeon = await loadDungeon('./data/dungeon.json');
-const prefs = loadPreferences({ renderer: 'dom', level: 0, frame: 'global', cell: null, showStates: true, panelOpen: true });
+const prefs = loadPreferences({
+  renderer: 'dom',
+  level: 0,
+  frame: 'global',
+  cell: null,
+  showStates: true,
+  showItems: true,
+  showCreatures: true,
+  panelOpen: true,
+  inventoryOpen: false,
+});
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
 
 let renderer = null;
 let mounting = null; // pending async creation, to ignore keys meanwhile
 let panel = null; // control panel, rebuilt for each renderer
+
+// Right-hand column: control panel (per renderer) above the inventory (persistent).
+const side = document.createElement('div');
+side.className = 'side-panels';
+const controlsSlot = document.createElement('div');
+side.append(controlsSlot);
+viewWrap.append(side);
+
+const tooltip = createTooltip();
+const creatureTypes = new Map(Object.entries(dungeon.data.catalog.creature).map(([type, name]) => [name, Number(type)]));
+const inventory = createInventoryPanel(side, buildInventory(dungeon), {
+  levelCount: dungeon.levelCount,
+  creatureType: (name) => creatureTypes.get(name),
+  onLocate: locate,
+  open: prefs.inventoryOpen,
+  onToggle: (open) => {
+    prefs.inventoryOpen = open;
+    savePreferences(prefs);
+  },
+});
+
+const layers = () => ({ items: prefs.showItems, creatures: prefs.showCreatures });
 
 async function mountRenderer() {
   const level = renderer?.currentLevel ?? prefs.level;
@@ -51,6 +86,7 @@ async function mountRenderer() {
       return await RENDERERS[id].create(view, dungeon, {
         frame: prefs.frame,
         showStates: prefs.showStates,
+        layers: layers(),
         settings: prefs.settings?.[id],
         onHover: showHover,
         onInfo: showInfo,
@@ -73,7 +109,7 @@ async function mountRenderer() {
     return;
   }
   renderer = created;
-  panel = createControlPanel(viewWrap, panelSchema(), panelValues(), onPanelChange, {
+  panel = createControlPanel(controlsSlot, panelSchema(), panelValues(), onPanelChange, {
     open: prefs.panelOpen,
     onToggle: (open) => {
       prefs.panelOpen = open;
@@ -102,7 +138,12 @@ function showLevel(level) {
 function showHover(info) {
   if (!info) {
     status.textContent = ' ';
+    tooltip.hide();
     return;
+  }
+  if (renderer?.setLayers) {
+    const contents = tileContents(dungeon, info.level, info.x, info.y);
+    tooltip.show(`Niveau ${info.level} (${info.x}, ${info.y}) · ${info.type}`, contents, { ...layers(), onWall: info.type === 'wall' });
   }
   let text = `niveau ${info.level} · (${info.x}, ${info.y}) local · [${info.gx}, ${info.gy}] global · ${info.type}`;
   if (info.type === 'stairs') text += ` ${info.detail.direction === 'up' ? '↑ vers' : '↓ vers'} niveau ${info.level + (info.detail.direction === 'up' ? -1 : 1)}`;
@@ -167,6 +208,23 @@ function changeSettings(changes) {
   panel?.setValues(changes);
 }
 
+function setLayer(key, enabled) {
+  if (!renderer.setLayers) return;
+  prefs[key] = enabled;
+  savePreferences(prefs);
+  renderer.setLayers(layers());
+  panel?.setValues({ [key]: enabled });
+  showInfo(`${key === 'showItems' ? 'Objets' : 'Créatures'} : ${enabled ? 'affichés' : 'masqués'}`);
+}
+
+// Inventory click: go to the level and point at the tile.
+function locate(entry) {
+  if (!renderer) return;
+  showLevel(entry.level);
+  renderer.highlightTile?.(entry.x, entry.y);
+  showInfo(`${entry.name} — niveau ${entry.level} (${entry.x}, ${entry.y})${entry.inside ? `, dans ${entry.inside}` : ''}`);
+}
+
 function setFrame(global) {
   if (RENDERERS[prefs.renderer].frameless) return;
   prefs.frame = global ? 'global' : 'local';
@@ -186,15 +244,27 @@ function panelSchema() {
     },
   ];
   if (renderer.setShowStates) schema.push({ type: 'checkbox', key: 'showStates', label: 'États des tuiles', shortcut: 'S' });
+  if (renderer.setLayers) {
+    schema.push({ type: 'checkbox', key: 'showItems', label: 'Objets', shortcut: 'O' });
+    schema.push({ type: 'checkbox', key: 'showCreatures', label: 'Créatures', shortcut: 'C' });
+  }
   if (!RENDERERS[prefs.renderer].frameless) schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
   return [...schema, ...(renderer.settingsSchema ?? [])];
 }
 
-const panelValues = () => ({ showStates: prefs.showStates, frameGlobal: prefs.frame === 'global', ...renderer.settings });
+const panelValues = () => ({
+  showStates: prefs.showStates,
+  showItems: prefs.showItems,
+  showCreatures: prefs.showCreatures,
+  frameGlobal: prefs.frame === 'global',
+  ...renderer.settings,
+});
 
 function onPanelChange(changes) {
-  const { showStates, frameGlobal, ...settings } = changes;
+  const { showStates, showItems, showCreatures, frameGlobal, ...settings } = changes;
   if (showStates !== undefined) setShowStates(showStates);
+  if (showItems !== undefined) setLayer('showItems', showItems);
+  if (showCreatures !== undefined) setLayer('showCreatures', showCreatures);
   if (frameGlobal !== undefined) setFrame(frameGlobal);
   if (Object.keys(settings).length) changeSettings(settings);
 }
@@ -220,6 +290,9 @@ const GLOBAL_KEYS = {
   r: nextRenderer,
   g: () => setFrame(prefs.frame !== 'global'),
   s: () => setShowStates(!prefs.showStates),
+  o: () => setLayer('showItems', !prefs.showItems),
+  c: () => setLayer('showCreatures', !prefs.showCreatures),
+  i: () => inventory.toggle(),
   '+': () => zoom(+1),
   '=': () => zoom(+1),
   '-': () => zoom(-1),

@@ -111,11 +111,26 @@ body {
   opacity: 0.45;
 }
 
-.control-panel {
+/* Right-hand column holding the control panel and the inventory. */
+.side-panels {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
+  bottom: 0.75rem;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 17rem;
+  pointer-events: none; /* let the map get the mouse between the panels */
+}
+
+.side-panels > * {
+  pointer-events: auto;
+}
+
+.control-panel {
   min-width: 15rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid #333;
@@ -231,4 +246,160 @@ body {
 .legend-ascii {
   font-family: ui-monospace, monospace;
   color: var(--fg);
+}
+
+/* --- Inventory panel (src/ui/inventory-panel.js) ------------------------------ */
+
+.inventory-panel {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: rgb(17 17 17 / 0.9);
+  font-size: 0.85rem;
+}
+
+.inventory-panel summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.inv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.inv-chip {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--c);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.inv-chip.is-active {
+  background: var(--c);
+  color: #111;
+}
+
+.inv-controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.inv-controls select,
+.inv-controls input {
+  min-width: 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1c1c1c;
+  color: var(--fg);
+  font: inherit;
+}
+
+/* The list scrolls inside the panel (<details> content does not shrink as a flex item). */
+.inv-list {
+  max-height: calc(100vh - 30rem);
+  min-height: 8rem;
+  overflow-y: auto;
+}
+
+.inv-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  color: var(--fg);
+  font-weight: 400;
+}
+
+.inv-dot,
+.tooltip-dot {
+  flex: none;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  border: 1px solid rgb(0 0 0 / 0.6);
+}
+
+.inv-count {
+  margin-left: auto;
+  font-family: ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.inv-group ul {
+  margin: 0 0 0.3rem;
+  padding-left: 1.1rem;
+  list-style: none;
+}
+
+.inv-group li button {
+  padding: 0.1rem 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inv-group li button:hover {
+  color: var(--accent);
+}
+
+.inv-empty {
+  color: var(--muted);
+}
+
+/* --- Tile tooltip (src/ui/tooltip.js) ------------------------------------------ */
+
+.tile-tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  max-width: 22rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background: rgb(14 14 14 / 0.95);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.tooltip-title {
+  margin-bottom: 0.25rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tooltip-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tooltip-detail {
+  color: var(--muted);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(0 0 0 / 0.6);
+}
+
+.legend-dot.round {
+  border-radius: 50%;
 }

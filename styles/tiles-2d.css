@@ -188,3 +188,76 @@
   background: var(--hidden-mark);
   z-index: 1;
 }
+
+/* --- Contents: items and creatures (src/render/dom/dom-renderer.js) -------- */
+
+.dom-view .mark {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  pointer-events: none; /* hovering is handled by the cell */
+  transform: translate(-50%, -50%);
+}
+
+/* Floor item: a small square in its sub-tile. */
+.item-mark {
+  width: 34%;
+  height: 34%;
+  background: var(--c);
+  border: 1px solid rgb(0 0 0 / 0.6);
+}
+
+/* Wall item: a bar against the face it lies on. */
+.item-mark.on-wall.face-N { left: 50%; top: 12%; width: 50%; height: 22%; }
+.item-mark.on-wall.face-S { left: 50%; top: 88%; width: 50%; height: 22%; }
+.item-mark.on-wall.face-W { left: 12%; top: 50%; width: 22%; height: 50%; }
+.item-mark.on-wall.face-E { left: 88%; top: 50%; width: 22%; height: 50%; }
+
+/* Stack count, shown when the cells are large enough to read it. */
+.item-mark[data-count]::after {
+  content: attr(data-count);
+  position: absolute;
+  right: -45%;
+  top: -55%;
+  font: 700 max(7px, calc(var(--cell) * 0.28)) / 1 system-ui, sans-serif;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* Creature: a disc per member; a lone creature stands in the centre, bigger. */
+.creature-mark {
+  width: 38%;
+  height: 38%;
+  border-radius: 50%;
+  background: var(--c);
+  border: 1px solid rgb(0 0 0 / 0.7);
+}
+
+.creature-mark.alone {
+  width: 56%;
+  height: 56%;
+}
+
+/* Chest with contents, creature carrying items. */
+.mark.has-contents {
+  box-shadow: 0 0 0 1.5px var(--has-contents, #ffd84a);
+}
+
+.hide-items .item-mark,
+.hide-creatures .creature-mark {
+  display: none;
+}
+
+/* Tile located from the inventory. */
+.tile.is-highlighted {
+  outline: 2px solid var(--accent, #e0b050);
+  outline-offset: 1px;
+  z-index: 3;
+  animation: tile-pulse 1s ease-in-out 3;
+}
+
+@keyframes tile-pulse {
+  50% {
+    outline-offset: 4px;
+  }
+}
