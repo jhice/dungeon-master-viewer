@@ -19,10 +19,11 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {HTMLElement} container
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
  * @param {object} [options]
+ * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  */
-export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}) {
+export function createThreeRenderer(container, dungeon, { showStates = true, onHover, onInfo } = {}) {
   const theme = readTheme();
   const b = dungeon.bounds;
   const center = { x: (b.minX + b.maxX) / 2, z: (b.minY + b.maxY) / 2 };
@@ -90,6 +91,9 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
       const lines = linesByLevel.get(i);
       if (lines) lines.visible = mode !== 'solo' || i === currentLevel || i === currentLevel - 1;
       for (const mesh of meshes) {
+        // Meshes specific to the types-only or the with-states rendering (see level-meshes.js).
+        const { variant } = mesh.userData;
+        mesh.visible = variant === 'all' || (variant === 'states') === showStates;
         const opacity = mode === 'focus' && !focused ? FADED_OPACITY * mesh.userData.baseOpacity : mesh.userData.baseOpacity;
         mesh.material.opacity = opacity;
         mesh.material.transparent = opacity < 1;
@@ -150,7 +154,10 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
       hoverPending = false;
       raycaster.setFromCamera(pointer, camera);
       // Only the focused level can be picked, except in "all" mode.
-      const pickable = levels.flatMap(({ group, meshes }, i) => (group.visible && (mode === 'all' || i === currentLevel) ? meshes : []));
+      // Raycasting ignores `visible`: filter hidden variants, and outlines (no instances to identify).
+      const pickable = levels.flatMap(({ group, meshes }, i) =>
+        group.visible && (mode === 'all' || i === currentLevel) ? meshes.filter((m) => m.isInstancedMesh && m.visible) : [],
+      );
       const hit = raycaster.intersectObjects(pickable, false)[0];
       onHover?.(hit ? hit.object.userData.tiles[hit.instanceId] : null);
     });
@@ -171,6 +178,10 @@ export function createThreeRenderer(container, dungeon, { onHover, onInfo } = {}
     showLevel(level) {
       currentLevel = level;
       targetGoal = levelCenter(level);
+      applyDisplayMode();
+    },
+    setShowStates(enabled) {
+      showStates = enabled;
       applyDisplayMode();
     },
     zoom(step) {

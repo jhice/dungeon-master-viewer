@@ -1,20 +1,24 @@
 // 2D top-down renderer: one <div> per tile in a CSS grid, styled by styles/tiles-2d.css.
-// Renders tile types only (plus the stairs direction and the passage axis of
-// doors/stairs, needed to draw them). Cells are created once per frame size and
-// only their classes change between levels.
+// Renders tile types (plus the stairs direction and the passage axis of
+// doors/stairs, needed to draw them) and, optionally, the states of doors, pits
+// and fake walls. Cells are created once per frame size and only their classes
+// change between levels; states are toggled by one class on the grid.
 
 import { assertRenderer } from '../renderer.js';
+import { stateModifiers } from '../../core/tile-states.js';
 
 /**
  * @param {HTMLElement} container
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
  * @param {object} [options]
  * @param {'global'|'local'} [options.frame='global']
+ * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
  * @param {(info: object|null) => void} [options.onHover] hovered tile, or null when leaving the grid
  */
-export function createDomRenderer(container, dungeon, { frame = 'global', onHover } = {}) {
+export function createDomRenderer(container, dungeon, { frame = 'global', showStates = true, onHover } = {}) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
+  grid.classList.toggle('show-states', showStates);
   container.append(grid);
 
   let cells = [];
@@ -77,6 +81,9 @@ export function createDomRenderer(container, dungeon, { frame = 'global', onHove
         cell.className = tileClasses(dungeon.tileAt(level, x, y));
       });
     },
+    setShowStates(enabled) {
+      grid.classList.toggle('show-states', enabled);
+    },
     dispose() {
       grid.removeEventListener('pointerover', onPointer);
       grid.removeEventListener('pointerleave', onLeave);
@@ -85,11 +92,16 @@ export function createDomRenderer(container, dungeon, { frame = 'global', onHove
   });
 }
 
-/** CSS classes of a tile: `tile t-<type>` plus direction/axis modifiers. */
+/**
+ * CSS classes of a tile: `tile t-<type>`, direction/axis modifiers, and state
+ * modifiers (is-open, is-closed, is-invisible, is-imaginary), which only take
+ * effect inside a `.show-states` container.
+ */
 export function tileClasses(tile) {
   if (!tile) return 'tile t-outside';
   let classes = `tile t-${tile.type}`;
   if (tile.type === 'stairs') classes += ` ${tile.detail.direction} axis-${tile.detail.orientation.toLowerCase()}`;
   if (tile.type === 'door') classes += ` axis-${tile.detail.orientation.toLowerCase()}`;
-  return classes;
+  const modifiers = tile.detail ? stateModifiers(tile.type, tile.detail) : [];
+  return modifiers.length ? `${classes} ${modifiers.join(' ')}` : classes;
 }

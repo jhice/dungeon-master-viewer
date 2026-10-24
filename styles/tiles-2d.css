@@ -19,6 +19,10 @@
   --tile-door-edge: #5c3d14;
   --tile-teleporter: #4cc3ff;
   --tile-fakewall: #6b5f73;
+  --tile-pit-lid: #4a4033;
+  /* Hidden states (invisible pit, imaginary wall) stay visible, faded. */
+  --hidden-opacity: 0.4;
+  --hidden-mark: #e0b050;
 }
 
 .dom-view {
@@ -50,16 +54,10 @@
     inset -1px -1px 0 var(--tile-wall-dark);
 }
 
-/* Fake wall: looks like a wall, hatched so it can be told apart on the map. */
-.t-fakewall {
-  background:
-    repeating-linear-gradient(45deg, transparent 0 3px, rgb(0 0 0 / 0.25) 3px 4px),
-    var(--tile-fakewall);
-  box-shadow: inset 0 0 0 1px var(--tile-wall-dark);
-}
-
-/* Every walkable tile is drawn on a floor base. */
+/* Every walkable tile is drawn on a floor base; so is the fake wall, whose
+   block is drawn in ::after so that its states only affect the block. */
 .t-floor,
+.t-fakewall,
 .t-pit,
 .t-stairs,
 .t-door,
@@ -68,8 +66,24 @@
   box-shadow: inset 0 0 0 0.5px var(--tile-floor-line);
 }
 
-.t-pit {
-  background-image: radial-gradient(circle, var(--tile-pit) 0 55%, transparent 58%);
+/* Fake wall: looks like a wall, hatched so it can be told apart on the map. */
+.t-fakewall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 3px, rgb(0 0 0 / 0.25) 3px 4px),
+    var(--tile-fakewall);
+  box-shadow: inset 0 0 0 1px var(--tile-wall-dark);
+}
+
+/* Pit: a dark hole, drawn in ::after (states change its look and opacity). */
+.t-pit::after {
+  content: '';
+  position: absolute;
+  inset: 21%;
+  border-radius: 50%;
+  background: var(--tile-pit);
 }
 
 /* Stairs: steps perpendicular to the passage axis. */
@@ -132,4 +146,45 @@
 
 .t-teleporter {
   background-image: radial-gradient(circle, var(--tile-teleporter) 0 20%, rgb(76 195 255 / 0.35) 45%, transparent 70%);
+}
+
+/* --- States (only inside .show-states, toggled with the S key) -------------- */
+
+/* Door open: an empty leaf, border only. */
+.show-states .t-door.is-open::after {
+  background: transparent;
+  border-color: var(--tile-door);
+}
+
+/* Pit closed: covered by a lid, outlined in dashes. */
+.show-states .t-pit.is-closed::after {
+  background: var(--tile-pit-lid);
+  border: 1px dashed var(--tile-pit);
+}
+
+/* Fake wall open: the wall has vanished, only its dashed outline remains. */
+.show-states .t-fakewall.is-open::after {
+  inset: 1px;
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed var(--tile-fakewall);
+}
+
+/* Hidden states: invisible pit, imaginary (illusory) wall. Faded, plus a corner mark. */
+.show-states .t-pit.is-invisible::after,
+.show-states .t-fakewall.is-imaginary::after {
+  opacity: var(--hidden-opacity);
+}
+
+.show-states .t-pit.is-invisible::before,
+.show-states .t-fakewall.is-imaginary::before {
+  content: '';
+  position: absolute;
+  top: 8%;
+  right: 8%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: var(--hidden-mark);
+  z-index: 1;
 }

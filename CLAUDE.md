@@ -37,11 +37,41 @@ Analyser le fichier XML en se concentrant d'abord sur
   - 2D : le DOM avec CSS
   - 3D : Three.js
 
-## Plus tard
+## Etapes suivantes
 
-- l'inventaire des objets et des monstres
-- la logique des actuators et téléporteurs
-- les textes
+### 006 - Les états des tuiles
+
+On afficherait les portes ouvertes ou fermées, les trappes ouvertes ou invisibles et les faux murs franchissables.
+
+Ta proposition de `6:10 PM` sur la session d'hier est très bien.
+
+Réponses à tes questions :
+
+- le repère d'un état caché (opacité réduite ou autre) ;
+  - réponse : comme tu as suggéré
+- la porte ouverte en 3D (relevée ou masquée) ;
+  - réponses :
+    - relevée en 3D,
+    - un rectangle vide avec une bordure en 2D
+- la touche S pour afficher ou masquer les états ;
+  - réponse : OK
+- les états en ASCII, oui ou non.
+  - réponse : on laisse de côté pour le moment, je verrais ce que je fais du mode ASCII, si je le conserve ou non.
+
+### 007 - réglages 3D
+
+- de l'espacement des niveaux et de la hauteur des murs
+- étiquettes de niveau
+
+### 008 - inventaire des objets et des monstres
+
+### 009 - logique des actuators et téléporteurs
+
+### 010 - textes
+
+### plus tard
+
+Vue « à la première personne » vers un mode jouable.
 
 ## Workflow
 

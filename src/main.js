@@ -1,4 +1,5 @@
 import { loadDungeon } from './core/dungeon.js';
+import { describeState } from './core/tile-states.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
@@ -15,7 +16,7 @@ const RENDERERS = {
   },
   ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer';
+const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · S états';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -26,7 +27,7 @@ const status = document.getElementById('status');
 const legend = document.getElementById('legend');
 
 const dungeon = await loadDungeon('./data/dungeon.json');
-const prefs = loadPreferences({ renderer: 'dom', level: 0, frame: 'global', cell: null });
+const prefs = loadPreferences({ renderer: 'dom', level: 0, frame: 'global', cell: null, showStates: true });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
 
@@ -42,7 +43,12 @@ async function mountRenderer() {
   status.textContent = `Chargement du renderer ${RENDERERS[id].label}…`;
   mounting = (async () => {
     try {
-      return await RENDERERS[id].create(view, dungeon, { frame: prefs.frame, onHover: showHover, onInfo: showInfo });
+      return await RENDERERS[id].create(view, dungeon, {
+        frame: prefs.frame,
+        showStates: prefs.showStates,
+        onHover: showHover,
+        onInfo: showInfo,
+      });
     } catch (error) {
       console.error(error);
       status.textContent = `Renderer ${RENDERERS[id].label} indisponible : ${error.message}`;
@@ -60,7 +66,7 @@ async function mountRenderer() {
     return;
   }
   renderer = created;
-  renderLegend(legend, id === 'ascii' ? 'ascii' : 'dom');
+  renderLegend(legend, id === 'ascii' ? 'ascii' : 'dom', { showStates: prefs.showStates });
   hint.textContent = renderer.keyHint ? `${BASE_HINT} · ${renderer.keyHint}` : `${BASE_HINT} · G repère · +/− zoom · 0 ajuster`;
   showLevel(level);
   if (!renderer.zoom) setCell(prefs.cell);
@@ -86,6 +92,8 @@ function showHover(info) {
   let text = `niveau ${info.level} · (${info.x}, ${info.y}) local · [${info.gx}, ${info.gy}] global · ${info.type}`;
   if (info.type === 'stairs') text += ` ${info.detail.direction === 'up' ? '↑ vers' : '↓ vers'} niveau ${info.level + (info.detail.direction === 'up' ? -1 : 1)}`;
   if (info.type === 'door' || info.type === 'stairs') text += ` · axe ${info.detail.orientation}`;
+  const state = prefs.showStates && info.detail ? describeState(info.type, info.detail) : null;
+  if (state) text += ` · ${state}`;
   status.textContent = text;
 }
 
@@ -124,6 +132,16 @@ function nextRenderer() {
   mountRenderer();
 }
 
+function toggleStates() {
+  // ASCII renders types only: the key does nothing there.
+  if (!renderer.setShowStates) return;
+  prefs.showStates = !prefs.showStates;
+  savePreferences(prefs);
+  renderer.setShowStates(prefs.showStates);
+  renderLegend(legend, prefs.renderer, { showStates: prefs.showStates });
+  showInfo(`États des tuiles : ${prefs.showStates ? 'affichés' : 'masqués'}`);
+}
+
 function toggleFrame() {
   if (RENDERERS[prefs.renderer].frameless) return;
   prefs.frame = prefs.frame === 'global' ? 'local' : 'global';
@@ -139,6 +157,7 @@ const GLOBAL_KEYS = {
   End: () => showLevel(dungeon.levelCount - 1),
   r: nextRenderer,
   g: toggleFrame,
+  s: toggleStates,
   '+': () => zoom(+1),
   '=': () => zoom(+1),
   '-': () => zoom(-1),
