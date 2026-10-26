@@ -3,7 +3,10 @@
 //   of their detail, which the simulation updates;
 // - actuators get a runtime record (disabled after a once-only use, counter
 //   value, gate bits) and each tile its own order of actuators (rotations);
-// - texts get their current visibility (messages shown by a mechanism).
+// - texts get their current visibility (messages shown by a mechanism);
+// - items lie on tiles (floor: sub-tile position, wall: face) or in the party's inventory.
+
+import { ITEM_POOLS } from '../core/contents.js';
 
 const MUTABLE_TYPES = new Set(['door', 'pit', 'fakewall', 'teleporter']);
 
@@ -15,17 +18,23 @@ export function createState(dungeon) {
   let actuators; // index -> { disabled, data, gate }
   let orders; // "level:x,y" -> [{ index, position }] actuators of the tile, in their current order
   let textVisibility; // text index -> visible
+  let items; // "level:x,y" -> [{ kind, index, position }] items lying on the tile, bottom first
+  let inventory; // [{ kind, index }] items carried by the party
 
   function reset() {
     details = new Map();
     actuators = new Map();
     orders = new Map();
     textVisibility = new Map();
+    items = new Map();
+    inventory = [];
     for (let level = 0; level < dungeon.levelCount; level++) {
       for (const { x, y, detail } of dungeon.detailedTiles(level)) {
         if (MUTABLE_TYPES.has(detail.type)) details.set(`${level}:${x},${y}`, structuredClone(detail));
         const refs = (detail.items ?? []).filter((item) => item.kind === 'actuator');
         if (refs.length) orders.set(`${level}:${x},${y}`, refs.map(({ index, position }) => ({ index, position })));
+        const lying = (detail.items ?? []).filter((item) => ITEM_POOLS[item.kind]);
+        if (lying.length) items.set(`${level}:${x},${y}`, lying.map(({ kind, index, position }) => ({ kind, index, position })));
       }
     }
   }
@@ -54,6 +63,16 @@ export function createState(dungeon) {
         });
       }
       return actuators.get(index);
+    },
+    /** Items lying on a tile: [{ kind, index, position }] (mutable). */
+    itemsAt(level, x, y) {
+      const key = `${level}:${x},${y}`;
+      if (!items.has(key)) items.set(key, []);
+      return items.get(key);
+    },
+    /** Items carried by the party: [{ kind, index }] (mutable). */
+    get inventory() {
+      return inventory;
     },
     textVisible(index) {
       return textVisibility.get(index) ?? dungeon.data.texts[index].visible;

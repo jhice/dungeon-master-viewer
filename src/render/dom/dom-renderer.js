@@ -27,11 +27,12 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * @param {(to: {level,x,y}) => void} [options.onFollow] a cross-level link label was clicked
  * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
  * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; main.js passes the simulation state)
+ * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (default: dungeon.json)
  */
 export function createDomRenderer(
   container,
   dungeon,
-  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel, tileAt = (l, x, y) => dungeon.tileAt(l, x, y) } = {},
+  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel, tileAt = (l, x, y) => dungeon.tileAt(l, x, y), contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) } = {},
 ) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
@@ -79,20 +80,28 @@ export function createDomRenderer(
   function drawContents(level) {
     for (const cell of markedCells) cell.replaceChildren();
     markedCells = [];
-    for (const { x, y, detail } of dungeon.detailedTiles(level)) {
-      const cell = cells[cellIndexOf(x, y)];
-      if (!cell) continue;
-      const onWall = detail.type === 'wall';
-      const contents = tileContents(dungeon, level, x, y);
-      const markers = [
-        ...mechanismMarkers(dungeon, detail, onWall),
-        ...textMarkers(dungeon, detail, onWall),
-        ...(contents ? contentMarkers(contents, onWall) : []),
-      ];
-      if (!markers.length) continue;
-      cell.append(...markers);
-      markedCells.push(cell);
-    }
+    // Every tile of the level: items may have been dropped anywhere (simulation).
+    const map = dungeon.level(level);
+    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) drawCell(level, x, y);
+  }
+
+  // Markers of one tile (mechanisms, texts, items, creatures); the party marker is kept.
+  function drawCell(level, x, y) {
+    const cell = cells[cellIndexOf(x, y)];
+    if (!cell) return;
+    const tile = dungeon.tileAt(level, x, y);
+    const detail = tile.detail ?? { type: tile.type };
+    const onWall = detail.type === 'wall';
+    const contents = contentsAt(level, x, y);
+    const markers = [
+      ...mechanismMarkers(dungeon, detail, onWall),
+      ...textMarkers(dungeon, detail, onWall),
+      ...(contents ? contentMarkers(contents, onWall) : []),
+    ];
+    const hadParty = partyMark.parentNode === cell;
+    cell.replaceChildren(...markers);
+    if (hadParty) cell.append(partyMark);
+    if (markers.length && !markedCells.includes(cell)) markedCells.push(cell);
   }
 
   function ensureCells(width, height) {
@@ -227,13 +236,14 @@ export function createDomRenderer(
       drawLinks();
       placeParty();
     },
-    /** The state of a tile changed (simulation): redraw it if its level is shown. */
+    /** The state or the items of a tile changed (simulation): redraw it if its level is shown. */
     updateTile(level, x, y) {
       const cell = level === area?.level ? cells[cellIndexOf(x, y)] : null;
       if (!cell) return;
       const kept = ['is-selected', 'is-highlighted'].filter((c) => cell.classList.contains(c));
       cell.className = tileClasses(tileAt(level, x, y));
       cell.classList.add(...kept);
+      drawCell(level, x, y);
     },
     /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
     setParty(next) {

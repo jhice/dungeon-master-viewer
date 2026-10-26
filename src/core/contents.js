@@ -71,11 +71,11 @@ export function describeCreature(dungeon, index) {
 /**
  * Contents of a tile: { items: [...describeItem], creature: describeCreature | null }.
  * Items keep the original stacking order. Returns null for an empty tile.
+ * `itemRefs` replaces the items of dungeon.json (the simulation passes the items lying there now).
  */
-export function tileContents(dungeon, level, x, y) {
-  const refs = dungeon.tileAt(level, x, y)?.detail?.items;
-  if (!refs) return null;
-  const items = refs.filter((r) => ITEM_POOLS[r.kind]).map((r) => describeItem(dungeon, r));
+export function tileContents(dungeon, level, x, y, itemRefs) {
+  const refs = dungeon.tileAt(level, x, y)?.detail?.items ?? [];
+  const items = (itemRefs ?? refs.filter((r) => ITEM_POOLS[r.kind])).map((r) => describeItem(dungeon, r));
   const creatureRef = refs.find((r) => r.kind === 'creature');
   const creature = creatureRef ? describeCreature(dungeon, creatureRef.index) : null;
   return items.length || creature ? { items, creature } : null;

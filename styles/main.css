@@ -574,3 +574,48 @@ body {
   white-space: pre-line;
   pointer-events: none;
 }
+
+/* Inventory of the party (phase E): one chip per item, the one in hand outlined. */
+.game-inventory {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  background: #1c1a17;
+  border-top: 1px solid #333;
+  font-size: 0.75rem;
+}
+
+.game-items {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  color: var(--muted);
+}
+
+.game-inventory button {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #2a2723;
+  color: var(--fg);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.game-inventory button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.game-item {
+  border-left: 4px solid var(--c, #888) !important;
+}
+
+.game-item.is-in-hand {
+  border-color: var(--accent) !important;
+  border-left-color: var(--c, #888) !important;
+  color: var(--accent);
+  background: #3a3226;
+}

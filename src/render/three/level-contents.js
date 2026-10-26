@@ -23,9 +23,14 @@ const FACE_DIRECTION = [
 ];
 
 /**
- * @returns {Array<THREE.InstancedMesh>} meshes with userData { part, layer, variant: 'all', tiles, baseOpacity }
+ * @param {object} options
+ * @param {number} options.wallHeight
+ * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (default: dungeon.json;
+ *   the simulation passes the items lying there now)
+ * @returns {Array<THREE.InstancedMesh>} meshes with userData { part, layer, variant: 'all', tiles, baseOpacity };
+ *   for items, tiles[i].item is the item ({ kind, index, position })
  */
-export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) {
+export function buildLevelContents(dungeon, levelIndex, center, { wallHeight, contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) }) {
   const map = dungeon.level(levelIndex);
   const items = []; // { position: [x, y, z], color, info }
   const creatures = []; // { position, scale, color, info }
@@ -34,7 +39,8 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
   const gizmos = []; // other mechanisms: small octahedrons (on the wall face, or centred)
   const writings = []; // texts: thin plates on the wall face (or flat on the floor)
 
-  for (const { x, y, gx, gy, detail } of dungeon.detailedTiles(levelIndex)) {
+  // Every tile, not only those of dungeon.json: items may have been dropped anywhere.
+  for (const { x, y, gx, gy, detail } of allTiles(dungeon, levelIndex)) {
     const info = { level: levelIndex, x, y, gx, gy, type: detail.type, detail };
     const ox = gx - center.x; // west edge of the tile
     const oz = gy - center.z; // north edge of the tile
@@ -75,7 +81,7 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
       }
     }
 
-    const contents = tileContents(dungeon, levelIndex, x, y);
+    const contents = contentsAt(levelIndex, x, y);
     if (!contents) continue;
 
     // Items stacked per position: on the floor in their sub-tile, on a wall against their face.
@@ -92,7 +98,7 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
         base = [ox + u, 0, oz + v];
       }
       const position = [base[0], base[1] + ITEM_HEIGHT / 2 + stack.length * ITEM_HEIGHT * 1.05, base[2]];
-      items.push({ position, color: CATEGORY_COLORS[item.category], info });
+      items.push({ position, color: CATEGORY_COLORS[item.category], info: { ...info, item } });
       if (item.contents?.length) rings.push({ position: [position[0], position[1] + ITEM_HEIGHT, position[2]], info });
       stack.push(item);
     }
@@ -134,6 +140,16 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
     meshes.push(instanced('texts', 'texts', new THREE.BoxGeometry(1, 1, 1), writings, levelIndex));
   }
   return meshes;
+}
+
+function* allTiles(dungeon, levelIndex) {
+  const map = dungeon.level(levelIndex);
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const tile = dungeon.tileAt(levelIndex, x, y);
+      yield { x, y, gx: x + map.offset.x, gy: y + map.offset.y, detail: tile.detail ?? { type: tile.type } };
+    }
+  }
 }
 
 function instanced(part, layer, geometry, list, levelIndex) {

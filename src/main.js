@@ -3,8 +3,8 @@ import { describeState } from './core/tile-states.js';
 import { tileContents, buildInventory } from './core/contents.js';
 import { buildLogic, describeActuator, describeTeleporter, actuatorFamily } from './core/logic.js';
 import { buildTexts, textsAt, championSummary } from './core/texts.js';
-import { FACE_LABELS } from './core/contents.js';
-import { FAMILY_COLORS, TELEPORTER_COLORS, TEXT_COLORS } from './render/palette.js';
+import { FACE_LABELS, describeItem } from './core/contents.js';
+import { FAMILY_COLORS, TELEPORTER_COLORS, TEXT_COLORS, CATEGORY_COLORS } from './render/palette.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
@@ -133,6 +133,7 @@ async function mountRenderer() {
         onSelect: select,
         onFollow: follow,
         tileAt: sim.state.tileAt, // tiles in their current state (simulation)
+        contentsAt, // and the items lying there now
       });
     } catch (error) {
       console.error(error);
@@ -266,7 +267,7 @@ function showHover(info) {
   const text = tileSummary(info);
   status.textContent = text;
   if (renderer?.setLayers) {
-    const contents = tileContents(dungeon, info.level, info.x, info.y);
+    const contents = contentsAt(info.level, info.x, info.y); // items lying there now
     // The tooltip title repeats the status bar, so it is useful even on an empty tile.
     tooltip.show(text, contents, {
       ...layers(),
@@ -513,10 +514,15 @@ async function openGame() {
     },
     onClose: closeGame,
     onReset: () => sim.reset(),
+    // Inventory: a click takes the item in hand, or releases it.
+    onSelectItem: (i) => sim.setHand(sim.hand === sim.inventory[i] ? null : sim.inventory[i]),
+    onDrop: () => sim.drop(),
   });
   try {
     const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
-    game = { window: win, view: createFirstPersonRenderer(win.viewport, dungeon, sim.state, { onClickFront: clickFront }) };
+    const view = createFirstPersonRenderer(win.viewport, dungeon, sim.state, { onClickFront: clickFront, onClickItem: pickUp, contentsAt });
+    game = { window: win, view };
+    showInventory();
     game.clock = setInterval(() => sim.tick(), TICK_MS);
   } catch (error) {
     console.error(error);
@@ -555,8 +561,27 @@ async function teleportToSelection() {
 
 // Click on the wall or door in front of the party (mouse in the view, or Space).
 function clickFront() {
-  const { target, fired } = sim.clickFront();
-  if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
+  const { target, fired, took, placed } = sim.clickFront();
+  if (took) showInfo(`${took} objet(s) pris`);
+  else if (placed) showInfo('Objet posé dans l’alcôve');
+  else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
+}
+
+// Click on an item of the party's tile: it goes into the inventory.
+function pickUp({ level, x, y, item }) {
+  if (!sim.pickUp(level, x, y, item)) showInfo('Hors de portée');
+}
+
+// Contents of a tile for the views: items lying there now (simulation), creatures of dungeon.json.
+const itemName = (ref) => describeItem(dungeon, ref).name;
+function contentsAt(level, x, y) {
+  return tileContents(dungeon, level, x, y, sim.state.itemsAt(level, x, y));
+}
+
+function showInventory() {
+  game?.window.setInventory(
+    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind], inHand: ref === sim.hand })),
+  );
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
@@ -586,9 +611,21 @@ function describeEffect({ type, direction, party, detail }) {
 }
 sim.on('reset', ({ party }) => {
   showParty(party);
+  showInventory();
   // Every tile may have changed: redraw the views.
   if (renderer) mountRenderer();
   for (let level = 0; level < dungeon.levelCount; level++) game?.view.updateTile(level);
+});
+
+// Items moved (picked up, dropped, taken by a lock): redraw the tile; the inventory changed.
+sim.on('itemsChanged', ({ level, x, y }) => {
+  game?.view.updateTile(level);
+  renderer?.updateTile?.(level, x, y);
+});
+sim.on('inventoryChanged', () => {
+  showInventory();
+  const hand = sim.hand;
+  if (hand) showInfo(`En main : ${itemName(hand)}`);
 });
 
 // A mechanism changed a tile: redraw it everywhere and say so.

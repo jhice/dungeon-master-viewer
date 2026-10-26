@@ -21,8 +21,13 @@ export function createSimulation(dungeon) {
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
+  let hand = null; // item of the inventory in hand ({ kind, index }), or null
   const logic = createLogic(dungeon, state, clock, {
-    emit: events.emit,
+    emit: (type, payload) => {
+      // An item that left the inventory (lock, alcove, drop) is no longer in hand.
+      if (type === 'inventoryChanged' && hand && !state.inventory.includes(hand)) hand = null;
+      events.emit(type, payload);
+    },
     party: () => party,
     onOpenedUnderParty: applyTileUnderParty,
   });
@@ -92,8 +97,38 @@ export function createSimulation(dungeon) {
         .filter((ref) => ref.kind === 'text' && ref.position === face && state.textVisible(ref.index))
         .map((ref) => dungeon.data.texts[ref.index].text);
     },
-    /** Click on what is in front of the party (wall face, door button). Phase E: item in hand. */
-    clickFront: () => logic.clickFront(party, null),
+    /** Click on what is in front of the party (wall face, door button, alcove), with the item in hand. */
+    clickFront: () => logic.clickFront(party, hand),
+    /** Items carried: [{ kind, index }]; the one in hand (or null). */
+    get inventory() {
+      return state.inventory;
+    },
+    get hand() {
+      return hand;
+    },
+    /** Takes an item of the inventory in hand, or empties the hand (null). */
+    setHand(item) {
+      hand = item && state.inventory.includes(item) ? item : null;
+      events.emit('inventoryChanged', { inventory: state.inventory });
+    },
+    /**
+     * Picks up an item lying on the party's tile, or on the wall face in front of it.
+     * @returns {boolean} false if the item is out of reach
+     */
+    pickUp(level, x, y, ref) {
+      const [dx, dy] = SIDE_DELTAS[party.facing];
+      const own = level === party.level && x === party.x && y === party.y;
+      const front = level === party.level && x === party.x + dx && y === party.y + dy;
+      const face = (FACINGS.indexOf(party.facing) + 2) % 4;
+      const onFrontWall = front && state.tileAt(level, x, y)?.type === 'wall' && ref.position === face;
+      if (!own && !onFrontWall) return false;
+      return logic.pickUp(party, level, x, y, ref);
+    },
+    /** Drops the item in hand (or the last one picked up) on the party's tile. */
+    drop() {
+      const item = hand ?? state.inventory.at(-1);
+      return item ? logic.drop(party, item) : false;
+    },
     /** Advances the clock: delayed effects due by then are applied. */
     tick(ticks = 1) {
       clock.advance(ticks);
@@ -101,6 +136,7 @@ export function createSimulation(dungeon) {
     reset() {
       clock.clear();
       state.reset();
+      hand = null;
       party = createParty(dungeon.start);
       events.emit('reset', { party });
     },

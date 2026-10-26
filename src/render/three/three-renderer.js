@@ -48,11 +48,12 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
  * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; main.js passes the simulation state)
+ * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (default: dungeon.json)
  */
 export function createThreeRenderer(
   container,
   dungeon,
-  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange, tileAt } = {},
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange, tileAt, contentsAt } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
   const layers = { items: true, creatures: true, mechanisms: true, texts: true, ...initialLayers };
@@ -109,7 +110,7 @@ export function createThreeRenderer(
 
   function buildLevel(i) {
     const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center, { wallHeight: settings.wallHeight, tileAt });
-    for (const mesh of buildLevelContents(dungeon, i, center, { wallHeight: settings.wallHeight })) {
+    for (const mesh of buildLevelContents(dungeon, i, center, { wallHeight: settings.wallHeight, contentsAt })) {
       group.add(mesh);
       meshes.push(mesh);
     }

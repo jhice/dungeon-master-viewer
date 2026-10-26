@@ -6,7 +6,8 @@
 //
 // Rendering is on demand (party moved, state changed, resize): no loop yet.
 // Mouse: a click on the wall or door just in front of the party is reported
-// (wall buttons, levers, door buttons); the cursor shows when it is clickable.
+// (wall buttons, levers, locks, alcoves, door buttons), and so is a click on an
+// item within reach; the cursor shows when it is clickable.
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
@@ -33,8 +34,10 @@ const CEILING_COLOR = '#1d1b18';
  * @param {{ tileAt(level, x, y): object, textVisible(index): boolean }} state simulation state (src/sim/state.js)
  * @param {object} [options]
  * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
+ * @param {(info: object) => void} [options.onClickItem] an item was clicked: { level, x, y, item }
+ * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (items lying there now)
  */
-export function createFirstPersonRenderer(container, dungeon, state, { onClickFront } = {}) {
+export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickItem, contentsAt } = {}) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -70,7 +73,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     });
     // Items, creatures (still) and mechanisms, as markers of the 3D renderer.
     // Texts are drawn for real (inscriptions below), not as markers.
-    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT })) {
+    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt })) {
       if (mesh.userData.layer === 'texts') {
         mesh.geometry.dispose();
         mesh.material.dispose();
@@ -138,25 +141,36 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   // --- Mouse: picking the tile in front of the party ------------------------------
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  function frontHit(event) {
-    if (!built || !party) return false;
+  // What the pointer designates: an item of the party's tile, the wall or door in
+  // front (an item in the front alcove counts as the wall: its actuators must act too), or null.
+  function target(event) {
+    if (!built || !party) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
     const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible);
     const hit = raycaster.intersectObjects(pickable, false)[0];
     const info = hit?.object.userData.tiles?.[hit.instanceId];
+    if (!info) return null;
     const [dx, dy] = SIDE_DELTAS[party.facing];
-    return Boolean(info) && info.x === party.x + dx && info.y === party.y + dy && (info.type === 'wall' || info.type === 'door');
+    const own = info.x === party.x && info.y === party.y;
+    const front = info.x === party.x + dx && info.y === party.y + dy;
+    if (info.item && own) return { kind: 'item', info };
+    if (front && (info.type === 'wall' || info.type === 'door')) return { kind: 'front' };
+    return null;
   }
-  const onClick = (event) => frontHit(event) && onClickFront?.();
+  const onClick = (event) => {
+    const t = target(event);
+    if (t?.kind === 'item') onClickItem?.(t.info);
+    else if (t?.kind === 'front') onClickFront?.();
+  };
   let hoverPending = false;
   const onMove = (event) => {
     if (hoverPending) return;
     hoverPending = true;
     requestAnimationFrame(() => {
       hoverPending = false;
-      renderer.domElement.style.cursor = frontHit(event) ? 'pointer' : '';
+      renderer.domElement.style.cursor = target(event) ? 'pointer' : '';
     });
   };
   renderer.domElement.addEventListener('click', onClick);

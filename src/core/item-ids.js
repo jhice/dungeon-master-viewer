@@ -19,6 +19,18 @@ const KNOWN = {
 };
 
 /**
+ * Identifier of an item ({ kind, index }), the reverse of decodeItemId(): keys by
+ * their type, the other known items by their name; null if unknown.
+ */
+export function itemIdOf(dungeon, { kind, index }) {
+  const entry = dungeon.data[kind === 'miscellaneous' ? 'miscellaneous' : kind === 'weapon' ? 'weapons' : null]?.[index];
+  if (!entry) return null;
+  if (kind === 'miscellaneous' && entry.type >= 9 && entry.type <= 24) return entry.type + KEYS_OFFSET;
+  const known = Object.entries(KNOWN).find(([, item]) => item.name === entry.name);
+  return known ? Number(known[0]) : null;
+}
+
+/**
  * @returns {{ name: string, certainty: 'confirmé'|'probable'|'incertain'|'inconnu' }}
  */
 export function decodeItemId(dungeon, id) {

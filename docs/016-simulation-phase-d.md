@@ -44,7 +44,7 @@ Les messages et ce qui les déclenche :
 
 - **Chrome :** en (8, 4) du niveau 0, face au sud, « HALL OF CHAMPIONS » est gravé sur le mur (8, 5) et repris dans la légende.
 - **Node :** la plaque (7, 5) du niveau 3 ne réagit pas au groupe, puisqu'une créature l'occupe. C'est conforme à la règle TPC de la phase C.
-- « WELCOME BACK » : vérifié avec la phase E (doc 017).
+- « WELCOME BACK » : vérifié avec la phase E (doc 017), en rapportant le Firestaff au Hall.
 
 ## Sources
 

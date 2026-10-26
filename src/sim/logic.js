@@ -13,12 +13,14 @@
 //               creature generators: not simulated yet (no creatures)
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
-import { tileContents } from '../core/contents.js';
+import { itemIdOf } from '../core/item-ids.js';
 import { decodeChampion } from '../core/texts.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
 const FLOOR_ANYTHING = 1; // TPCI: party, creatures, items
 const FLOOR_NO_ITEMS = 2; // TPC: party, creatures
+const FLOOR_ITEM = 4; // I: a given item lying on the tile
+const FLOOR_POSSESSION = 8; // party carrying a given item
 const WALL_CLICK = 1; // any item / empty hand
 const WALL_CLICK_HOLDING = 2; // any item / no empty hand
 const WALL_SPECIFIC_ITEM = 3;
@@ -171,37 +173,105 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (runtime.data === 0) fire(index, !actuatorData(index).revert);
   }
 
-  // --- Floor actuators: the party enters or leaves a tile -----------------------------------
-  function floorActuators(p, added, onlyFacing = false) {
-    const contents = tileContents(dungeon, p.level, p.x, p.y);
-    const hasItems = Boolean(contents?.items.length);
-    const hasCreature = Boolean(contents?.creature);
-    for (const { index } of [...state.actuatorsAt(p.level, p.x, p.y)]) {
+  // --- Floor actuators: pressed or released ---------------------------------------------
+  // A floor actuator is pressed by what stands on its tile (party, items, creature,
+  // or an item carried by the party); it acts when that changes, not on every arrival.
+  function pressedOn(level, x, y, p) {
+    const here = p && p.level === level && p.x === x && p.y === y ? p : null;
+    const items = state.itemsAt(level, x, y);
+    const creature = (dungeon.tileAt(level, x, y)?.detail?.items ?? []).some((ref) => ref.kind === 'creature');
+    const pressed = new Map();
+    for (const { index } of state.actuatorsAt(level, x, y)) {
       const a = actuatorData(index);
       if (a.kind !== 'floor') continue;
-      if (a.type === FLOOR_PARTY) {
-        if (onlyFacing && !a.data) continue;
-        // data 1..4: only when the party faces N, E, S, W.
-        if (a.data && p.facing !== FACINGS[a.data - 1]) continue;
-      } else if (onlyFacing) {
-        continue;
-      } else if (a.type === FLOOR_ANYTHING) {
-        // Already pressed by an item or a creature: the party changes nothing.
-        if (hasItems || hasCreature) continue;
-      } else if (a.type === FLOOR_NO_ITEMS) {
-        if (hasCreature) continue;
-      } else {
-        continue; // items only, creatures only, party possessions (phase E), generators
+      let on;
+      switch (a.type) {
+        case FLOOR_PARTY:
+          // data 1..4: only when the party faces N, E, S, W.
+          on = Boolean(here) && (!a.data || here.facing === FACINGS[a.data - 1]);
+          break;
+        case FLOOR_ANYTHING:
+          on = Boolean(here) || items.length > 0 || creature;
+          break;
+        case FLOOR_NO_ITEMS:
+          on = Boolean(here) || creature;
+          break;
+        case FLOOR_ITEM:
+          on = items.some((item) => itemIdOf(dungeon, item) === a.data);
+          break;
+        case FLOOR_POSSESSION:
+          on = Boolean(here) && state.inventory.some((item) => itemIdOf(dungeon, item) === a.data);
+          break;
+        default:
+          continue; // creatures only, generators: no creatures yet
       }
-      fire(index, added !== a.revert);
+      pressed.set(index, on);
     }
+    return pressed;
+  }
+
+  // Applies `change` (the party comes or goes, items move) and fires the floor
+  // actuators of the tile whose state changed: pressed = triggered, released = not.
+  function floorChange(level, x, y, partyBefore, partyAfter, change) {
+    const before = pressedOn(level, x, y, partyBefore);
+    change?.();
+    const after = pressedOn(level, x, y, partyAfter);
+    for (const [index, on] of after) {
+      if (on !== before.get(index)) fire(index, on !== actuatorData(index).revert);
+    }
+    clock.flush();
+  }
+
+  // --- Items: inventory, floor, alcoves ---------------------------------------------------
+  const sameItem = (a, b) => a.kind === b.kind && a.index === b.index;
+  const changedItems = (level, x, y) => emit('itemsChanged', { level, x, y });
+  const changedInventory = () => emit('inventoryChanged', { inventory: state.inventory });
+
+  /** Picks up an item of the party's tile, or of the wall face in front of it. */
+  function pickUp(p, level, x, y, ref) {
+    const lying = state.itemsAt(level, x, y);
+    const i = lying.findIndex((item) => sameItem(item, ref));
+    if (i < 0) return false;
+    floorChange(level, x, y, p, p, () => {
+      const [item] = lying.splice(i, 1);
+      state.inventory.push({ kind: item.kind, index: item.index });
+    });
+    changedItems(level, x, y);
+    changedInventory();
+    return true;
+  }
+
+  /** Drops a carried item on the party's tile, in the front sub-tile on its left (DM). */
+  function drop(p, item) {
+    const i = state.inventory.findIndex((carried) => sameItem(carried, item));
+    if (i < 0) return false;
+    floorChange(p.level, p.x, p.y, p, p, () => {
+      state.inventory.splice(i, 1);
+      // Sub-tiles 0..3 = NW, NE, SE, SW: the front-left one has the index of the facing.
+      state.itemsAt(p.level, p.x, p.y).push({ kind: item.kind, index: item.index, position: FACINGS.indexOf(p.facing) });
+    });
+    changedItems(p.level, p.x, p.y);
+    changedInventory();
+    return true;
+  }
+
+  // Is there an alcove on this face of the wall (wall decoration named "… Alcove")?
+  function isAlcove(level, x, y, face) {
+    const decorations = dungeon.level(level).wallDecorations;
+    return (dungeon.tileAt(level, x, y)?.detail?.decorations ?? []).some(
+      (d) => d.side === FACINGS[face] && /Alcove/.test(decorations[d.graphic - 1]?.name ?? ''),
+    );
   }
 
   // --- Wall click: the face in front of the party ---------------------------------------
   /**
+   * Actuators of the face first (buttons, levers, locks); then an item still in
+   * hand goes into an alcove, or else the items of the face are taken.
+   * Locks and "specific item" actuators only need the item to be carried (answer Q2);
+   * a lock ("Specific item / Removed") keeps it.
    * @param {object} p party
-   * @param {object|null} hand item held (phase E), null = empty hand
-   * @returns {{ target: string, fired: number }} what was clicked, and how many actuators acted
+   * @param {object|null} hand item in hand ({ kind, index }), null = empty hand
+   * @returns {{ target: string, fired: number, took?: number, placed?: boolean }}
    */
   function clickFront(p, hand = null) {
     const [dx, dy] = SIDE_DELTAS[p.facing];
@@ -217,14 +287,42 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       if (position !== face) continue;
       const a = actuatorData(index);
       let condition;
+      let key = null;
       if (a.type === WALL_CLICK) condition = true;
       else if (a.type === WALL_CLICK_HOLDING) condition = hand !== null;
-      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) condition = hand?.id === a.data;
-      else continue; // storage, exchanger, portraits, shooters, gates: not clickable here
-      fire(index, condition !== a.revert);
+      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) {
+        const matches = (item) => itemIdOf(dungeon, item) === a.data;
+        key = hand && matches(hand) ? hand : (state.inventory.find(matches) ?? null);
+        condition = key !== null;
+      } else continue; // storage, exchanger, portraits, shooters, gates: not clickable here
+      const triggered = condition !== a.revert;
+      if (a.type === WALL_LOCK && key && triggered && !state.actuator(index).disabled) {
+        state.inventory.splice(state.inventory.indexOf(key), 1);
+        changedInventory();
+      }
+      fire(index, triggered);
     }
     clock.flush();
-    return { target: 'wall', fired: firedCount };
+    const fired = firedCount;
+
+    const lying = state.itemsAt(p.level, x, y);
+    if (hand && isAlcove(p.level, x, y, face) && state.inventory.includes(hand)) {
+      state.inventory.splice(state.inventory.indexOf(hand), 1);
+      lying.push({ kind: hand.kind, index: hand.index, position: face });
+      changedItems(p.level, x, y);
+      changedInventory();
+      return { target: 'wall', fired, placed: true };
+    }
+    const onFace = lying.filter((item) => item.position === face);
+    for (const item of onFace) {
+      lying.splice(lying.indexOf(item), 1);
+      state.inventory.push({ kind: item.kind, index: item.index });
+    }
+    if (onFace.length) {
+      changedItems(p.level, x, y);
+      changedInventory();
+    }
+    return { target: 'wall', fired, took: onFace.length };
   }
 
   // Door with a button: a click toggles it.
@@ -236,25 +334,23 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   }
 
   return {
-    /** The party left a tile (before moving), entered one (after its arrival effects), or turned. */
+    /** The party left a tile (after moving), entered one (after its arrival effects), or turned. */
     partyLeft(p) {
-      floorActuators(p, false);
-      clock.flush();
+      floorChange(p.level, p.x, p.y, p, null);
     },
     partyEntered(p) {
       // A visible text on the floor is printed when the party walks on it.
       for (const ref of floorTexts(p.level, p.x, p.y)) {
         if (state.textVisible(ref.index)) emit('textShown', { index: ref.index, level: p.level, x: p.x, y: p.y });
       }
-      floorActuators(p, true);
-      clock.flush();
+      floorChange(p.level, p.x, p.y, null, p);
     },
     partyTurned(from, to) {
-      // Only the plates with a facing condition notice a turn: off with the old facing, on with the new.
-      floorActuators(from, false, true);
-      floorActuators(to, true, true);
-      clock.flush();
+      // Only the plates with a facing condition notice it.
+      floorChange(to.level, to.x, to.y, from, to);
     },
     clickFront,
+    pickUp,
+    drop,
   };
 }

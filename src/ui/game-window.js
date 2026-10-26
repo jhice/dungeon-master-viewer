@@ -15,9 +15,11 @@ const MESSAGE_MS = 12000; // before a message fades out
  * @param {(layout: object) => void} [options.onLayoutChange] after a drag or a resize
  * @param {() => void} [options.onClose]
  * @param {() => void} [options.onReset] back to the start position
- * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setReading(text|null), flash(), dispose() }}
+ * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked (take in hand / release)
+ * @param {() => void} [options.onDrop] the drop button was clicked
+ * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setReading(text|null), setInventory(items), flash(), dispose() }}
  */
-export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = {}) {
+export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onDrop } = {}) {
   const win = document.createElement('section');
   win.className = 'game-window';
   win.setAttribute('aria-label', 'Simulation');
@@ -40,7 +42,14 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = 
   const messages = document.createElement('div');
   messages.className = 'game-messages';
   messages.setAttribute('aria-live', 'polite');
-  win.append(bar, viewport, messages);
+  // Inventory of the party: one chip per item (click = take in hand), and a drop button.
+  const inventory = document.createElement('div');
+  inventory.className = 'game-inventory';
+  const chips = document.createElement('div');
+  chips.className = 'game-items';
+  const dropButton = button('Poser', 'Poser l’objet en main (ou le dernier ramassé) sur la case', onDrop);
+  inventory.append(chips, dropButton);
+  win.append(bar, viewport, messages, inventory);
   document.body.append(win);
 
   const place = ({ left, top, width }) => {
@@ -94,6 +103,19 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = 
       messages.append(line);
       while (messages.children.length > MESSAGE_LINES) messages.firstChild.remove();
       setTimeout(() => line.classList.add('is-old'), MESSAGE_MS);
+    },
+    /** Items carried: [{ name, color, inHand }]. */
+    setInventory(items) {
+      chips.replaceChildren(
+        ...items.map((item, i) => {
+          const chip = button(item.name, item.inHand ? 'En main (clic : lâcher)' : 'Prendre en main', () => onSelectItem?.(i));
+          chip.className = `game-item${item.inHand ? ' is-in-hand' : ''}`;
+          chip.style.setProperty('--c', item.color);
+          return chip;
+        }),
+      );
+      if (!items.length) chips.textContent = 'Inventaire vide — clic sur un objet de la case pour le ramasser';
+      dropButton.disabled = !items.length;
     },
     /** Caption over the view: the inscription faced by the party, or null. */
     setReading(text) {
