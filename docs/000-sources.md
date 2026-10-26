@@ -1,0 +1,57 @@
+# Claude Code sources
+
+La liste des sources utilisées par Claude Code, de la première analyse (001) aux ajustements (011).
+Elles sont classées selon leur traçabilité : ce qui a été **consulté** pendant les sessions, ce qui vient des
+**connaissances préalables** du modèle, sans consultation, et ce qui a été **déduit des données** elles-mêmes.
+
+## 1. Sources consultées pendant les sessions
+
+| Source | Lien | Description | Usage |
+|---|---|---|---|
+| Fichier du donjon | `Dungeon.xml` (identique à `0000.DUNGEON [Dungeon].xml`), fourni par l'utilisateur | Dump XML du `DUNGEON.DAT` de Dungeon Master, avec des commentaires qui documentent chaque champ : taille en bits, plage de valeurs, cas DM, CSB et DM2. L'outil qui a produit ce dump n'est pas identifié | **Source principale.** Toute la structure (001), la conversion (002), et des précisions reprises telles quelles des commentaires : rune de potion = puissance ÷ 40, valeurs de `seed` selon le jeu, rôle de `difficulty`, apparence des portes 0 à 3, champs inutilisés en DM, objets « cursed » lâchés par les Animated Armours… |
+| Scripts PHP | `map.php`, `reader.php`, fournis par l'utilisateur | Premiers essais de lecture du XML avec SimpleXML | Lecture seule, pour comprendre le point de départ |
+| graphics.dat de DM Amiga 3.6 (version CAPS) | http://greatstone.free.fr/dm/db_data/dm_amiga_36_caps/graphics.dat/graphics.dat.html, lien donné par l'utilisateur | Page de l'extraction des graphismes du jeu original, avec le libellé de chaque graphisme (« [0584] Creature 00 (Front) (Giant Scorpion) »…) | Étape 008 : **mesure de la teinte moyenne** des sprites de face des créatures, calculée dans le navigateur. Aucune image téléchargée, copiée ni reproduite. Ces teintes ont servi de point de départ à la palette des espèces, complétée de mémoire, car le jeu recolore certaines créatures à l'affichage |
+| Three.js 0.170.0 | https://threejs.org/ (servi par le CDN https://cdn.jsdelivr.net/npm/three@0.170.0/) | Bibliothèque 3D, avec ses modules `OrbitControls` et `CSS2DRenderer` | Dépendance du renderer 3D (005 à 011). Sa documentation n'a pas été consultée : usage d'après les connaissances préalables de l'API |
+
+Aucune autre page web n'a été consultée, et aucun fichier n'a été téléchargé.
+
+## 2. Connaissances préalables du modèle (non consultées, sans lien vérifié)
+
+Ces points viennent de l'entraînement du modèle, et non d'une page lue pendant les sessions. **Je ne peux pas dire
+précisément de quels documents ils proviennent.** La documentation publiée par la communauté de Dungeon Master les couvre
+très probablement, en particulier la *Dungeon Master Encyclopaedia* de Christophe Fontanel (http://dmweb.free.fr/),
+qui héberge aussi le projet ReDMCSB (reconstruction du code source de DM / CSB). Mais je ne peux pas affirmer
+que ce sont mes sources. **À vérifier sur ces références avant de les citer comme faits.**
+
+| Point | Utilisé dans | Statut |
+|---|---|---|
+| Ordre des 4 positions d'une case : sens horaire depuis le nord-ouest (0 NO, 1 NE, 2 SE, 3 SO), contre les annotations du dump | 008 | **Vérifié dans le jeu original** par l'utilisateur |
+| Sens des drapeaux des trappes (ouverte, invisible, imaginaire) et des faux murs (ouvert = disparu, imaginaire = illusoire) | 006 | Cohérent avec les comptes des données, non vérifié en jeu |
+| États d'une porte (0 = ouverte, 4 = fermée, valeurs intermédiaires en mouvement) | 002, 006 | 0 et 4 confirmés par les libellés `state_str` du dump. Les autres valeurs, absentes des données, ne sont pas vérifiées |
+| Format des fiches de champions : lettres A à P = chiffres hexadécimaux ; PV, endurance (stockée × 10), mana ; ordre des 7 attributs ; 16 compétences cachées, 4 par classe, avec leurs noms | 010 | Cohérent : classes décodées conformes aux champions connus (Halk guerrier, Mophus prêtre, Wuuf ninja et prêtre…), non vérifié en jeu |
+| Idée que l'« item identifier » des actuators est un **index d'icône** et non un type d'objet | 009 | Hypothèse de départ, ensuite démontrée par les données pour les clés (voir § 3) |
+| Les 25 noms d'espèces et leurs types (0 Giant Scorpion … 24 Red Dragon) | 008 | Les noms viennent des commentaires du dump. Seules les couleurs complétées de mémoire relèvent des connaissances préalables |
+| Le niveau 0 est le Hall of Champions, le niveau 13 le repaire de Lord Chaos ; rôle de l'Amalgam, du Firestaff et de la Power Gem dans la fin du jeu | 003, 009 | Contexte d'interprétation, non vérifié |
+| Conventions roguelike (`<` et `>` pour les escaliers) | 003 | Choix d'affichage |
+
+## 3. Déductions faites à partir des données (sans source externe)
+
+Ces résultats ont été établis par analyse et contre-vérification du fichier XML, avec des scripts Node et Python
+écrits pour l'occasion. Ils sont reproductibles avec les outils du projet.
+
+| Résultat | Méthode | Doc |
+|---|---|---|
+| Index des tuiles = `y × width + x` (ordre ligne par ligne) | Commentaires `(x;y)` du dump, et concordance totale avec l'`<overview>` | 001 |
+| Superposition des niveaux par `offsetx` et `offsety` | Les 29 paires d'escaliers et les 67 trappes tombent aux mêmes coordonnées globales | 003 |
+| `orientation` des portes et des escaliers = axe de passage | Voisins praticables de 169 portes sur 170 et de 56 escaliers sur 58 | 004 |
+| Mots spéciaux de l'encodage (`_THE`, `_AND`, `_YOU`) = mot **suivi d'une espace** | Les 48 occurrences sont toutes suivies directement d'une lettre | 010 |
+| Clés : identifiant = type d'objet divers + 167 (176 Iron Key … 191 Master Key) | Graphisme des serrures (« Gold Lock » ↔ 184, « Iron Lock » ↔ 176), et chaque clé présente aux niveaux de ses serrures | 009 |
+| `actuator.graphic` = index **en base 1** dans les décorations murales du niveau | Correspondance serrure ↔ clé ci-dessus | 009 |
+| Pièces, torche, Firestaff (identifiants 125-127, 4, 27-28) | Graphisme mural de l'actuator (Coin Slot, Full Torch Holder, Amalgam) et emplacement des détecteurs | 009, **probable** |
+| Générateurs de créatures : `data` = type de créature | Chaque espèce générée fait partie des créatures autorisées sur son niveau | 009 |
+| Textes de fin préfixés A, B, C, D | Observation : probablement un code d'ordre lu par le moteur | 010, hypothèse |
+
+## 4. Outils utilisés
+
+- **Node.js 24 et Python 3** : conversion, validation et scripts d'analyse ponctuels.
+- **Chrome avec l'extension Claude** : tests de l'interface, sur un serveur local (`python3 -m http.server`).

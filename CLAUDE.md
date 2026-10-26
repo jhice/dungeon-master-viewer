@@ -111,3 +111,4 @@ Vue « à la première personne » vers un mode jouable.
 ## Workflow
 
 - résume toutes tes analyses suite à nos échanges dans un dossier `docs/` avec un préfixe 001, 002, 003.
+- lister toutes les sources (lien et description, pas d'extraits de code) que tu as utilisé
