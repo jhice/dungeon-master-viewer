@@ -102,22 +102,27 @@ export function createSimulation(dungeon) {
       events.emit('inventoryChanged', { inventory: state.inventory });
     },
     /**
-     * Picks up an item lying on the party's tile, or on the wall face in front of it.
-     * @returns {boolean} false if the item is out of reach
+     * Sub-tiles within reach (DM): the two front ones of the party's tile, and the two
+     * near ones of the tile in front, if the party could step there.
+     * Sub-tiles 0..3 = NW, NE, SE, SW; the front-left one of a tile has the index of the facing.
      */
-    pickUp(level, x, y, ref) {
+    reachable(level, x, y, position) {
+      if (level !== party.level) return false;
+      const f = FACINGS.indexOf(party.facing);
       const [dx, dy] = SIDE_DELTAS[party.facing];
-      const own = level === party.level && x === party.x && y === party.y;
-      const front = level === party.level && x === party.x + dx && y === party.y + dy;
-      const face = (FACINGS.indexOf(party.facing) + 2) % 4;
-      const onFrontWall = front && state.tileAt(level, x, y)?.type === 'wall' && ref.position === face;
-      if (!own && !onFrontWall) return false;
+      if (x === party.x && y === party.y) return position === f || position === (f + 1) % 4;
+      if (x !== party.x + dx || y !== party.y + dy || blockReason(state, level, x, y)) return false;
+      return position === (f + 2) % 4 || position === (f + 3) % 4;
+    },
+    /** Picks up an item lying within reach; false if it is out of reach. */
+    pickUp(level, x, y, ref) {
+      if (!this.reachable(level, x, y, ref.position)) return false;
       return logic.pickUp(party, level, x, y, ref);
     },
-    /** Drops the item in hand (or the last one picked up) on the party's tile. */
-    drop() {
-      const item = hand ?? state.inventory.at(-1);
-      return item ? logic.drop(party, item) : false;
+    /** Drops the item in hand on a sub-tile within reach; false if impossible. */
+    drop(level, x, y, position) {
+      if (!hand || !this.reachable(level, x, y, position)) return false;
+      return logic.drop(party, hand, level, x, y, position);
     },
     /** Advances the clock: delayed effects due by then are applied. */
     tick(ticks = 1) {

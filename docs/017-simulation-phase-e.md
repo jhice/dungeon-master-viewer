@@ -2,19 +2,24 @@
 
 > Suite de [016-simulation-phase-d.md](016-simulation-phase-d.md).
 > Phase E : ramasser, poser, main active, serrures à clé, alcôves, détecteurs.
-> Gestion simplifiée (réponse Q2) : un **inventaire** du groupe. Pour une serrure, il suffit de **posséder** la clé.
+> Gestion simplifiée (réponse Q2) : un **inventaire** du groupe, avec une **main** : la clé doit être en main.
+> Voir § 5 pour les ajustements après les retours de test.
 
 ## 1. Utilisation
 
-- **Ramasser :** un clic sur un objet **de la case du groupe**, dans la vue à la première personne. Le curseur devient une main.
-  - Un objet est dans la sous-case avant gauche quand on le pose, et les deux sous-cases de devant sont visibles.
+- **Portée :** 4 sous-cases.
+  - Les **deux sous-cases de devant** de la case du groupe.
+  - Les **deux sous-cases proches** de la case d'en face, si le groupe pourrait y entrer (ni mur ni porte fermée).
+- **Ramasser :** un clic sur un objet à portée, dans la vue à la première personne. Le curseur devient une main au survol.
 - **Alcôve en face :** un clic sur le mur (ou Espace) prend les objets de la face.
   - Avec un objet **en main**, le clic le pose dans l'alcôve.
   - Les actuators de la face réagissent d'abord : prendre le Firestaff dans son alcôve ouvre des portes.
 - **Inventaire :** une barre sous la zone de messages, avec une pastille par objet, de la couleur de sa catégorie.
-  - Un clic sur une pastille prend l'objet **en main**, un second clic le lâche.
-  - **Poser** dépose l'objet en main, ou à défaut le dernier ramassé, sur la case du groupe.
-- **Serrures :** Espace ou un clic sur la serrure, avec la clé dans l'inventaire, qu'elle soit en main ou non. La serrure **garde** la clé.
+  - Un clic sur une pastille prend l'objet **en main**. Le curseur devient un carré de la couleur de l'objet.
+  - Un second clic sur la pastille le remet dans l'inventaire.
+- **Poser :** objet en main, un clic sur le **sol** dans l'une des 4 sous-cases à portée l'y dépose.
+- **Serrures :** Espace ou un clic sur la serrure, **la clé en main**. La serrure **garde** la clé.
+- **Supports à torche :** un clic main vide prend la torche, un clic torche en main la remet.
 - **Vues :**
   - la 2D, la 3D et les infobulles montrent les objets là où ils sont maintenant ;
   - un objet posé sur une case vide apparaît aussi, puisque toutes les cases sont parcourues, et non plus seulement celles de `dungeon.json`.
@@ -59,13 +64,17 @@ Les règles de la phase C sont retrouvées : une plaque TPCI déjà chargée d'u
 1. **Actuators de la face :**
    - bouton (1) : toujours ;
    - « main non vide » (2) : un objet en main ;
-   - « objet précis » (3) et serrure (4) : l'objet `data` est en main ou dans l'inventaire ;
-   - la **serrure garde la clé** quand elle réagit.
+   - « objet précis » (3) et serrure (4) : l'objet `data` est **en main** ;
+   - la **serrure garde la clé** quand elle réagit ;
+   - support (13, « Item storage », supports à torche) :
+     - réagit si l'objet attendu y est et que la main est vide (l'objet est pris) ;
+     - ou si l'objet attendu est en main et que le support est vide (il y est posé).
 2. **Objets :**
-   - si un objet est encore en main et que la face a une **alcôve** (décor « … Alcove »), il y est posé ;
+   - si un objet est encore en main et que la face a une **alcôve**, il y est posé ;
+   - une alcôve, c'est un décor « Square Alcove », « Arched Alcove » ou « Vi Altar ». Il est porté par la tuile ou par le **graphisme d'un actuator** de la face (`src/core/ornaments.js`) ;
    - sinon, les objets de la face sont pris.
 
-Ne sont pas gérés : les supports à torche et alcôves à actuator (type 13), l'échangeur (16) et le type 17.
+Ne sont pas gérés : l'échangeur (16) et le type 17.
 
 ## 3. Vérifications
 
@@ -90,7 +99,32 @@ Ne sont pas gérés : les supports à torche et alcôves à actuator (type 13), 
 
 - Pas de **lancer**, ni de main gauche / droite. Le groupe est abstrait : un inventaire sans limite de poids.
 - Les objets dans les **coffres** et ceux que portent les créatures restent inaccessibles.
-- Les **identifiants** probables (pièces, torche, Firestaff) et la règle « posséder suffit » restent à confronter au jeu.
+- Les **identifiants** probables (pièces, torche, Firestaff) restent à confronter au jeu.
+
+## 5. Retours de test et ajustements
+
+| Retour | Ajustement |
+|---|---|
+| Ramasser jusqu'aux 2 premières sous-cases de la case d'en face | Portée de 4 sous-cases : `sim.reachable(level, x, y, position)` |
+| Poser sur ces sous-cases, au clic, l'objet pris en main | Le bouton « Poser » est supprimé. Un clic sur le sol pose l'objet en main sur la sous-case visée, calculée à partir du point touché |
+| Impossible de poser dans l'autel N0 (4, 18) ni de remettre la torche N0 (3, 14) | L'autel de Vi est un **graphisme d'actuator** (inactif, graphisme 5), pas une décoration de tuile. C'est désormais une alcôve. Le support à torche est un actuator de **type 13**, maintenant géré |
+| Curseur quand un objet est en main | Carré de la couleur de la catégorie, avec une petite flèche |
+| Supprimer « posséder suffit » | Serrures et « objet précis » : objet **en main**. Le détecteur d'objet porté (au sol) compte toujours tout l'inventaire |
+| Dans un téléporteur, impossible d'agir (N1 (13, 16)) | Le champ du téléporteur, à 0,35 de son centre, arrêtait les rayons de la souris, alors que l'œil est reculé de 0,35. Les **téléporteurs sont ignorés** par le pointeur |
+| Visuel des alcôves | Une **niche** sombre avec un rebord de pierre, à la hauteur où les objets y reposent |
+
+**Vérifications :**
+- **Node :**
+  - une clé hors de portée n'est pas prise ;
+  - la serrure ne réagit pas à la clé restée dans l'inventaire, mais réagit à la clé en main ;
+  - support à torche : prendre puis remettre, et l'ordre de ses actuators alterne ;
+  - autel : prendre puis remettre le parchemin ;
+  - poser sur la sous-case proche de la case d'en face réussit, mais pas sur la sous-case éloignée.
+- **Chrome :**
+  - la niche de l'autel s'affiche ;
+  - un clic prend le parchemin, la pastille passe en main avec son curseur, et un clic sur la niche le repose ;
+  - depuis le téléporteur N1 (13, 16), un clic au centre atteint les murs sud et est.
+- Aucune erreur dans la console.
 
 ## Sources
 

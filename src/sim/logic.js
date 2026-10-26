@@ -14,6 +14,7 @@
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
+import { isAlcove } from '../core/ornaments.js';
 import { decodeChampion } from '../core/texts.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
@@ -27,6 +28,7 @@ const WALL_SPECIFIC_ITEM = 3;
 const WALL_LOCK = 4; // specific item / removed
 const WALL_GATE = 5;
 const WALL_COUNTER = 6;
+const WALL_ITEM_HOLDER = 13; // "item storage": torch holder
 const LOCAL_ROTATION = 1;
 
 // Retry delay (ticks) when a door or a fake wall cannot close on the party.
@@ -227,7 +229,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   const changedItems = (level, x, y) => emit('itemsChanged', { level, x, y });
   const changedInventory = () => emit('inventoryChanged', { inventory: state.inventory });
 
-  /** Picks up an item of the party's tile, or of the wall face in front of it. */
+  /** Picks up an item lying on a floor tile (reach is checked by the simulation). */
   function pickUp(p, level, x, y, ref) {
     const lying = state.itemsAt(level, x, y);
     const i = lying.findIndex((item) => sameItem(item, ref));
@@ -241,34 +243,41 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     return true;
   }
 
-  /** Drops a carried item on the party's tile, in the front sub-tile on its left (DM). */
-  function drop(p, item) {
+  /** Drops a carried item on a sub-tile (0..3 = NW, NE, SE, SW) of a floor tile. */
+  function drop(p, item, level, x, y, position) {
     const i = state.inventory.findIndex((carried) => sameItem(carried, item));
     if (i < 0) return false;
-    floorChange(p.level, p.x, p.y, p, p, () => {
+    floorChange(level, x, y, p, p, () => {
       state.inventory.splice(i, 1);
-      // Sub-tiles 0..3 = NW, NE, SE, SW: the front-left one has the index of the facing.
-      state.itemsAt(p.level, p.x, p.y).push({ kind: item.kind, index: item.index, position: FACINGS.indexOf(p.facing) });
+      state.itemsAt(level, x, y).push({ kind: item.kind, index: item.index, position });
     });
-    changedItems(p.level, p.x, p.y);
+    changedItems(level, x, y);
     changedInventory();
     return true;
   }
 
-  // Is there an alcove on this face of the wall (wall decoration named "… Alcove")?
-  function isAlcove(level, x, y, face) {
-    const decorations = dungeon.level(level).wallDecorations;
-    return (dungeon.tileAt(level, x, y)?.detail?.decorations ?? []).some(
-      (d) => d.side === FACINGS[face] && /Alcove/.test(decorations[d.graphic - 1]?.name ?? ''),
-    );
+  // Moves an item between the inventory and a wall face (alcove, torch holder).
+  function intoWall(level, x, y, face, item) {
+    state.inventory.splice(state.inventory.indexOf(item), 1);
+    state.itemsAt(level, x, y).push({ kind: item.kind, index: item.index, position: face });
+    changedItems(level, x, y);
+    changedInventory();
+  }
+  function outOfWall(level, x, y, item) {
+    const lying = state.itemsAt(level, x, y);
+    lying.splice(lying.indexOf(item), 1);
+    state.inventory.push({ kind: item.kind, index: item.index });
+    changedItems(level, x, y);
+    changedInventory();
   }
 
   // --- Wall click: the face in front of the party ---------------------------------------
   /**
-   * Actuators of the face first (buttons, levers, locks); then an item still in
-   * hand goes into an alcove, or else the items of the face are taken.
-   * Locks and "specific item" actuators only need the item to be carried (answer Q2);
-   * a lock ("Specific item / Removed") keeps it.
+   * Actuators of the face first (buttons, levers, locks, item holders); then an item
+   * still in hand goes into an alcove, or else the items of the face are taken.
+   * Locks and "specific item" actuators need the item **in hand**; a lock
+   * ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
+   * takes the item it expects from the hand, or gives it back to an empty hand.
    * @param {object} p party
    * @param {object|null} hand item in hand ({ kind, index }), null = empty hand
    * @returns {{ target: string, fired: number, took?: number, placed?: boolean }}
@@ -282,47 +291,54 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (tile.type === 'door') return clickDoor(p.level, x, y, tile);
     if (tile.type !== 'wall') return { target: tile.type, fired: 0 };
     const face = (FACINGS.indexOf(p.facing) + 2) % 4; // the face looking at the party
+    const lying = state.itemsAt(p.level, x, y);
+    const matches = (item, a) => item !== null && itemIdOf(dungeon, item) === a.data;
+    let held = hand && state.inventory.includes(hand) ? hand : null;
+    let placed = false;
+    let took = 0;
     firedCount = 0;
     for (const { index, position } of [...state.actuatorsAt(p.level, x, y)]) {
       if (position !== face) continue;
       const a = actuatorData(index);
       let condition;
-      let key = null;
       if (a.type === WALL_CLICK) condition = true;
-      else if (a.type === WALL_CLICK_HOLDING) condition = hand !== null;
-      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) {
-        const matches = (item) => itemIdOf(dungeon, item) === a.data;
-        key = hand && matches(hand) ? hand : (state.inventory.find(matches) ?? null);
-        condition = key !== null;
-      } else continue; // storage, exchanger, portraits, shooters, gates: not clickable here
+      else if (a.type === WALL_CLICK_HOLDING) condition = held !== null;
+      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) condition = matches(held, a);
+      else if (a.type === WALL_ITEM_HOLDER) {
+        const stored = lying.find((item) => item.position === face && matches(item, a));
+        condition = stored ? held === null : matches(held, a);
+        if (condition && !state.actuator(index).disabled) {
+          if (stored) {
+            outOfWall(p.level, x, y, stored);
+            took++;
+          } else {
+            intoWall(p.level, x, y, face, held);
+            held = null;
+            placed = true;
+          }
+        }
+      } else continue; // exchanger, portraits, shooters, gates: not clickable here
       const triggered = condition !== a.revert;
-      if (a.type === WALL_LOCK && key && triggered && !state.actuator(index).disabled) {
-        state.inventory.splice(state.inventory.indexOf(key), 1);
+      if (a.type === WALL_LOCK && held && triggered && !state.actuator(index).disabled) {
+        state.inventory.splice(state.inventory.indexOf(held), 1); // the lock keeps the key
+        held = null;
         changedInventory();
       }
       fire(index, triggered);
     }
     clock.flush();
     const fired = firedCount;
+    if (placed || took) return { target: 'wall', fired, placed, took };
 
-    const lying = state.itemsAt(p.level, x, y);
-    if (hand && isAlcove(p.level, x, y, face) && state.inventory.includes(hand)) {
-      state.inventory.splice(state.inventory.indexOf(hand), 1);
-      lying.push({ kind: hand.kind, index: hand.index, position: face });
-      changedItems(p.level, x, y);
-      changedInventory();
+    if (held && isAlcove(dungeon, p.level, x, y, face)) {
+      intoWall(p.level, x, y, face, held);
       return { target: 'wall', fired, placed: true };
     }
-    const onFace = lying.filter((item) => item.position === face);
-    for (const item of onFace) {
-      lying.splice(lying.indexOf(item), 1);
-      state.inventory.push({ kind: item.kind, index: item.index });
+    for (const item of lying.filter((i) => i.position === face)) {
+      outOfWall(p.level, x, y, item);
+      took++;
     }
-    if (onFace.length) {
-      changedItems(p.level, x, y);
-      changedInventory();
-    }
-    return { target: 'wall', fired, took: onFace.length };
+    return { target: 'wall', fired, took };
   }
 
   // Door with a button: a click toggles it.

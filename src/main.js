@@ -514,13 +514,17 @@ async function openGame() {
     },
     onClose: closeGame,
     onReset: () => sim.reset(),
-    // Inventory: a click takes the item in hand, or releases it.
+    // Inventory: a click takes the item in hand, or puts it back.
     onSelectItem: (i) => sim.setHand(sim.hand === sim.inventory[i] ? null : sim.inventory[i]),
-    onDrop: () => sim.drop(),
   });
   try {
     const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
-    const view = createFirstPersonRenderer(win.viewport, dungeon, sim.state, { onClickFront: clickFront, onClickItem: pickUp, contentsAt });
+    const view = createFirstPersonRenderer(win.viewport, dungeon, sim.state, {
+      onClickFront: clickFront,
+      onClickFloor: clickFloor,
+      canReach: ({ level, x, y, position, item }) => sim.reachable(level, x, y, position) && Boolean(item || sim.hand),
+      contentsAt,
+    });
     game = { window: win, view };
     showInventory();
     game.clock = setInterval(() => sim.tick(), TICK_MS);
@@ -567,9 +571,14 @@ function clickFront() {
   else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
-// Click on an item of the party's tile: it goes into the inventory.
-function pickUp({ level, x, y, item }) {
-  if (!sim.pickUp(level, x, y, item)) showInfo('Hors de portée');
+// Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
+// ones of the tile in front): the item in hand is dropped there, or the item clicked is picked up.
+function clickFloor({ level, x, y, position, item }) {
+  if (sim.hand) {
+    if (!sim.drop(level, x, y, position)) showInfo('Hors de portée');
+  } else if (item && !sim.pickUp(level, x, y, item)) {
+    showInfo('Hors de portée');
+  }
 }
 
 // Contents of a tile for the views: items lying there now (simulation), creatures of dungeon.json.
@@ -582,6 +591,7 @@ function showInventory() {
   game?.window.setInventory(
     sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind], inHand: ref === sim.hand })),
   );
+  game?.view.setHandCursor(sim.hand ? CATEGORY_COLORS[sim.hand.kind] : null);
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };

@@ -15,10 +15,9 @@ const MESSAGE_MS = 12000; // before a message fades out
  * @param {() => void} [options.onClose]
  * @param {() => void} [options.onReset] back to the start position
  * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked (take in hand / release)
- * @param {() => void} [options.onDrop] the drop button was clicked
  * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setInventory(items), flash(), dispose() }}
  */
-export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onDrop } = {}) {
+export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem } = {}) {
   const win = document.createElement('section');
   win.className = 'game-window';
   win.setAttribute('aria-label', 'Simulation');
@@ -37,13 +36,12 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
   const messages = document.createElement('div');
   messages.className = 'game-messages';
   messages.setAttribute('aria-live', 'polite');
-  // Inventory of the party: one chip per item (click = take in hand), and a drop button.
+  // Inventory of the party: one chip per item (click = take in hand; then a click in the view drops it).
   const inventory = document.createElement('div');
   inventory.className = 'game-inventory';
   const chips = document.createElement('div');
   chips.className = 'game-items';
-  const dropButton = button('Poser', 'Poser l’objet en main (ou le dernier ramassé) sur la case', onDrop);
-  inventory.append(chips, dropButton);
+  inventory.append(chips);
   win.append(bar, viewport, messages, inventory);
   document.body.append(win);
 
@@ -103,14 +101,13 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
     setInventory(items) {
       chips.replaceChildren(
         ...items.map((item, i) => {
-          const chip = button(item.name, item.inHand ? 'En main (clic : lâcher)' : 'Prendre en main', () => onSelectItem?.(i));
+          const chip = button(item.name, item.inHand ? 'En main : clic dans la vue pour le poser, ici pour le reprendre' : 'Prendre en main', () => onSelectItem?.(i));
           chip.className = `game-item${item.inHand ? ' is-in-hand' : ''}`;
           chip.style.setProperty('--c', item.color);
           return chip;
         }),
       );
-      if (!items.length) chips.textContent = 'Inventaire vide — clic sur un objet de la case pour le ramasser';
-      dropButton.disabled = !items.length;
+      if (!items.length) chips.textContent = 'Inventaire vide — clic sur un objet à portée pour le ramasser';
     },
     /** Short visual feedback (blocked move). */
     flash() {

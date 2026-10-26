@@ -6,12 +6,15 @@
 //
 // Rendering is on demand (party moved, state changed, resize): no loop yet.
 // Mouse: a click on the wall or door just in front of the party is reported
-// (wall buttons, levers, locks, alcoves, door buttons), and so is a click on an
-// item within reach; the cursor shows when it is clickable.
+// (wall buttons, levers, locks, alcoves, door buttons), and so is a click on the
+// floor (a sub-tile, maybe with an item): main.js picks up or drops there if it
+// is within reach. The cursor shows what is clickable, and the item in hand.
+// Teleporter fields do not stop the pointer.
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents } from '../three/level-contents.js';
+import { wallOrnaments, isAlcove } from '../../core/ornaments.js';
 import { readTheme } from '../three/theme.js';
 import { FACINGS, SIDE_DELTAS } from '../../core/dungeon.js';
 
@@ -34,10 +37,11 @@ const CEILING_COLOR = '#1d1b18';
  * @param {{ tileAt(level, x, y): object, textVisible(index): boolean }} state simulation state (src/sim/state.js)
  * @param {object} [options]
  * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
- * @param {(info: object) => void} [options.onClickItem] an item was clicked: { level, x, y, item }
+ * @param {(spot: object) => void} [options.onClickFloor] a floor sub-tile was clicked: { level, x, y, position, item? }
+ * @param {(spot: object) => boolean} [options.canReach] is this floor spot within reach (pointer cursor)?
  * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (items lying there now)
  */
-export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickItem, contentsAt } = {}) {
+export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickFloor, canReach, contentsAt } = {}) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -82,7 +86,8 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       group.add(mesh);
       meshes.push(mesh);
     }
-    const inscriptions = buildInscriptions(dungeon, state, levelIndex);
+    // Wall details drawn for real: inscriptions and alcoves.
+    const inscriptions = [...buildInscriptions(dungeon, state, levelIndex), ...buildAlcoves(dungeon, levelIndex)];
     for (const mesh of inscriptions) group.add(mesh);
     for (const mesh of meshes) {
       // `game` builds no types-only look, but stairs/doors share variants: hide what is not 'states'.
@@ -112,7 +117,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     built.ceiling.material.dispose();
     for (const mesh of built.inscriptions) {
       mesh.geometry.dispose();
-      mesh.material.map.dispose();
+      mesh.material.map?.dispose();
       mesh.material.dispose();
     }
     built = null;
@@ -141,27 +146,30 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   // --- Mouse: picking the tile in front of the party ------------------------------
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  // What the pointer designates: an item of the party's tile, the wall or door in
-  // front (an item in the front alcove counts as the wall: its actuators must act too), or null.
+  // What the pointer designates: the wall or door in front (an item in the front
+  // alcove counts as the wall: its actuators must act too), a floor spot
+  // { level, x, y, position (sub-tile), item? }, or null.
   function target(event) {
     if (!built || !party) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
-    const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible);
+    const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible && m.userData.part !== 'teleporter');
     const hit = raycaster.intersectObjects(pickable, false)[0];
     const info = hit?.object.userData.tiles?.[hit.instanceId];
     if (!info) return null;
     const [dx, dy] = SIDE_DELTAS[party.facing];
-    const own = info.x === party.x && info.y === party.y;
     const front = info.x === party.x + dx && info.y === party.y + dy;
-    if (info.item && own) return { kind: 'item', info };
-    if (front && (info.type === 'wall' || info.type === 'door')) return { kind: 'front' };
-    return null;
+    if (info.type === 'wall' || info.type === 'door') return front ? { kind: 'front' } : null;
+    // Sub-tile under the pointer (items: their own), 0..3 = NW, NE, SE, SW.
+    const u = hit.point.x - info.x;
+    const v = hit.point.z - info.y;
+    const position = info.item?.position ?? (v < 0.5 ? (u < 0.5 ? 0 : 1) : u < 0.5 ? 3 : 2);
+    return { kind: 'floor', spot: { level: info.level, x: info.x, y: info.y, position, item: info.item } };
   }
   const onClick = (event) => {
     const t = target(event);
-    if (t?.kind === 'item') onClickItem?.(t.info);
+    if (t?.kind === 'floor') onClickFloor?.(t.spot);
     else if (t?.kind === 'front') onClickFront?.();
   };
   let hoverPending = false;
@@ -170,9 +178,22 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     hoverPending = true;
     requestAnimationFrame(() => {
       hoverPending = false;
-      renderer.domElement.style.cursor = target(event) ? 'pointer' : '';
+      const t = target(event);
+      const active = t?.kind === 'front' || (t?.kind === 'floor' && canReach?.(t.spot));
+      renderer.domElement.style.cursor = handCursor ?? (active ? 'pointer' : '');
     });
   };
+  // Item in hand: a square of its colour replaces the cursor.
+  let handCursor = null;
+  function setHandCursor(color) {
+    if (!color) {
+      handCursor = null;
+    } else {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect x="5" y="5" width="14" height="14" rx="2" fill="${color}" stroke="black" stroke-width="2"/><path d="M1 1 L8 3 L3 8 Z" fill="white" stroke="black"/></svg>`;
+      handCursor = `url("data:image/svg+xml,${encodeURIComponent(svg)}") 1 1, auto`;
+    }
+    renderer.domElement.style.cursor = handCursor ?? '';
+  }
   renderer.domElement.addEventListener('click', onClick);
   renderer.domElement.addEventListener('pointermove', onMove);
 
@@ -185,6 +206,8 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       placeCamera(party);
       render();
     },
+    /** Colour of the item in hand (cursor), or null for an empty hand. */
+    setHandCursor,
     /** The state of a tile of the shown level changed: rebuild it (about 2 ms, see 007). */
     updateTile(levelIndex) {
       if (levelIndex !== level) return;
@@ -231,6 +254,31 @@ function buildInscriptions(dungeon, state, levelIndex) {
       mesh.position.set(x + 0.5 + dx * out, WALL_HEIGHT * 0.55, y + 0.5 + dz * out);
       mesh.rotation.y = rotation;
       meshes.push(mesh);
+    }
+  }
+  return meshes;
+}
+
+// Alcove: a dark niche on the face, with a stone sill where its items lie
+// (items on a wall stand at 35 % of its height, see level-contents.js).
+const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 }; // fractions of the wall height for bottom / top
+
+function buildAlcoves(dungeon, levelIndex) {
+  const meshes = [];
+  for (const { x, y, detail } of dungeon.detailedTiles(levelIndex)) {
+    if (detail.type !== 'wall') continue;
+    const faces = new Set(wallOrnaments(dungeon, levelIndex, x, y).map((o) => o.face).filter((face) => isAlcove(dungeon, levelIndex, x, y, face)));
+    for (const face of faces) {
+      const { dx, dz, rotation } = FACE_PLANES[face];
+      const out = 1 + INSCRIPTION_GAP / 0.5;
+      const height = (NICHE.top - NICHE.bottom) * WALL_HEIGHT;
+      const niche = new THREE.Mesh(new THREE.PlaneGeometry(NICHE.width, height), new THREE.MeshLambertMaterial({ color: 0x0c0a08 }));
+      niche.position.set(x + 0.5 + dx * out, NICHE.bottom * WALL_HEIGHT + height / 2, y + 0.5 + dz * out);
+      niche.rotation.y = rotation;
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(NICHE.width + 0.06, 0.025, 0.05), new THREE.MeshLambertMaterial({ color: 0x8a8070 }));
+      sill.position.set(x + 0.5 + dx * (1 + 0.05), NICHE.bottom * WALL_HEIGHT, y + 0.5 + dz * (1 + 0.05));
+      sill.rotation.y = rotation;
+      meshes.push(niche, sill);
     }
   }
   return meshes;
