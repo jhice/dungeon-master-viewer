@@ -6,7 +6,9 @@
 import * as THREE from 'three';
 import { tileContents, subcellOffset } from '../../core/contents.js';
 import { actuatorFamily } from '../../core/logic.js';
-import { CATEGORY_COLORS, FAMILY_COLORS, HAS_CONTENTS_COLOR, creatureColor } from '../palette.js';
+import { CATEGORY_COLORS, FAMILY_COLORS, HAS_CONTENTS_COLOR, TEXT_COLORS, creatureColor } from '../palette.js';
+
+const CHAMPION_SHEET = /\n[MF]\n[A-P]{12}\n/;
 
 const ITEM_SIZE = 0.16;
 const ITEM_HEIGHT = 0.1;
@@ -30,6 +32,7 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
   const rings = []; // { position, info }
   const plates = []; // floor triggers: thin plate under the tile contents
   const gizmos = []; // other mechanisms: small octahedrons (on the wall face, or centred)
+  const writings = []; // texts: thin plates on the wall face (or flat on the floor)
 
   for (const { x, y, gx, gy, detail } of dungeon.detailedTiles(levelIndex)) {
     const info = { level: levelIndex, x, y, gx, gy, type: detail.type, detail };
@@ -55,6 +58,20 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
       } else {
         // Logic gates on walls, generators on floors: above the tile.
         gizmos.push({ position: [ox + 0.5, (onWall ? wallHeight : 0) + 0.25, oz + 0.5], scale: 1.6, color, info });
+      }
+    }
+
+    for (const ref of detail.items ?? []) {
+      if (ref.kind !== 'text') continue;
+      const text = dungeon.data.texts[ref.index];
+      if (CHAMPION_SHEET.test(text.text)) continue; // champion sheets: their mirror is marked already
+      const color = TEXT_COLORS[text.visible ? 'inscription' : 'message'];
+      if (onWall) {
+        const [dx, dz] = FACE_DIRECTION[ref.position];
+        const scale = dx ? [0.02, 0.22, 0.5] : [0.5, 0.22, 0.02];
+        writings.push({ position: [ox + 0.5 + dx * 0.51, wallHeight * 0.75, oz + 0.5 + dz * 0.51], scale, color, info });
+      } else {
+        writings.push({ position: [ox + 0.5, 0.03, oz + 0.5], scale: [0.35, 0.02, 0.35], color, info });
       }
     }
 
@@ -112,6 +129,9 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
   if (gizmos.length) {
     meshes.push(instanced('mechanisms', 'mechanisms', new THREE.OctahedronGeometry(0.07), gizmos, levelIndex));
   }
+  if (writings.length) {
+    meshes.push(instanced('texts', 'texts', new THREE.BoxGeometry(1, 1, 1), writings, levelIndex));
+  }
   return meshes;
 }
 
@@ -121,7 +141,8 @@ function instanced(part, layer, geometry, list, levelIndex) {
   const m4 = new THREE.Matrix4();
   const color = new THREE.Color();
   list.forEach(({ position, scale = 1, color: hex }, i) => {
-    m4.makeScale(scale, scale, scale).setPosition(...position);
+    // `scale` is a number (uniform) or [sx, sy, sz] (text plates).
+    m4.makeScale(...(Array.isArray(scale) ? scale : [scale, scale, scale])).setPosition(...position);
     mesh.setMatrixAt(i, m4);
     mesh.setColorAt(i, color.set(hex));
   });

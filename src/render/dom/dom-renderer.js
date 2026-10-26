@@ -10,7 +10,7 @@ import { assertRenderer } from '../renderer.js';
 import { stateModifiers } from '../../core/tile-states.js';
 import { tileContents, subcellOffset, FACES } from '../../core/contents.js';
 import { actuatorFamily } from '../../core/logic.js';
-import { CATEGORY_COLORS, FAMILY_COLORS, creatureColor, linkColor } from '../palette.js';
+import { CATEGORY_COLORS, FAMILY_COLORS, TEXT_COLORS, creatureColor, linkColor } from '../palette.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -47,7 +47,8 @@ export function createDomRenderer(
   let markedCells = []; // cells holding content markers, emptied on level change
   let highlighted = null;
 
-  function setLayers({ items = true, creatures = true, mechanisms = true }) {
+  function setLayers({ items = true, creatures = true, mechanisms = true, texts = true }) {
+    grid.classList.toggle('hide-texts', !texts);
     grid.classList.toggle('hide-items', !items);
     grid.classList.toggle('hide-creatures', !creatures);
     grid.classList.toggle('hide-mechanisms', !mechanisms);
@@ -70,6 +71,7 @@ export function createDomRenderer(
       const contents = tileContents(dungeon, level, x, y);
       const markers = [
         ...mechanismMarkers(dungeon, detail, onWall),
+        ...textMarkers(dungeon, detail, onWall),
         ...(contents ? contentMarkers(contents, onWall) : []),
       ];
       if (!markers.length) continue;
@@ -311,6 +313,26 @@ function mechanismMarkers(dungeon, detail, onWall) {
     mark.className = `mark mech-mark mech-${family}`;
     if ((family === 'wallTrigger' || family === 'shooter') && onWall) mark.classList.add(`face-${FACES[ref.position]}`);
     mark.style.setProperty('--c', FAMILY_COLORS[family]);
+    markers.push(mark);
+  }
+  return markers;
+}
+
+/**
+ * Markers of the texts placed on a tile: a "≡" against the wall face for
+ * inscriptions (faded and dashed for invisible messages), centred on floors.
+ * Champion sheets are not marked (their mirror already is, on the wall).
+ */
+function textMarkers(dungeon, detail, onWall) {
+  const markers = [];
+  for (const ref of detail.items ?? []) {
+    if (ref.kind !== 'text') continue;
+    const text = dungeon.data.texts[ref.index];
+    if (/\n[MF]\n[A-P]{12}\n/.test(text.text)) continue; // champion sheet
+    const kind = text.visible ? 'inscription' : 'message';
+    const mark = document.createElement('span');
+    mark.className = `mark text-mark is-${kind}${onWall ? ` face-${FACES[ref.position]}` : ''}`;
+    mark.style.setProperty('--c', TEXT_COLORS[kind]);
     markers.push(mark);
   }
   return markers;

@@ -357,3 +357,35 @@
   outline-offset: -1px;
   z-index: 3;
 }
+
+/* --- Texts (step 010) ------------------------------------------------------------ */
+
+.text-mark {
+  left: 50%;
+  top: 50%;
+  color: var(--c);
+  font: 700 calc(var(--cell) * 0.62) / 1 system-ui, sans-serif;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+.text-mark::before {
+  content: '≡';
+}
+
+.text-mark.face-N { top: 22%; }
+.text-mark.face-S { top: 78%; }
+.text-mark.face-W { left: 22%; }
+.text-mark.face-E { left: 78%; }
+
+/* Invisible message (shown by a mechanism): faded. */
+.text-mark.is-message {
+  opacity: 0.6;
+}
+
+.text-mark.is-message::before {
+  content: '…';
+}
+
+.hide-texts .text-mark {
+  display: none;
+}

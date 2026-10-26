@@ -76,10 +76,12 @@ Réponses à tes questions :
 
 ### 010 - textes
 
+textes (inscriptions murales, parchemins, fiches des champions encodées)
+
 ### plus tard
 
 Vue « à la première personne » vers un mode jouable.
 
-## Workflow
+## Workflow
 
 - résume toutes tes analyses suite à nos échanges dans un dossier `docs/` avec un préfixe 001, 002, 003.

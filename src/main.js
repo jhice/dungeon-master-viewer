@@ -2,7 +2,9 @@ import { loadDungeon } from './core/dungeon.js';
 import { describeState } from './core/tile-states.js';
 import { tileContents, buildInventory } from './core/contents.js';
 import { buildLogic, describeActuator, describeTeleporter, actuatorFamily } from './core/logic.js';
-import { FAMILY_COLORS, TELEPORTER_COLORS } from './render/palette.js';
+import { buildTexts, textsAt, championSummary } from './core/texts.js';
+import { FACE_LABELS } from './core/contents.js';
+import { FAMILY_COLORS, TELEPORTER_COLORS, TEXT_COLORS } from './render/palette.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
@@ -10,6 +12,7 @@ import { renderLegend } from './ui/legend.js';
 import { createControlPanel } from './ui/control-panel.js';
 import { createInventoryPanel } from './ui/inventory-panel.js';
 import { createTooltip } from './ui/tooltip.js';
+import { createTextsPanel } from './ui/texts-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
@@ -22,7 +25,7 @@ const RENDERERS = {
   },
   ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire';
+const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -43,7 +46,9 @@ const prefs = loadPreferences({
   showItems: true,
   showCreatures: true,
   showMechanisms: true,
+  showTexts: true,
   allLinks: false,
+  textsOpen: false,
   panelOpen: true,
   inventoryOpen: false,
 });
@@ -55,6 +60,7 @@ let mounting = null; // pending async creation, to ignore keys meanwhile
 let panel = null; // control panel, rebuilt for each renderer
 let selection = null; // selected tile { level, x, y }: its logic links are drawn
 const logic = buildLogic(dungeon);
+const texts = buildTexts(dungeon);
 
 // Right-hand column: control panel (per renderer) above the inventory (persistent).
 const side = document.createElement('div');
@@ -76,7 +82,21 @@ const inventory = createInventoryPanel(side, buildInventory(dungeon), {
   },
 });
 
-const layers = () => ({ items: prefs.showItems, creatures: prefs.showCreatures, mechanisms: prefs.showMechanisms });
+const textsPanel = createTextsPanel(side, texts, {
+  onLocate: (t) => locate({ name: t.champion?.name ?? t.text.split('\n')[0], level: t.level, x: t.x, y: t.y, inside: t.inside }),
+  open: prefs.textsOpen,
+  onToggle: (open) => {
+    prefs.textsOpen = open;
+    savePreferences(prefs);
+  },
+});
+
+const layers = () => ({
+  items: prefs.showItems,
+  creatures: prefs.showCreatures,
+  mechanisms: prefs.showMechanisms,
+  texts: prefs.showTexts,
+});
 
 async function mountRenderer() {
   const level = renderer?.currentLevel ?? prefs.level;
@@ -172,6 +192,19 @@ function follow(to) {
   renderer.highlightTile?.(to.x, to.y);
 }
 
+// Tooltip lines for the texts of a tile: inscription / message in full, champion sheet decoded.
+function textLines(info) {
+  if (!prefs.showTexts) return [];
+  return textsAt(texts, info.level, info.x, info.y).map((t) => {
+    if (t.champion) {
+      return { color: TEXT_COLORS.champion, title: `Champion : ${t.champion.name}, ${t.champion.title}`, details: championSummary(t.champion) };
+    }
+    const face = t.onWall ? ` (${FACE_LABELS[t.position]})` : '';
+    const title = t.kind === 'message' ? `Message${face} — affiché par un mécanisme` : `Inscription${face}`;
+    return { color: TEXT_COLORS[t.kind], title, details: t.text.split('\n') };
+  });
+}
+
 // Tooltip lines for the actuators and teleporter of a tile.
 function mechanismLines(info) {
   if (!prefs.showMechanisms) return [];
@@ -200,7 +233,7 @@ function showHover(info) {
     tooltip.show(`Niveau ${info.level} (${info.x}, ${info.y}) · ${info.type}`, contents, {
       ...layers(),
       onWall: info.type === 'wall',
-      mechanisms: mechanismLines(info),
+      mechanisms: [...textLines(info), ...mechanismLines(info)],
     });
   }
   let text = `niveau ${info.level} · (${info.x}, ${info.y}) local · [${info.gx}, ${info.gy}] global · ${info.type}`;
@@ -273,7 +306,7 @@ function setLayer(key, enabled) {
   renderer.setLayers(layers());
   panel?.setValues({ [key]: enabled });
   refreshLinks();
-  const names = { showItems: 'Objets', showCreatures: 'Créatures', showMechanisms: 'Mécanismes' };
+  const names = { showItems: 'Objets', showCreatures: 'Créatures', showMechanisms: 'Mécanismes', showTexts: 'Textes' };
   showInfo(`${names[key]} : ${enabled ? 'affichés' : 'masqués'}`);
 }
 
@@ -316,6 +349,7 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'showItems', label: 'Objets', shortcut: 'O' });
     schema.push({ type: 'checkbox', key: 'showCreatures', label: 'Créatures', shortcut: 'C' });
     schema.push({ type: 'checkbox', key: 'showMechanisms', label: 'Mécanismes', shortcut: 'M' });
+    schema.push({ type: 'checkbox', key: 'showTexts', label: 'Textes', shortcut: 'X' });
     schema.push({ type: 'checkbox', key: 'allLinks', label: 'Tous les liens (sinon sélection)', shortcut: 'T' });
   }
   if (!RENDERERS[prefs.renderer].frameless) schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
@@ -327,17 +361,19 @@ const panelValues = () => ({
   showItems: prefs.showItems,
   showCreatures: prefs.showCreatures,
   showMechanisms: prefs.showMechanisms,
+  showTexts: prefs.showTexts,
   allLinks: prefs.allLinks,
   frameGlobal: prefs.frame === 'global',
   ...renderer.settings,
 });
 
 function onPanelChange(changes) {
-  const { showStates, showItems, showCreatures, showMechanisms, allLinks, frameGlobal, ...settings } = changes;
+  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, ...settings } = changes;
   if (showStates !== undefined) setShowStates(showStates);
   if (showItems !== undefined) setLayer('showItems', showItems);
   if (showCreatures !== undefined) setLayer('showCreatures', showCreatures);
   if (showMechanisms !== undefined) setLayer('showMechanisms', showMechanisms);
+  if (showTexts !== undefined) setLayer('showTexts', showTexts);
   if (allLinks !== undefined) setAllLinks(allLinks);
   if (frameGlobal !== undefined) setFrame(frameGlobal);
   if (Object.keys(settings).length) changeSettings(settings);
@@ -370,6 +406,8 @@ const GLOBAL_KEYS = {
   t: () => setAllLinks(!prefs.allLinks),
   Escape: () => selection && select(selection),
   i: () => inventory.toggle(),
+  j: () => textsPanel.toggle(),
+  x: () => setLayer('showTexts', !prefs.showTexts),
   '+': () => zoom(+1),
   '=': () => zoom(+1),
   '-': () => zoom(-1),

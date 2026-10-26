@@ -123,6 +123,8 @@ body {
   align-items: stretch;
   gap: 0.5rem;
   width: 17rem;
+  overflow-y: auto; /* several panels open: the column scrolls, not the page */
+  scrollbar-width: thin;
   pointer-events: none; /* let the map get the mouse between the panels */
 }
 
@@ -307,7 +309,7 @@ body {
 
 /* The list scrolls inside the panel (<details> content does not shrink as a flex item). */
 .inv-list {
-  max-height: calc(100vh - 30rem);
+  max-height: max(12rem, calc(100vh - 30rem));
   min-height: 8rem;
   overflow-y: auto;
 }
@@ -408,4 +410,51 @@ body {
 
 .legend-dot.round {
   border-radius: 50%;
+}
+
+/* --- Texts panel (src/ui/texts-panel.js) ----------------------------------------- */
+
+.texts-search {
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1c1c1c;
+  color: var(--fg);
+  font: inherit;
+}
+
+.text-card {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-left: 3px solid var(--c);
+  border-radius: 3px;
+  background: #1a1a1a;
+  color: var(--fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.text-card:hover {
+  background: #232323;
+}
+
+.text-where {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* Dungeon text: uppercase, one line per line of the original. */
+.text-body {
+  display: block;
+  white-space: pre-line;
+  font: 0.78rem / 1.35 ui-monospace, monospace;
+  letter-spacing: 0.03em;
 }

@@ -61,6 +61,9 @@ export const TELEPORTER_COLORS = {
 };
 export const linkColor = (link) => (link.kind === 'teleporter' ? TELEPORTER_COLORS[link.scope] : ACTION_COLORS[link.action]) ?? '#ffffff';
 
+// Texts (step 010): visible inscriptions, invisible messages shown by mechanisms.
+export const TEXT_COLORS = { inscription: '#f3e6b8', message: '#9ad0ff', champion: '#e0b050', scroll: '#f3e6b8' };
+
 // Mechanism markers, by actuator family (src/core/logic.js).
 export const FAMILY_COLORS = {
   floorTrigger: '#ffb000',

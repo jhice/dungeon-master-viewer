@@ -223,8 +223,9 @@ export function convertDungeon(root) {
 // --- Pool entries -----------------------------------------------------------
 
 function cleanText(raw) {
-  // '_THE', '_AND', '_YOU' mark single 5-bit special characters in the original encoding.
-  return raw.replace(/_(THE|AND|YOU)/g, '$1');
+  // '_THE', '_AND', '_YOU' mark single 5-bit special characters of the original
+  // encoding; they include their trailing space ("PUT _THEGEM" = "PUT THE GEM").
+  return raw.replace(/_(THE|AND|YOU)/g, '$1 ');
 }
 
 function convertPoolEntry(kind, node) {

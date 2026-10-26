@@ -47,7 +47,7 @@ export function createThreeRenderer(
   { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
-  const layers = { items: true, creatures: true, mechanisms: true, ...initialLayers };
+  const layers = { items: true, creatures: true, mechanisms: true, texts: true, ...initialLayers };
   // Mesh layer -> visible. Markers of chests/possessions ('contents') follow either layer.
   const layerVisible = (layer) =>
     layer === undefined || (layer === 'contents' ? layers.items || layers.creatures : layers[layer]);
