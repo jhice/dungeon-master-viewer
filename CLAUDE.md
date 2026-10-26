@@ -44,7 +44,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - le graphe de la logique, avec `buildLogic()` dans `src/core/logic.js`, point de départ naturel de la simulation ;
 - les docs à lire en priorité, 009 (logique) et 002 (format JSON).
 - toutes les docs se trouevnt dans le dossier `docs/`
-- la simulation (phases A et B faites, voir docs 013 et 014) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/`
+- la simulation (phases A, B et C faites, voir docs 013 à 015) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/`
 
 ## Simulation
 

@@ -47,11 +47,12 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
+ * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; main.js passes the simulation state)
  */
 export function createThreeRenderer(
   container,
   dungeon,
-  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange } = {},
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange, tileAt } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
   const layers = { items: true, creatures: true, mechanisms: true, texts: true, ...initialLayers };
@@ -103,16 +104,27 @@ export function createThreeRenderer(
       scene.remove(group);
       disposeLevelMeshes(meshes);
     }
-    levels = [];
-    for (let i = 0; i < dungeon.levelCount; i++) {
-      const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center, { wallHeight: settings.wallHeight });
-      for (const mesh of buildLevelContents(dungeon, i, center, { wallHeight: settings.wallHeight })) {
-        group.add(mesh);
-        meshes.push(mesh);
-      }
-      scene.add(group);
-      levels.push({ group, meshes });
+    levels = Array.from({ length: dungeon.levelCount }, (_, i) => buildLevel(i));
+  }
+
+  function buildLevel(i) {
+    const { group, meshes } = buildLevelMeshes(dungeon, i, theme, center, { wallHeight: settings.wallHeight, tileAt });
+    for (const mesh of buildLevelContents(dungeon, i, center, { wallHeight: settings.wallHeight })) {
+      group.add(mesh);
+      meshes.push(mesh);
     }
+    scene.add(group);
+    return { group, meshes };
+  }
+
+  // A tile changed (simulation): rebuild its level only (about 2 ms, see 007).
+  function rebuildLevel(i) {
+    const old = levels[i];
+    scene.remove(old.group);
+    disposeLevelMeshes(old.meshes);
+    levels[i] = buildLevel(i);
+    levels[i].group.position.y = levelY(i);
+    applyDisplayMode();
   }
 
   // One LineSegments per departure level, so solo mode can keep only the links of the shown level.
@@ -435,6 +447,9 @@ export function createThreeRenderer(
       logicLinks = links;
       drawLogicLinks();
       setSelection(selection);
+    },
+    updateTile(level) {
+      rebuildLevel(level);
     },
     /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
     setParty(next) {

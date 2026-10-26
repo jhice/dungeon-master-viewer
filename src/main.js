@@ -30,7 +30,7 @@ const RENDERERS = {
   // Out of the R rotation (docs/012-simulation.md): kept for the command-line tool.
   ascii: { label: 'ASCII', hidden: true, create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = 'Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes · P jeu · F y aller';
+const BASE_HINT = 'Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes · P jeu · F y aller · Espace / clic dans la vue : actionner';
 // ↑/↓ change the level outside the game, and move the party in the game.
 const LEVEL_HINT = { viewer: '↑/↓ ou Maj + molette : niveau', game: 'jeu : ZQSD + A/E (AZERTY), flèches, pavé num. · PgPréc/PgSuiv ou Maj + molette : niveau' };
 const MIN_CELL = 6;
@@ -132,6 +132,7 @@ async function mountRenderer() {
         onSettingsChange: saveRendererSettings,
         onSelect: select,
         onFollow: follow,
+        tileAt: sim.state.tileAt, // tiles in their current state (simulation)
       });
     } catch (error) {
       console.error(error);
@@ -482,9 +483,10 @@ const GLOBAL_KEYS = {
 
 bindKeys((key, event) => {
   if (mounting || !renderer) return undefined;
-  // In the game, movement keys (by physical key) come first.
+  // In the game, movement keys (by physical key) come first; Space clicks in front of the party.
   const move = game && moveKey(event);
   if (move) return move;
+  if (game && event.code === 'Space') return clickFront;
   const k = key.length === 1 ? key.toLowerCase() : key;
   return renderer.keys?.[k] ?? settingShortcut(k) ?? GLOBAL_KEYS[k];
 });
@@ -494,6 +496,8 @@ window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell
 // One simulation shared by every view: the first-person window, and the party
 // marker of the 2D/3D renderers, whose shown level follows the party.
 const sim = createSimulation(dungeon);
+// Duration of a game tick (actuator delays are in ticks). About 1/6 s in DM, to be checked.
+const TICK_MS = 1000 / 6;
 const moveKey = createControls((command) => sim.command(command));
 let game = null; // { window, view } while the game window is open
 let opening = false;
@@ -512,7 +516,8 @@ async function openGame() {
   });
   try {
     const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
-    game = { window: win, view: createFirstPersonRenderer(win.viewport, dungeon, sim.state) };
+    game = { window: win, view: createFirstPersonRenderer(win.viewport, dungeon, sim.state, { onClickFront: clickFront }) };
+    game.clock = setInterval(() => sim.tick(), TICK_MS);
   } catch (error) {
     console.error(error);
     win.dispose();
@@ -529,6 +534,7 @@ async function openGame() {
 
 function closeGame() {
   if (!game) return;
+  clearInterval(game.clock);
   game.view.dispose();
   game.window.dispose();
   game = null;
@@ -545,6 +551,12 @@ async function teleportToSelection() {
   if (!game) await openGame();
   const blocked = sim.teleport(target.level, target.x, target.y);
   if (blocked) showInfo(`F : case infranchissable (${BLOCK_LABELS[blocked]})`);
+}
+
+// Click on the wall or door in front of the party (mouse in the view, or Space).
+function clickFront() {
+  const { target, fired } = sim.clickFront();
+  if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
@@ -571,7 +583,29 @@ function describeEffect({ type, direction, party, detail }) {
   const same = detail.at.map === party.level && detail.at.x === party.x && detail.at.y === party.y;
   return same ? `Téléporteur : rotation, face ${FACING_LABELS[party.facing]}` : `Téléporteur → ${where}, face ${FACING_LABELS[party.facing]}`;
 }
-sim.on('reset', ({ party }) => showParty(party));
+sim.on('reset', ({ party }) => {
+  showParty(party);
+  // Every tile may have changed: redraw the views.
+  if (renderer) mountRenderer();
+  for (let level = 0; level < dungeon.levelCount; level++) game?.view.updateTile(level);
+});
+
+// A mechanism changed a tile: redraw it everywhere and say so.
+const STATE_WORDS = {
+  door: ['Porte', 'ouverte', 'fermée'],
+  pit: ['Trappe', 'ouverte', 'fermée'],
+  teleporter: ['Téléporteur', 'activé', 'désactivé'],
+  fakewall: ['Faux mur', 'disparu', 'revenu'],
+};
+sim.on('tileChanged', ({ level, x, y, type, detail }) => {
+  game?.view.updateTile(level);
+  renderer?.updateTile?.(level, x, y);
+  const [name, open, closed] = STATE_WORDS[type];
+  showInfo(`${name} (${x}, ${y}) niveau ${level} : ${detail.open ? open : closed}`);
+});
+sim.on('textChanged', ({ index, visible }) => {
+  if (visible) showInfo(`Message : ${dungeon.data.texts[index].text.replaceAll('\n', ' ')}`);
+});
 sim.on('blocked', ({ reason }) => {
   game?.window.flash();
   showInfo(`Bloqué : ${BLOCK_LABELS[reason]}`);

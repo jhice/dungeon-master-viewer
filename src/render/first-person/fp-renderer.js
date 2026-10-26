@@ -5,11 +5,14 @@
 // here the level is built in local coordinates (tile (x, y) spans [x, x+1]).
 //
 // Rendering is on demand (party moved, state changed, resize): no loop yet.
+// Mouse: a click on the wall or door just in front of the party is reported
+// (wall buttons, levers, door buttons); the cursor shows when it is clickable.
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
+import { buildLevelContents } from '../three/level-contents.js';
 import { readTheme } from '../three/theme.js';
-import { FACINGS } from '../../sim/party.js';
+import { FACINGS, SIDE_DELTAS } from '../../core/dungeon.js';
 
 // Field of view (docs/012-simulation.md § 4): the eye is pulled back from the
 // tile centre, so the floor of the current tile and the side openings show.
@@ -28,8 +31,10 @@ const CEILING_COLOR = '#1d1b18';
  * @param {HTMLElement} container element sized by the caller (4/3), the canvas fills it
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
  * @param {{ tileAt(level, x, y): object }} state simulation state (src/sim/state.js)
+ * @param {object} [options]
+ * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
  */
-export function createFirstPersonRenderer(container, dungeon, state) {
+export function createFirstPersonRenderer(container, dungeon, state, { onClickFront } = {}) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -57,11 +62,17 @@ export function createFirstPersonRenderer(container, dungeon, state) {
     clear();
     level = levelIndex;
     const map = dungeon.level(levelIndex);
-    const { group, meshes } = buildLevelMeshes(dungeon, levelIndex, theme, { x: map.offset.x, z: map.offset.y }, {
+    const center = { x: map.offset.x, z: map.offset.y };
+    const { group, meshes } = buildLevelMeshes(dungeon, levelIndex, theme, center, {
       wallHeight: WALL_HEIGHT,
       tileAt: state.tileAt,
       game: true,
     });
+    // Items, creatures (still), mechanisms and texts, as markers of the 3D renderer.
+    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT })) {
+      group.add(mesh);
+      meshes.push(mesh);
+    }
     for (const mesh of meshes) {
       // `game` builds no types-only look, but stairs/doors share variants: hide what is not 'states'.
       mesh.visible = mesh.userData.variant !== 'types';
@@ -111,6 +122,33 @@ export function createFirstPersonRenderer(container, dungeon, state) {
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(container);
 
+  // --- Mouse: picking the tile in front of the party ------------------------------
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  function frontHit(event) {
+    if (!built || !party) return false;
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible);
+    const hit = raycaster.intersectObjects(pickable, false)[0];
+    const info = hit?.object.userData.tiles?.[hit.instanceId];
+    const [dx, dy] = SIDE_DELTAS[party.facing];
+    return Boolean(info) && info.x === party.x + dx && info.y === party.y + dy && (info.type === 'wall' || info.type === 'door');
+  }
+  const onClick = (event) => frontHit(event) && onClickFront?.();
+  let hoverPending = false;
+  const onMove = (event) => {
+    if (hoverPending) return;
+    hoverPending = true;
+    requestAnimationFrame(() => {
+      hoverPending = false;
+      renderer.domElement.style.cursor = frontHit(event) ? 'pointer' : '';
+    });
+  };
+  renderer.domElement.addEventListener('click', onClick);
+  renderer.domElement.addEventListener('pointermove', onMove);
+
   let party = null;
   return {
     /** Shows the view of the party ({ level, x, y, facing }), rebuilding the level if it changed. */
@@ -128,6 +166,8 @@ export function createFirstPersonRenderer(container, dungeon, state) {
     },
     dispose() {
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener('click', onClick);
+      renderer.domElement.removeEventListener('pointermove', onMove);
       clear();
       for (const texture of Object.values(textures)) texture.dispose();
       renderer.dispose();

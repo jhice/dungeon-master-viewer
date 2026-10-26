@@ -26,11 +26,12 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * @param {(info: object) => void} [options.onSelect] a tile was clicked
  * @param {(to: {level,x,y}) => void} [options.onFollow] a cross-level link label was clicked
  * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
+ * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; main.js passes the simulation state)
  */
 export function createDomRenderer(
   container,
   dungeon,
-  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel } = {},
+  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel, tileAt = (l, x, y) => dungeon.tileAt(l, x, y) } = {},
 ) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
@@ -191,7 +192,7 @@ export function createDomRenderer(
     const i = target.closest?.('[data-i]')?.dataset.i;
     if (i === undefined) return undefined;
     const { x, y } = localOf(Number(i));
-    const tile = dungeon.tileAt(area.level, x, y);
+    const tile = tileAt(area.level, x, y);
     return tile && { level: area.level, x, y, gx: x + area.map.offset.x, gy: y + area.map.offset.y, type: tile.type, detail: tile.detail };
   }
   function onPointer(event) {
@@ -218,13 +219,21 @@ export function createDomRenderer(
       grid.dataset.level = level;
       cells.forEach((cell, i) => {
         const { x, y } = localOf(i);
-        cell.className = tileClasses(dungeon.tileAt(level, x, y));
+        cell.className = tileClasses(tileAt(level, x, y));
       });
       highlighted = null;
       selected = null;
       drawContents(level);
       drawLinks();
       placeParty();
+    },
+    /** The state of a tile changed (simulation): redraw it if its level is shown. */
+    updateTile(level, x, y) {
+      const cell = level === area?.level ? cells[cellIndexOf(x, y)] : null;
+      if (!cell) return;
+      const kept = ['is-selected', 'is-highlighted'].filter((c) => cell.classList.contains(c));
+      cell.className = tileClasses(tileAt(level, x, y));
+      cell.classList.add(...kept);
     },
     /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
     setParty(next) {
