@@ -2,8 +2,7 @@
 // stays above the 2D/3D views, which remain visible. Width is resizable
 // (the viewport keeps its 4/3 ratio); position and width are reported to the
 // caller, which remembers them.
-// Below the viewport, a message area (as in DM) prints the messages of the
-// dungeon; over the viewport, a caption shows the inscription being faced.
+// Below the viewport, a message area (as in DM) prints the messages of the dungeon.
 
 const MIN_WIDTH = 240;
 const MESSAGE_LINES = 3; // latest messages kept
@@ -17,7 +16,7 @@ const MESSAGE_MS = 12000; // before a message fades out
  * @param {() => void} [options.onReset] back to the start position
  * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked (take in hand / release)
  * @param {() => void} [options.onDrop] the drop button was clicked
- * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setReading(text|null), setInventory(items), flash(), dispose() }}
+ * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setInventory(items), flash(), dispose() }}
  */
 export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onDrop } = {}) {
   const win = document.createElement('section');
@@ -35,10 +34,6 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
 
   const viewport = document.createElement('div');
   viewport.className = 'game-viewport';
-  const reading = document.createElement('div');
-  reading.className = 'game-reading';
-  reading.hidden = true;
-  viewport.append(reading);
   const messages = document.createElement('div');
   messages.className = 'game-messages';
   messages.setAttribute('aria-live', 'polite');
@@ -116,11 +111,6 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
       );
       if (!items.length) chips.textContent = 'Inventaire vide — clic sur un objet de la case pour le ramasser';
       dropButton.disabled = !items.length;
-    },
-    /** Caption over the view: the inscription faced by the party, or null. */
-    setReading(text) {
-      reading.hidden = !text;
-      reading.textContent = text ?? '';
     },
     /** Short visual feedback (blocked move). */
     flash() {

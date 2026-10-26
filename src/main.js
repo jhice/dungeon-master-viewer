@@ -590,7 +590,6 @@ function showParty(party) {
   if (!game) return;
   game.view.setParty(party);
   game.window.setStatus(`niveau ${party.level} · (${party.x}, ${party.y}) · face ${FACING_LABELS[party.facing]}`);
-  game.window.setReading(sim.facedTexts().join('\n\n') || null);
   if (!renderer) return; // being mounted: mountRenderer() places the party
   if (renderer.currentLevel !== party.level) showLevel(party.level);
   renderer.setParty?.(party);
@@ -643,9 +642,7 @@ sim.on('tileChanged', ({ level, x, y, type, detail }) => {
 });
 // Messages: a text on a wall appears (or vanishes) on its face; a text on the floor is printed.
 sim.on('textChanged', ({ level, onWall }) => {
-  if (!onWall || !game) return;
-  game.view.updateTile(level);
-  game.window.setReading(sim.facedTexts().join('\n\n') || null);
+  if (onWall) game?.view.updateTile(level);
 });
 sim.on('textShown', ({ index }) => game?.window.message(dungeon.data.texts[index].text.replaceAll('\n', ' ')));
 sim.on('blocked', ({ reason }) => {

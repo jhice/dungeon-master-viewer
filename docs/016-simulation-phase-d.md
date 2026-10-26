@@ -37,12 +37,11 @@ Les messages et ce qui les déclenche :
 - **Inscriptions gravées** sur la face du mur : lettres claires avec une ombre décalée vers le bas, centrées, à la taille que permet la plus longue ligne.
   - C'est un plan transparent à 4 mm de la face, avec une texture canvas.
   - Les marqueurs de textes de la 3D ne sont plus dessinés dans la vue à la première personne.
-- **Légende de lecture :** quand le groupe fait face à une inscription visible, son texte s'affiche en bas de la vue, lisible même dans une petite fenêtre (`sim.facedTexts()`).
 - **Zone de messages** sous la vue, comme dans DM : les 3 derniers messages, qui pâlissent au bout de 12 s.
 
 ## 4. Vérifications
 
-- **Chrome :** en (8, 4) du niveau 0, face au sud, « HALL OF CHAMPIONS » est gravé sur le mur (8, 5) et repris dans la légende.
+- **Chrome :** en (8, 4) du niveau 0, face au sud, « HALL OF CHAMPIONS » est gravé sur le mur (8, 5).
 - **Node :** la plaque (7, 5) du niveau 3 ne réagit pas au groupe, puisqu'une créature l'occupe. C'est conforme à la règle TPC de la phase C.
 - « WELCOME BACK » : vérifié avec la phase E (doc 017), en rapportant le Firestaff au Hall.
 
