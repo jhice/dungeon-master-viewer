@@ -393,6 +393,12 @@ body {
   color: var(--muted);
 }
 
+/* Detail lines of a mechanism (actuator, teleporter). */
+.tooltip-sub {
+  padding-left: 1.05rem;
+  color: var(--muted);
+}
+
 .legend-dot {
   display: inline-block;
   width: 12px;

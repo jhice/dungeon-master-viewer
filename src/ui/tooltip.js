@@ -27,9 +27,15 @@ export function createTooltip(container = document.body) {
   window.addEventListener('pointermove', onMove);
 
   return {
-    /** Shows `title` and the tile contents (filtered by layers); hides if there is nothing to show. */
-    show(title, contents, { items = true, creatures = true, onWall = false } = {}) {
-      const body = contents ? contentLines(contents, { items, creatures, onWall }) : [];
+    /**
+     * Shows `title`, the tile contents (filtered by layers) and its mechanisms
+     * ([{ color, title, details: [] }]); hides if there is nothing to show.
+     */
+    show(title, contents, { items = true, creatures = true, onWall = false, mechanisms = [] } = {}) {
+      const body = [
+        ...(contents ? contentLines(contents, { items, creatures, onWall }) : []),
+        ...mechanisms.flatMap((m) => [line(m.color, m.title), ...m.details.map((d) => detailLine(d))]),
+      ];
       if (!body.length) return this.hide();
       const heading = document.createElement('div');
       heading.className = 'tooltip-title';
@@ -64,6 +70,13 @@ function contentLines(contents, { items, creatures, onWall }) {
     }
   }
   return lines;
+}
+
+function detailLine(text) {
+  const row = document.createElement('div');
+  row.className = 'tooltip-line tooltip-sub';
+  row.textContent = text;
+  return row;
 }
 
 const itemLine = (item, depth, where) =>

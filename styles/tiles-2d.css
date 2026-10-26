@@ -26,6 +26,7 @@
 }
 
 .dom-view {
+  position: relative; /* anchors the links overlay */
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cell));
   grid-auto-rows: var(--cell);
@@ -260,4 +261,99 @@
   50% {
     outline-offset: 4px;
   }
+}
+
+/* --- Mechanisms and links (step 009) --------------------------------------------- */
+
+/* Floor trigger (pressure plate…): a coloured inner frame. */
+.mech-floorTrigger {
+  left: 50%;
+  top: 50%;
+  width: 82%;
+  height: 82%;
+  border: 1.5px solid var(--c);
+  border-radius: 2px;
+  z-index: 1;
+}
+
+/* Wall trigger / shooter: a dot on its face. */
+.mech-wallTrigger,
+.mech-shooter {
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: var(--c);
+  border: 1px solid #000;
+}
+
+.mech-shooter {
+  border-radius: 2px;
+}
+
+.mech-mark.face-N { left: 50%; top: 10%; }
+.mech-mark.face-S { left: 50%; top: 90%; }
+.mech-mark.face-W { left: 10%; top: 50%; }
+.mech-mark.face-E { left: 90%; top: 50%; }
+
+/* Logic gate / counter and creature generator: a centred glyph. */
+.mech-logic,
+.mech-generator {
+  left: 50%;
+  top: 50%;
+  color: var(--c);
+  font: 700 calc(var(--cell) * 0.7) / 1 system-ui, sans-serif;
+  text-shadow: 0 0 2px #000;
+}
+
+.mech-logic::before {
+  content: '⊕';
+}
+
+.mech-generator::before {
+  content: '✶';
+}
+
+.hide-mechanisms .mech-mark {
+  display: none;
+}
+
+.links-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.link-line {
+  stroke-width: 0.12;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+
+.link-line.is-teleporter {
+  stroke-width: 0.1;
+  stroke-dasharray: 0.35 0.18;
+}
+
+.link-line.is-delayed {
+  stroke-dasharray: 0.12 0.2;
+}
+
+.link-label {
+  font: 700 0.6px system-ui, sans-serif;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 0.12;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Selected tile (click): its links are drawn. */
+.tile.is-selected {
+  outline: 2px solid #fff;
+  outline-offset: -1px;
+  z-index: 3;
 }

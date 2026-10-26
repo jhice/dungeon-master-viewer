@@ -11,6 +11,7 @@ import { findConnections } from '../../core/connections.js';
 import { buildLevelMeshes, disposeLevelMeshes, DEFAULT_WALL_HEIGHT } from './level-meshes.js';
 import { buildLevelContents } from './level-contents.js';
 import { readTheme } from './theme.js';
+import { linkColor } from '../palette.js';
 
 export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, links: true, labels: true };
 
@@ -34,7 +35,8 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {object} [options]
  * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
  * @param {object} [options.settings] { levelGap, wallHeight, links, labels }, see DEFAULT_SETTINGS
- * @param {{ items?: boolean, creatures?: boolean }} [options.layers] contents layers shown (default: both)
+ * @param {{ items?: boolean, creatures?: boolean, mechanisms?: boolean }} [options.layers] layers shown (default: all)
+ * @param {(info: object) => void} [options.onSelect] a tile was clicked (without dragging)
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
@@ -42,10 +44,10 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
 export function createThreeRenderer(
   container,
   dungeon,
-  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel } = {},
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
-  const layers = { items: true, creatures: true, ...initialLayers };
+  const layers = { items: true, creatures: true, mechanisms: true, ...initialLayers };
   // Mesh layer -> visible. Markers of chests/possessions ('contents') follow either layer.
   const layerVisible = (layer) =>
     layer === undefined || (layer === 'contents' ? layers.items || layers.creatures : layers[layer]);
@@ -143,6 +145,72 @@ export function createThreeRenderer(
       labels[i].position.set(m.offset.x - center.x, levelY(i) + settings.wallHeight + 0.2, m.offset.y - center.z);
     });
     buildLinks();
+    drawLogicLinks();
+  }
+
+  // --- Logic links (actuators, teleporters) and selection -------------------------
+  // Lines from tile centre to tile centre, above the walls; links between levels
+  // (teleporters) are arcs. Rebuilt by showLinks() and when the layout changes.
+  let logicLinks = [];
+  let logicLines = null;
+  function tilePoint({ level, x, y }) {
+    const m = dungeon.level(level);
+    return new THREE.Vector3(m.offset.x + x + 0.5 - center.x, levelY(level) + settings.wallHeight + 0.15, m.offset.y + y + 0.5 - center.z);
+  }
+  function drawLogicLinks() {
+    if (logicLines) {
+      scene.remove(logicLines);
+      logicLines.geometry.dispose();
+      logicLines.material.dispose();
+      logicLines = null;
+    }
+    if (!logicLinks.length) return;
+    const positions = [];
+    const colors = [];
+    const color = new THREE.Color();
+    const head = new THREE.Color();
+    for (const link of logicLinks) {
+      if (!dungeon.level(link.to.level)) continue;
+      const a = tilePoint(link.from);
+      const b = tilePoint(link.to);
+      color.set(linkColor(link));
+      // Brighter towards the destination, to read the direction.
+      head.copy(color).lerp(new THREE.Color(0xffffff), 0.6);
+      const sameLevel = link.from.level === link.to.level;
+      const steps = sameLevel ? 1 : 16;
+      const lift = sameLevel ? 0 : Math.max(2, a.distanceTo(b) * 0.25);
+      let prev = a;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const p = a.clone().lerp(b, t);
+        p.y += Math.sin(Math.PI * t) * lift; // arc for links between levels
+        positions.push(prev.x, prev.y, prev.z, p.x, p.y, p.z);
+        const c0 = color.clone().lerp(head, (i - 1) / steps);
+        const c1 = color.clone().lerp(head, t);
+        colors.push(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b);
+        prev = p;
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    logicLines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true }));
+    logicLines.name = 'logic-links';
+    scene.add(logicLines);
+  }
+
+  const selectionBox = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1, 1.02)),
+    new THREE.LineBasicMaterial({ color: 0xffffff }),
+  );
+  selectionBox.visible = false;
+  scene.add(selectionBox);
+  function setSelection(tile) {
+    selectionBox.visible = Boolean(tile);
+    if (!tile) return;
+    const p = tilePoint(tile);
+    selectionBox.scale.set(1, settings.wallHeight + 0.1, 1);
+    selectionBox.position.set(p.x, levelY(tile.level) + (settings.wallHeight + 0.1) / 2, p.z);
   }
 
   // --- State ------------------------------------------------------------------
@@ -278,6 +346,25 @@ export function createThreeRenderer(
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
+  // Click = pointer released close to where it was pressed (otherwise it is an orbit drag).
+  let downAt = null;
+  const onPointerDown = (event) => {
+    downAt = event.button === 0 ? [event.clientX, event.clientY] : null;
+  };
+  const onPointerUp = (event) => {
+    if (!downAt || Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) > 4) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    const pickable = levels.flatMap(({ group, meshes }, i) =>
+      group.visible && (mode === 'all' || i === currentLevel) ? meshes.filter((m) => m.isInstancedMesh && m.visible) : [],
+    );
+    const hit = raycaster.intersectObjects(pickable, false)[0];
+    if (hit) onSelect?.(hit.object.userData.tiles[hit.instanceId]);
+  };
+  renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointerup', onPointerUp);
+
   buildLevels();
   layoutLevels();
   resize();
@@ -294,6 +381,11 @@ export function createThreeRenderer(
       targetGoal = levelCenter(level);
       highlight.visible = false;
       applyDisplayMode();
+    },
+    showLinks(links, selection = null) {
+      logicLinks = links;
+      drawLogicLinks();
+      setSelection(selection);
     },
     setLayers(changes) {
       Object.assign(layers, changes);
@@ -329,6 +421,12 @@ export function createThreeRenderer(
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      logicLinks = [];
+      drawLogicLinks();
+      selectionBox.geometry.dispose();
+      selectionBox.material.dispose();
       controls.removeEventListener('start', stopGlide);
       controls.dispose();
       for (const { meshes } of levels) disposeLevelMeshes(meshes);

@@ -66,11 +66,13 @@ Réponses à tes questions :
 
 ### 008 - inventaire des objets et des monstres
 
-- l'idée ici est de pouvoir visualier où se trouvent créatures et objets.
+- l'idée ici est de pouvoir visualiser où se trouvent créatures et objets.
 - si l'inventaire comprend aussi sa disposition (2D et 3D), rappelle-toi que chaque tile contient 4 positions. à voir aussi comment cela pourra se gérer au survol en 2D et en 3D. ce qui se fait dans d'autres éditeurs, c'est d'afficher le contenu de la tile au survol.
 - si tu as des questions ou que tu souhaites détailler cette étape, pose-moi des questions.
 
 ### 009 - logique des actuators et téléporteurs
+
+- si tu as des questions ou que tu souhaites détailler cette étape, pose-moi des questions.
 
 ### 010 - textes
 

@@ -45,3 +45,29 @@ const CREATURE_COLORS = [
 ];
 
 export const creatureColor = (type) => CREATURE_COLORS[type] ?? '#ffffff';
+
+// Logic links (step 009): actuator links by action, teleporters by scope.
+export const ACTION_COLORS = {
+  set: '#5bd16a',
+  clear: '#ff5a4f',
+  toggle: '#ffd54a',
+  hold: '#4fa8ff',
+};
+export const TELEPORTER_COLORS = {
+  all: '#c08bff',
+  creatures: '#ff7fbf',
+  items: '#7fe3f0',
+  items_party: '#e0b0ff',
+};
+export const linkColor = (link) => (link.kind === 'teleporter' ? TELEPORTER_COLORS[link.scope] : ACTION_COLORS[link.action]) ?? '#ffffff';
+
+// Mechanism markers, by actuator family (src/core/logic.js).
+export const FAMILY_COLORS = {
+  floorTrigger: '#ffb000',
+  wallTrigger: '#ffe066',
+  logic: '#00e5c0',
+  shooter: '#ff6a00',
+  generator: '#ff3df5',
+  portrait: '#9ad0ff',
+  inactive: '#777777',
+};

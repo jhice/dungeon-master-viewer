@@ -94,6 +94,10 @@ il reste compact, lisible et facile à comparer d'une version à l'autre.
 
 > `graphic` dans `decorations` vaut 1–6 alors que les listes `wallDecorations` sont indexées à partir de 0.
 > Hypothèse à vérifier au moment du rendu : `graphic` est un index base 1 dans `wallDecorations` / `floorDecorations`.
+>
+> **Mise à jour (009) :** pour les actuators, `graphic` est bien un index **en base 1** dans `wallDecorations`
+> (0 = invisible). Les serrures « Gold Lock » attendent la Gold Key, les « Iron Lock » l'Iron Key.
+> Les décorations aléatoires suivent très probablement la même convention.
 
 ### Listes d'objets
 

@@ -9,7 +9,10 @@
 import { assertRenderer } from '../renderer.js';
 import { stateModifiers } from '../../core/tile-states.js';
 import { tileContents, subcellOffset, FACES } from '../../core/contents.js';
-import { CATEGORY_COLORS, creatureColor } from '../palette.js';
+import { actuatorFamily } from '../../core/logic.js';
+import { CATEGORY_COLORS, FAMILY_COLORS, creatureColor, linkColor } from '../palette.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * @param {HTMLElement} container
@@ -17,23 +20,37 @@ import { CATEGORY_COLORS, creatureColor } from '../palette.js';
  * @param {object} [options]
  * @param {'global'|'local'} [options.frame='global']
  * @param {boolean} [options.showStates=true] draw door/pit/fake wall states
- * @param {{ items?: boolean, creatures?: boolean }} [options.layers] contents layers shown (default: both)
+ * @param {{ items?: boolean, creatures?: boolean, mechanisms?: boolean }} [options.layers] layers shown (default: all)
  * @param {(info: object|null) => void} [options.onHover] hovered tile, or null when leaving the grid
+ * @param {(info: object) => void} [options.onSelect] a tile was clicked
+ * @param {(to: {level,x,y}) => void} [options.onFollow] a cross-level link label was clicked
  */
-export function createDomRenderer(container, dungeon, { frame = 'global', showStates = true, layers = {}, onHover } = {}) {
+export function createDomRenderer(
+  container,
+  dungeon,
+  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow } = {},
+) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
   grid.classList.toggle('show-states', showStates);
   container.append(grid);
+
+  // Links overlay, in tile units (viewBox = frame size), so it scales with --cell.
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.classList.add('links-overlay');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  let drawnLinks = [];
+  let selected = null;
 
   let cells = [];
   let area = null;
   let markedCells = []; // cells holding content markers, emptied on level change
   let highlighted = null;
 
-  function setLayers({ items = true, creatures = true }) {
+  function setLayers({ items = true, creatures = true, mechanisms = true }) {
     grid.classList.toggle('hide-items', !items);
     grid.classList.toggle('hide-creatures', !creatures);
+    grid.classList.toggle('hide-mechanisms', !mechanisms);
   }
   setLayers(layers);
 
@@ -46,11 +63,17 @@ export function createDomRenderer(container, dungeon, { frame = 'global', showSt
   function drawContents(level) {
     for (const cell of markedCells) cell.replaceChildren();
     markedCells = [];
-    for (const { x, y } of dungeon.detailedTiles(level)) {
-      const contents = tileContents(dungeon, level, x, y);
-      const cell = contents && cells[cellIndexOf(x, y)];
+    for (const { x, y, detail } of dungeon.detailedTiles(level)) {
+      const cell = cells[cellIndexOf(x, y)];
       if (!cell) continue;
-      cell.append(...contentMarkers(contents, dungeon.tileAt(level, x, y).type === 'wall'));
+      const onWall = detail.type === 'wall';
+      const contents = tileContents(dungeon, level, x, y);
+      const markers = [
+        ...mechanismMarkers(dungeon, detail, onWall),
+        ...(contents ? contentMarkers(contents, onWall) : []),
+      ];
+      if (!markers.length) continue;
+      cell.append(...markers);
       markedCells.push(cell);
     }
   }
@@ -64,7 +87,75 @@ export function createDomRenderer(container, dungeon, { frame = 'global', showSt
       cell.dataset.i = i;
       return cell;
     });
-    grid.replaceChildren(...cells);
+    grid.replaceChildren(...cells, svg);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  }
+
+  // Draws the given links that touch the shown level. Links to another level end
+  // in a clickable label ("→ N5 (12, 3)"), links from another level start with one.
+  function drawLinks() {
+    svg.replaceChildren(arrowDefs());
+    const center = ({ x, y }) => [x - area.x0 + 0.5, y - area.y0 + 0.5];
+    for (const link of drawnLinks) {
+      const color = linkColor(link);
+      const fromHere = link.from.level === area.level;
+      const toHere = link.to.level === area.level;
+      if (!fromHere && !toHere) continue;
+      if (fromHere && toHere) {
+        const [x1, y1] = center(link.from);
+        const [x2, y2] = center(link.to);
+        if (x1 === x2 && y1 === y2) continue;
+        svg.append(line(x1, y1, x2, y2, color, link));
+        continue;
+      }
+      // Cross-level: a short arrow and a label at the tile of this level.
+      const here = fromHere ? link.from : link.to;
+      const other = fromHere ? link.to : link.from;
+      const [x, y] = center(here);
+      const label = document.createElementNS(SVG_NS, 'text');
+      label.setAttribute('x', x + 0.55);
+      label.setAttribute('y', y - 0.35);
+      label.setAttribute('fill', color);
+      label.classList.add('link-label');
+      label.textContent = `${fromHere ? '→' : '←'} N${other.level} (${other.x}, ${other.y})`;
+      label.addEventListener('click', (event) => {
+        event.stopPropagation();
+        onFollow?.(other);
+      });
+      svg.append(line(x, y, x + 0.5, y - 0.5, color, link), label);
+    }
+  }
+
+  function line(x1, y1, x2, y2, color, link) {
+    const el = document.createElementNS(SVG_NS, 'line');
+    Object.entries({ x1, y1, x2, y2, stroke: color }).forEach(([k, v]) => el.setAttribute(k, v));
+    el.setAttribute('marker-end', `url(#arrow-${color.slice(1)})`);
+    el.classList.add('link-line', link.kind === 'teleporter' ? 'is-teleporter' : 'is-actuator');
+    if (link.delay) el.classList.add('is-delayed');
+    return el;
+  }
+
+  // One arrow marker per colour used.
+  function arrowDefs() {
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    for (const color of new Set(drawnLinks.map(linkColor))) {
+      const marker = document.createElementNS(SVG_NS, 'marker');
+      Object.entries({ id: `arrow-${color.slice(1)}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto' }).forEach(
+        ([k, v]) => marker.setAttribute(k, v),
+      );
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', 'M0,0 L10,5 L0,10 z');
+      path.setAttribute('fill', color);
+      marker.append(path);
+      defs.append(marker);
+    }
+    return defs;
+  }
+
+  function setSelection(tile) {
+    selected?.classList.remove('is-selected');
+    selected = tile && tile.level === area?.level ? (cells[cellIndexOf(tile.x, tile.y)] ?? null) : null;
+    selected?.classList.add('is-selected');
   }
 
   function areaOf(level) {
@@ -79,27 +170,26 @@ export function createDomRenderer(container, dungeon, { frame = 'global', showSt
   // Cell index -> local coordinates of the level shown.
   const localOf = (i) => ({ x: area.x0 + (i % area.width), y: area.y0 + Math.floor(i / area.width) });
 
-  function onPointer(event) {
-    // The target may be a content marker inside the cell.
-    const i = event.target.closest?.('[data-i]')?.dataset.i;
-    if (i === undefined) return;
+  // Tile under an event target (which may be a marker inside the cell).
+  function infoOf(target) {
+    const i = target.closest?.('[data-i]')?.dataset.i;
+    if (i === undefined) return undefined;
     const { x, y } = localOf(Number(i));
     const tile = dungeon.tileAt(area.level, x, y);
-    onHover?.(
-      tile && {
-        level: area.level,
-        x,
-        y,
-        gx: x + area.map.offset.x,
-        gy: y + area.map.offset.y,
-        type: tile.type,
-        detail: tile.detail,
-      },
-    );
+    return tile && { level: area.level, x, y, gx: x + area.map.offset.x, gy: y + area.map.offset.y, type: tile.type, detail: tile.detail };
+  }
+  function onPointer(event) {
+    const info = infoOf(event.target);
+    if (info !== undefined) onHover?.(info);
+  }
+  function onClick(event) {
+    const info = infoOf(event.target);
+    if (info) onSelect?.(info);
   }
   const onLeave = () => onHover?.(null);
   grid.addEventListener('pointerover', onPointer);
   grid.addEventListener('pointerleave', onLeave);
+  grid.addEventListener('click', onClick);
 
   return assertRenderer({
     currentLevel: 0,
@@ -113,7 +203,15 @@ export function createDomRenderer(container, dungeon, { frame = 'global', showSt
         cell.className = tileClasses(dungeon.tileAt(level, x, y));
       });
       highlighted = null;
+      selected = null;
       drawContents(level);
+      drawLinks();
+    },
+    /** Links to draw (see src/core/logic.js), and the selected tile ({level,x,y} or null). */
+    showLinks(links, selection = null) {
+      drawnLinks = links;
+      drawLinks();
+      setSelection(selection);
     },
     setShowStates(enabled) {
       grid.classList.toggle('show-states', enabled);
@@ -129,6 +227,7 @@ export function createDomRenderer(container, dungeon, { frame = 'global', showSt
     dispose() {
       grid.removeEventListener('pointerover', onPointer);
       grid.removeEventListener('pointerleave', onLeave);
+      grid.removeEventListener('click', onClick);
       grid.remove();
     },
   });
@@ -189,6 +288,30 @@ function contentMarkers(contents, onWall) {
       if (creature.possessions.length) disc.classList.add('has-contents');
       markers.push(disc);
     }
+  }
+  return markers;
+}
+
+/**
+ * Markers of a tile's mechanisms (actuators), by family:
+ * floor triggers = coloured inner frame; wall triggers and shooters = dot on
+ * their face; logic and generators = a centred glyph. Inactive ones are skipped.
+ */
+function mechanismMarkers(dungeon, detail, onWall) {
+  const markers = [];
+  const seen = new Set();
+  for (const ref of detail.items ?? []) {
+    if (ref.kind !== 'actuator') continue;
+    const family = actuatorFamily(dungeon.data.actuators[ref.index]);
+    if (family === 'inactive' || family === 'portrait') continue;
+    const key = family === 'wallTrigger' || family === 'shooter' ? `${family}:${ref.position}` : family;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const mark = document.createElement('span');
+    mark.className = `mark mech-mark mech-${family}`;
+    if ((family === 'wallTrigger' || family === 'shooter') && onWall) mark.classList.add(`face-${FACES[ref.position]}`);
+    mark.style.setProperty('--c', FAMILY_COLORS[family]);
+    markers.push(mark);
   }
   return markers;
 }

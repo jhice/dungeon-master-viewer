@@ -5,7 +5,8 @@
 
 import * as THREE from 'three';
 import { tileContents, subcellOffset } from '../../core/contents.js';
-import { CATEGORY_COLORS, HAS_CONTENTS_COLOR, creatureColor } from '../palette.js';
+import { actuatorFamily } from '../../core/logic.js';
+import { CATEGORY_COLORS, FAMILY_COLORS, HAS_CONTENTS_COLOR, creatureColor } from '../palette.js';
 
 const ITEM_SIZE = 0.16;
 const ITEM_HEIGHT = 0.1;
@@ -27,14 +28,38 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
   const items = []; // { position: [x, y, z], color, info }
   const creatures = []; // { position, scale, color, info }
   const rings = []; // { position, info }
+  const plates = []; // floor triggers: thin plate under the tile contents
+  const gizmos = []; // other mechanisms: small octahedrons (on the wall face, or centred)
 
   for (const { x, y, gx, gy, detail } of dungeon.detailedTiles(levelIndex)) {
-    const contents = tileContents(dungeon, levelIndex, x, y);
-    if (!contents) continue;
     const info = { level: levelIndex, x, y, gx, gy, type: detail.type, detail };
     const ox = gx - center.x; // west edge of the tile
     const oz = gy - center.z; // north edge of the tile
     const onWall = detail.type === 'wall';
+
+    const seen = new Set();
+    for (const ref of detail.items ?? []) {
+      if (ref.kind !== 'actuator') continue;
+      const family = actuatorFamily(dungeon.data.actuators[ref.index]);
+      if (family === 'inactive' || family === 'portrait') continue;
+      const onFace = onWall && (family === 'wallTrigger' || family === 'shooter');
+      const key = onFace ? `${family}:${ref.position}` : family;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const color = FAMILY_COLORS[family];
+      if (family === 'floorTrigger') {
+        plates.push({ position: [ox + 0.5, 0.012, oz + 0.5], color, info });
+      } else if (onFace) {
+        const [dx, dz] = FACE_DIRECTION[ref.position];
+        gizmos.push({ position: [ox + 0.5 + dx * 0.56, wallHeight * 0.6, oz + 0.5 + dz * 0.56], color, info });
+      } else {
+        // Logic gates on walls, generators on floors: above the tile.
+        gizmos.push({ position: [ox + 0.5, (onWall ? wallHeight : 0) + 0.25, oz + 0.5], scale: 1.6, color, info });
+      }
+    }
+
+    const contents = tileContents(dungeon, levelIndex, x, y);
+    if (!contents) continue;
 
     // Items stacked per position: on the floor in their sub-tile, on a wall against their face.
     const stacks = new Map();
@@ -80,6 +105,12 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
     // layer 'contents', visible when either layer is on.
     const withColor = rings.map((r) => ({ ...r, color: HAS_CONTENTS_COLOR }));
     meshes.push(instanced('hasContents', 'contents', new THREE.SphereGeometry(0.045, 10, 8), withColor, levelIndex));
+  }
+  if (plates.length) {
+    meshes.push(instanced('floorTriggers', 'mechanisms', new THREE.BoxGeometry(0.8, 0.02, 0.8), plates, levelIndex));
+  }
+  if (gizmos.length) {
+    meshes.push(instanced('mechanisms', 'mechanisms', new THREE.OctahedronGeometry(0.07), gizmos, levelIndex));
   }
   return meshes;
 }

@@ -1,6 +1,8 @@
 import { loadDungeon } from './core/dungeon.js';
 import { describeState } from './core/tile-states.js';
 import { tileContents, buildInventory } from './core/contents.js';
+import { buildLogic, describeActuator, describeTeleporter, actuatorFamily } from './core/logic.js';
+import { FAMILY_COLORS, TELEPORTER_COLORS } from './render/palette.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
 import { bindKeys } from './ui/keyboard.js';
@@ -20,7 +22,7 @@ const RENDERERS = {
   },
   ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · S états · O objets · C créatures · I inventaire';
+const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -40,6 +42,8 @@ const prefs = loadPreferences({
   showStates: true,
   showItems: true,
   showCreatures: true,
+  showMechanisms: true,
+  allLinks: false,
   panelOpen: true,
   inventoryOpen: false,
 });
@@ -49,6 +53,8 @@ prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
 let renderer = null;
 let mounting = null; // pending async creation, to ignore keys meanwhile
 let panel = null; // control panel, rebuilt for each renderer
+let selection = null; // selected tile { level, x, y }: its logic links are drawn
+const logic = buildLogic(dungeon);
 
 // Right-hand column: control panel (per renderer) above the inventory (persistent).
 const side = document.createElement('div');
@@ -70,7 +76,7 @@ const inventory = createInventoryPanel(side, buildInventory(dungeon), {
   },
 });
 
-const layers = () => ({ items: prefs.showItems, creatures: prefs.showCreatures });
+const layers = () => ({ items: prefs.showItems, creatures: prefs.showCreatures, mechanisms: prefs.showMechanisms });
 
 async function mountRenderer() {
   const level = renderer?.currentLevel ?? prefs.level;
@@ -91,6 +97,8 @@ async function mountRenderer() {
         onHover: showHover,
         onInfo: showInfo,
         onRequestLevel: showLevel,
+        onSelect: select,
+        onFollow: follow,
       });
     } catch (error) {
       console.error(error);
@@ -131,8 +139,54 @@ function showLevel(level) {
   label.textContent =
     `Niveau ${level} / ${dungeon.levelCount - 1} — ${m.width}×${m.height}, offset (${m.offset.x}, ${m.offset.y})` +
     ` — ${RENDERERS[prefs.renderer].label}${frameLabel}`;
+  if (selection && selection.level !== level) selection = null;
+  refreshLinks();
   showHover(null);
   panel?.refresh();
+}
+
+// --- Logic: selection and links ---------------------------------------------------
+// Drawn links: every link of the level ("Tous les liens"), or those of the selection.
+function refreshLinks() {
+  if (!renderer?.showLinks) return;
+  let links = [];
+  if (prefs.allLinks && prefs.showMechanisms) links = logic.linksOfLevel(renderer.currentLevel);
+  else if (selection) links = [...logic.outgoing(selection.level, selection.x, selection.y), ...logic.incoming(selection.level, selection.x, selection.y)];
+  renderer.showLinks(links, selection);
+}
+
+function select(info) {
+  const same = selection && selection.level === info.level && selection.x === info.x && selection.y === info.y;
+  selection = same ? null : { level: info.level, x: info.x, y: info.y };
+  refreshLinks();
+  if (!selection) return showInfo('Sélection annulée');
+  const out = logic.outgoing(info.level, info.x, info.y).length;
+  const into = logic.incoming(info.level, info.x, info.y).length;
+  showInfo(`Sélection : niveau ${info.level} (${info.x}, ${info.y}) · ${info.type} — ${out} lien(s) sortant(s), ${into} entrant(s)`);
+}
+
+// Cross-level link label clicked: go to the other end and select it.
+function follow(to) {
+  showLevel(to.level);
+  select({ ...to, type: dungeon.tileAt(to.level, to.x, to.y)?.type ?? '?' });
+  renderer.highlightTile?.(to.x, to.y);
+}
+
+// Tooltip lines for the actuators and teleporter of a tile.
+function mechanismLines(info) {
+  if (!prefs.showMechanisms) return [];
+  const lines = logic.actuatorsAt(info.level, info.x, info.y).map((a) => ({
+    color: FAMILY_COLORS[actuatorFamily(a)],
+    ...describeActuator(dungeon, a),
+  }));
+  const teleporter = logic.teleporterAt(info.level, info.x, info.y);
+  if (teleporter) lines.push({ color: TELEPORTER_COLORS[teleporter.scope], ...describeTeleporter(dungeon, teleporter) });
+  const into = logic.incoming(info.level, info.x, info.y);
+  if (into.length) {
+    const sources = into.map((l) => (l.from.level === info.level ? `(${l.from.x}, ${l.from.y})` : `N${l.from.level} (${l.from.x}, ${l.from.y})`));
+    lines.push({ color: '#ffffff', title: `Déclenché par ${into.length} source(s)`, details: [sources.slice(0, 6).join(' · ') + (sources.length > 6 ? ' …' : '')] });
+  }
+  return lines;
 }
 
 function showHover(info) {
@@ -143,7 +197,11 @@ function showHover(info) {
   }
   if (renderer?.setLayers) {
     const contents = tileContents(dungeon, info.level, info.x, info.y);
-    tooltip.show(`Niveau ${info.level} (${info.x}, ${info.y}) · ${info.type}`, contents, { ...layers(), onWall: info.type === 'wall' });
+    tooltip.show(`Niveau ${info.level} (${info.x}, ${info.y}) · ${info.type}`, contents, {
+      ...layers(),
+      onWall: info.type === 'wall',
+      mechanisms: mechanismLines(info),
+    });
   }
   let text = `niveau ${info.level} · (${info.x}, ${info.y}) local · [${info.gx}, ${info.gy}] global · ${info.type}`;
   if (info.type === 'stairs') text += ` ${info.detail.direction === 'up' ? '↑ vers' : '↓ vers'} niveau ${info.level + (info.detail.direction === 'up' ? -1 : 1)}`;
@@ -214,7 +272,17 @@ function setLayer(key, enabled) {
   savePreferences(prefs);
   renderer.setLayers(layers());
   panel?.setValues({ [key]: enabled });
-  showInfo(`${key === 'showItems' ? 'Objets' : 'Créatures'} : ${enabled ? 'affichés' : 'masqués'}`);
+  refreshLinks();
+  const names = { showItems: 'Objets', showCreatures: 'Créatures', showMechanisms: 'Mécanismes' };
+  showInfo(`${names[key]} : ${enabled ? 'affichés' : 'masqués'}`);
+}
+
+function setAllLinks(enabled) {
+  prefs.allLinks = enabled;
+  savePreferences(prefs);
+  refreshLinks();
+  panel?.setValues({ allLinks: enabled });
+  showInfo(`Tous les liens du niveau : ${enabled ? 'affichés' : 'sélection seule'}`);
 }
 
 // Inventory click: go to the level and point at the tile.
@@ -247,6 +315,8 @@ function panelSchema() {
   if (renderer.setLayers) {
     schema.push({ type: 'checkbox', key: 'showItems', label: 'Objets', shortcut: 'O' });
     schema.push({ type: 'checkbox', key: 'showCreatures', label: 'Créatures', shortcut: 'C' });
+    schema.push({ type: 'checkbox', key: 'showMechanisms', label: 'Mécanismes', shortcut: 'M' });
+    schema.push({ type: 'checkbox', key: 'allLinks', label: 'Tous les liens (sinon sélection)', shortcut: 'T' });
   }
   if (!RENDERERS[prefs.renderer].frameless) schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
   return [...schema, ...(renderer.settingsSchema ?? [])];
@@ -256,15 +326,19 @@ const panelValues = () => ({
   showStates: prefs.showStates,
   showItems: prefs.showItems,
   showCreatures: prefs.showCreatures,
+  showMechanisms: prefs.showMechanisms,
+  allLinks: prefs.allLinks,
   frameGlobal: prefs.frame === 'global',
   ...renderer.settings,
 });
 
 function onPanelChange(changes) {
-  const { showStates, showItems, showCreatures, frameGlobal, ...settings } = changes;
+  const { showStates, showItems, showCreatures, showMechanisms, allLinks, frameGlobal, ...settings } = changes;
   if (showStates !== undefined) setShowStates(showStates);
   if (showItems !== undefined) setLayer('showItems', showItems);
   if (showCreatures !== undefined) setLayer('showCreatures', showCreatures);
+  if (showMechanisms !== undefined) setLayer('showMechanisms', showMechanisms);
+  if (allLinks !== undefined) setAllLinks(allLinks);
   if (frameGlobal !== undefined) setFrame(frameGlobal);
   if (Object.keys(settings).length) changeSettings(settings);
 }
@@ -292,6 +366,9 @@ const GLOBAL_KEYS = {
   s: () => setShowStates(!prefs.showStates),
   o: () => setLayer('showItems', !prefs.showItems),
   c: () => setLayer('showCreatures', !prefs.showCreatures),
+  m: () => setLayer('showMechanisms', !prefs.showMechanisms),
+  t: () => setAllLinks(!prefs.allLinks),
+  Escape: () => selection && select(selection),
   i: () => inventory.toggle(),
   '+': () => zoom(+1),
   '=': () => zoom(+1),
