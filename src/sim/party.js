@@ -1,10 +1,10 @@
 // The party: an abstract character (answer Q3) with a position and a facing.
 // Party objects are immutable: every command returns a new one.
 
-import { SIDE_DELTAS } from '../core/dungeon.js';
+import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { blockReason } from './rules.js';
 
-export const FACINGS = ['N', 'E', 'S', 'W'];
+export { FACINGS };
 
 // Steps relative to the facing, in quarter turns clockwise.
 const STEP_TURNS = { forward: 0, right: 1, back: 2, left: 3 };

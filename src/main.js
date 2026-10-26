@@ -558,7 +558,19 @@ function showParty(party) {
   renderer.setParty?.(party);
 }
 
-sim.on('partyMoved', ({ party }) => showParty(party));
+sim.on('partyMoved', ({ party, effects, loop }) => {
+  showParty(party);
+  if (effects?.length) showInfo(effects.map(describeEffect).join(' · ') + (loop ? ' · boucle interrompue' : ''));
+});
+
+// Status bar text of an arrival effect (stairs, pit, teleporter), see src/sim/rules.js.
+function describeEffect({ type, direction, party, detail }) {
+  const where = `niveau ${party.level} (${party.x}, ${party.y})`;
+  if (type === 'stairs') return `Escalier ${direction === 'down' ? '↓' : '↑'} → ${where}`;
+  if (type === 'fall') return `Chute → ${where}`;
+  const same = detail.at.map === party.level && detail.at.x === party.x && detail.at.y === party.y;
+  return same ? `Téléporteur : rotation, face ${FACING_LABELS[party.facing]}` : `Téléporteur → ${where}, face ${FACING_LABELS[party.facing]}`;
+}
 sim.on('reset', ({ party }) => showParty(party));
 sim.on('blocked', ({ reason }) => {
   game?.window.flash();

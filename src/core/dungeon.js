@@ -8,6 +8,8 @@ import { tileTypeOfChar } from './tile-types.js';
 
 // North is towards y - 1 (rows grow southwards).
 export const SIDE_DELTAS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+// Facings in clockwise order (index = DM direction code, quarter turns from north).
+export const FACINGS = ['N', 'E', 'S', 'W'];
 
 export class Dungeon {
   constructor(data) {

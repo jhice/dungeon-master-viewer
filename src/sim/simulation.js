@@ -5,7 +5,7 @@
 import { createEmitter } from './events.js';
 import { createState } from './state.js';
 import { createParty, step, turn } from './party.js';
-import { blockReason } from './rules.js';
+import { blockReason, resolveArrival } from './rules.js';
 
 export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
 
@@ -29,11 +29,16 @@ export function createSimulation(dungeon) {
       events.emit('blocked', { party, reason: result.blocked });
       return;
     }
-    party = result.party;
-    events.emit('partyMoved', { party, from, kind: 'step' });
+    // Stairs, pits, teleporters: applied in chain until the party stays somewhere.
+    const arrival = resolveArrival(dungeon, state, result.party);
+    party = arrival.party;
+    events.emit('partyMoved', { party, from, kind: 'step', effects: arrival.effects, loop: arrival.loop });
   }
 
-  /** Places the party on a tile (test tool, key F); returns the block reason if it cannot stand there. */
+  /**
+   * Places the party on a tile (test tool, key F), without the effects of the tile
+   * (so that a pit or a teleporter can be inspected); returns the block reason if it cannot stand there.
+   */
   function teleport(level, x, y) {
     const blocked = blockReason(state, level, x, y);
     if (blocked) return blocked;

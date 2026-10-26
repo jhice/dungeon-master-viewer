@@ -1,5 +1,9 @@
 // Minimal event bus: the views subscribe to what the simulation emits.
-// Events (phase A): 'partyMoved' { party, from, kind: 'step'|'turn'|'teleport' }, 'blocked' { party, reason }, 'reset' { party }.
+// Events:
+//   'partyMoved' { party, from, kind: 'step'|'turn'|'teleport', effects?, loop? }
+//                effects: [{ type: 'stairs'|'fall'|'teleport', party }…] applied after a step (rules.js)
+//   'blocked'    { party, reason }
+//   'reset'      { party }
 
 export function createEmitter() {
   const listeners = new Map(); // type -> Set<fn>
