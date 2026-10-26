@@ -183,9 +183,11 @@ function addFakewall(add, openWallCenters, info, px, pz, h) {
 }
 
 // Fake wall as the party sees it: a wall while it is there (closed or imaginary), floor once it has vanished.
+// An imaginary wall can be walked into: it needs a floor too (its faces are not drawn from inside).
 function addGameFakewall(add, info, px, pz, h) {
-  if (info.detail.open) return add('floor', info, [px, -FLOOR_THICKNESS / 2, pz]);
-  add('wall', info, [px, h.wall / 2, pz]);
+  const { open, imaginary } = info.detail;
+  if (open || imaginary) add('floor', info, [px, -FLOOR_THICKNESS / 2, pz]);
+  if (!open) add('wall', info, [px, h.wall / 2, pz]);
 }
 
 // Edges of unit wall boxes centred on `centers`, merged into one LineSegments.

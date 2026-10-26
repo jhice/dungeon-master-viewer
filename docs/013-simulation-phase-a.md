@@ -95,7 +95,7 @@ Au départ, en (1, 3) du niveau 0 face au sud, on est sur le téléporteur ferm�
   - `tileAt` : la source des tuiles. La simulation passe son état mutable, et la vue suivra donc les portes et les faux murs en phase C (`updateTile()` reconstruit le niveau, environ 2 ms) ;
   - `game: true` : ce que voit le joueur, sans les aides de la visionneuse :
     - les faux murs fermés ou imaginaires ressemblent à des murs ;
-    - un faux mur ouvert devient du sol, sans contour filaire ;
+    - un faux mur ouvert devient du sol, sans contour filaire. Un faux mur imaginaire a aussi un sol, visible quand on se tient dedans ;
     - les trappes invisibles ne sont pas dessinées ;
     - les téléporteurs ne sont dessinés que s'ils sont **visibles et ouverts** ;
     - seul le rendu « avec états » est construit.
