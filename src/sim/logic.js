@@ -15,6 +15,7 @@
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
 import { isAlcove } from '../core/ornaments.js';
+import { resolveItemArrival } from './rules.js';
 import { decodeChampion } from '../core/texts.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
@@ -112,8 +113,12 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     }
     detail.open = open;
     emit('tileChanged', { level, x, y, type: tile.type, detail, source });
-    // The party falls through a pit opening under it, and is carried by a teleporter activated under it.
-    if ((tile.type === 'pit' || tile.type === 'teleporter') && open && partyOn(level, x, y)) onOpenedUnderParty();
+    // The party falls through a pit opening under it, and is carried by a teleporter activated under it;
+    // so are the items lying there.
+    if ((tile.type === 'pit' || tile.type === 'teleporter') && open) {
+      settleItems(level, x, y);
+      if (partyOn(level, x, y)) onOpenedUnderParty();
+    }
   }
 
   // Event on a wall: gates and counters of the wall (whatever their face: the event's
@@ -243,7 +248,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     return true;
   }
 
-  /** Drops a carried item on a sub-tile (0..3 = NW, NE, SE, SW) of a floor tile. */
+  /** Drops a carried item on a sub-tile (0..3 = NW, NE, SE, SW) of a floor tile; it may fall or be carried away. */
   function drop(p, item, level, x, y, position) {
     const i = state.inventory.findIndex((carried) => sameItem(carried, item));
     if (i < 0) return false;
@@ -253,7 +258,23 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     });
     changedItems(level, x, y);
     changedInventory();
+    settleItems(level, x, y);
     return true;
+  }
+
+  // Items of a floor tile on an open pit or an active teleporter (for items) go where
+  // it leads, keeping their sub-tile; the floor actuators of both tiles notice it.
+  function settleItems(level, x, y) {
+    const lying = state.itemsAt(level, x, y);
+    if (!lying.length) return;
+    const to = resolveItemArrival(dungeon, state, { level, x, y });
+    if (!to) return;
+    const moving = [...lying];
+    floorChange(level, x, y, party(), party(), () => lying.splice(0));
+    floorChange(to.level, to.x, to.y, party(), party(), () => state.itemsAt(to.level, to.x, to.y).push(...moving));
+    changedItems(level, x, y);
+    changedItems(to.level, to.x, to.y);
+    emit('itemsMoved', { from: { level, x, y }, to, items: moving });
   }
 
   // Moves an item between the inventory and a wall face (alcove, torch holder).

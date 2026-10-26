@@ -17,12 +17,12 @@
 import * as THREE from 'three';
 import { tileState } from '../../core/tile-states.js';
 
-// Wall height is a setting (fraction of a tile, 1 = cube); doors and
+// Wall height is a setting (fraction of a tile, 1 = cube); doors span it,
 // teleporters are 90 % of it, stairs span it.
 export const DEFAULT_WALL_HEIGHT = 0.7;
 const FLOOR_THICKNESS = 0.05;
 const STEPS = 3;
-const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight * 0.9 });
+const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight, teleporter: wallHeight * 0.9 });
 // Part of the leaf still visible when an open door is raised into the lintel.
 const RAISED_DOOR_VISIBLE = 0.25;
 const HIDDEN_OPACITY = 0.4; // invisible pits, imaginary walls: faded but visible
@@ -48,7 +48,7 @@ function partDefinitions(theme, h) {
     stepDown: { geometry: new THREE.BoxGeometry(1, 1, 1 / STEPS), color: theme.stairsDown },
     door: { geometry: new THREE.BoxGeometry(1, h.door, 0.12), color: theme.door },
     teleporter: {
-      geometry: new THREE.BoxGeometry(0.7, h.door, 0.7),
+      geometry: new THREE.BoxGeometry(0.7, h.teleporter, 0.7),
       color: theme.teleporter,
       emissive: true,
       opacity: 0.45,
@@ -114,7 +114,7 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
       if (tile.type === 'pit' && game) {
         if (!tile.detail.invisible) add(pitPart(tile.detail), info, [px, 0.011, pz]);
       } else if (tile.type === 'pit') addVariants('pit', pitPart(tile.detail), info, [px, 0.011, pz]);
-      if (tile.type === 'teleporter' && (!game || (tile.detail.visible && tile.detail.open))) add('teleporter', info, [px, h.door / 2, pz]);
+      if (tile.type === 'teleporter' && (!game || (tile.detail.visible && tile.detail.open))) add('teleporter', info, [px, h.teleporter / 2, pz]);
       if (tile.type === 'door') addDoor(add, info, px, pz, h, game);
     }
   }

@@ -29,6 +29,8 @@ export const BLOCK_LABELS = { outside: 'bord de la carte', wall: 'mur', fakewall
 
 // Teleporter scopes that carry the party.
 const PARTY_SCOPES = new Set(['all', 'items_party']);
+// Teleporter scopes that carry items.
+const ITEM_SCOPES = new Set(['all', 'items', 'items_party']);
 // Longest chain of arrivals (pit -> teleporter -> …) before it is considered a loop.
 const MAX_CHAIN = 32;
 
@@ -76,6 +78,28 @@ export function resolveArrival(dungeon, state, party) {
   return { party: current, effects, loop: true };
 }
 
+/**
+ * Where an item lying on a tile ends up: it falls through open pits and is
+ * carried by open teleporters whose scope includes items, in chain (not by stairs).
+ * @returns {{ level, x, y }|null} the final tile, or null if the item stays
+ */
+export function resolveItemArrival(dungeon, state, { level, x, y }) {
+  const seen = new Set();
+  let current = { level, x, y, facing: 'N' };
+  for (let i = 0; i < MAX_CHAIN; i++) {
+    const key = `${current.level}:${current.x},${current.y}`;
+    if (seen.has(key)) break;
+    seen.add(key);
+    const tile = state.tileAt(current.level, current.x, current.y);
+    const effect =
+      tile?.type === 'pit' ? fall(dungeon, current, tile.detail) : tile?.type === 'teleporter' ? teleport(dungeon, current, tile.detail, ITEM_SCOPES) : null;
+    if (!effect) break;
+    current = effect.party;
+  }
+  const moved = current.level !== level || current.x !== x || current.y !== y;
+  return moved ? { level: current.level, x: current.x, y: current.y } : null;
+}
+
 // Stairs: the matching stairs of the adjacent level are at the same global
 // coordinates. The party lands beside them, on their access side, facing away.
 function takeStairs(dungeon, state, party, detail) {
@@ -117,13 +141,13 @@ function fall(dungeon, party, detail) {
   return { type: 'fall', party: { ...party, level: party.level + 1, x, y } };
 }
 
-// Open teleporter whose scope includes the party: to its destination, with a
-// relative rotation (quarter turns clockwise) or an absolute facing.
-function teleport(dungeon, party, detail) {
+// Open teleporter whose scope includes the party (or the items): to its destination,
+// with a relative rotation (quarter turns clockwise) or an absolute facing.
+function teleport(dungeon, party, detail, scopes = PARTY_SCOPES) {
   if (!detail.open) return null;
   const ref = detail.items?.find((item) => item.kind === 'teleporter');
   const teleporter = ref && dungeon.data.teleporters[ref.index];
-  if (!teleporter || !PARTY_SCOPES.has(teleporter.scope)) return null;
+  if (!teleporter || !scopes.has(teleporter.scope)) return null;
   const { map, x, y } = teleporter.dest;
   if (!dungeon.tileAt(map, x, y)) return null;
   const quarters = teleporter.rotation / 90;

@@ -126,6 +126,36 @@ Ne sont pas gérés : l'échangeur (16) et le type 17.
   - depuis le téléporteur N1 (13, 16), un clic au centre atteint les murs sud et est.
 - Aucune erreur dans la console.
 
+## 6. Retours graphiques et objets en mouvement
+
+| Retour | Ajustement |
+|---|---|
+| Créatures qui ne touchent pas le sol | Le cylindre mesure 0,7 × la hauteur des murs, mais il était centré à 0,35 quelle que soit cette hauteur. Il est maintenant posé au sol, en 3D et dans la vue à la première personne (`level-contents.js`) |
+| Portes à la hauteur des murs | Une porte fait maintenant toute la hauteur du mur (`dimensions.door`). Les téléporteurs restent à 90 % (`dimensions.teleporter`). En 3D, une porte ouverte remonte toujours en laissant dépasser son quart inférieur |
+| Flash à la chute dans une trappe | Même liseré rouge qu'une collision, à chaque effet `fall` (pas ou mécanisme) |
+| Objets dans les trappes et les téléporteurs | `resolveItemArrival()` (`rules.js`) fait tomber un objet par les trappes ouvertes et l'envoie par les téléporteurs actifs dont la portée inclut les objets (`all`, `items`, `items_party`), en chaîne. Les escaliers ne sont pas concernés |
+| `F` désactive la sélection courante | Après le déplacement, la sélection et ses liens sont effacés |
+
+**Quand un objet se déplace :**
+- quand on le **pose** ;
+- quand une **trappe s'ouvre** ou qu'un **téléporteur s'active** sous lui, comme pour le groupe.
+
+Il garde sa sous-case. Les actuators au sol des deux cases réagissent, et la barre d'état l'annonce (événement `itemsMoved`).
+
+**Exemple :** le téléporteur N1 (13, 16) ne transporte que les objets, vers (14, 14). Juste à côté, l'inscription (14, 16) dit « TO CLOSE PIT LEAVE A VALUABLE ON FLOOR » : l'énigme devient jouable.
+
+**Vérifications :**
+- **Node :**
+  - une Gold Key posée sur la trappe (7, 8) du niveau 1, fermée par le levier, y reste ;
+  - au clic suivant sur le levier, la trappe s'ouvre et la clé tombe en N2 (2, 12) ;
+  - une seconde clé posée sur la trappe ouverte tombe aussitôt ;
+  - les 5 téléporteurs « objets » ouverts emportent un objet et laissent le groupe sur place.
+- **Chrome :**
+  - la porte fermée (18, 1) occupe toute la hauteur ;
+  - une créature du niveau 1, en (27, 2), repose au sol ;
+  - `F` efface la sélection ;
+  - aucune erreur dans la console.
+
 ## Sources
 
 Aucune nouvelle source. Identifiants : doc 009 ; décors muraux (alcôves) : doc 002.

@@ -109,9 +109,10 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight, co
         const alone = member.position === null;
         const [u, v] = alone ? [0.5, 0.5] : subcellOffset(member.position);
         // A lone creature stands in the centre, with the same size as a group member.
-        const position = [ox + u, CREATURE_HEIGHT / 2, oz + v];
+        // Standing on the floor: the cylinder is CREATURE_HEIGHT × wallHeight tall.
+        const position = [ox + u, (CREATURE_HEIGHT * wallHeight) / 2, oz + v];
         creatures.push({ position, color: creatureColor(creature.type), info });
-        if (creature.possessions.length) rings.push({ position: [position[0], CREATURE_HEIGHT + 0.06, position[2]], info });
+        if (creature.possessions.length) rings.push({ position: [position[0], CREATURE_HEIGHT * wallHeight + 0.06, position[2]], info });
       }
     }
   }

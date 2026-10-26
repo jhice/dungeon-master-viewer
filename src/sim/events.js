@@ -3,6 +3,7 @@
 //   'partyMoved' { party, from, kind: 'step'|'turn'|'teleport', effects?, loop? }
 //                effects: [{ type: 'stairs'|'fall'|'teleport', party }…] applied after a step (rules.js)
 //   'blocked'    { party, reason }
+//   'itemsMoved' { from, to, items } items fell through a pit or were carried by a teleporter
 //   'reset'      { party }
 
 export function createEmitter() {

@@ -560,7 +560,10 @@ async function teleportToSelection() {
   const target = selection;
   if (!game) await openGame();
   const blocked = sim.teleport(target.level, target.x, target.y);
-  if (blocked) showInfo(`F : case infranchissable (${BLOCK_LABELS[blocked]})`);
+  if (blocked) return showInfo(`F : case infranchissable (${BLOCK_LABELS[blocked]})`);
+  // The party is there: the selection has done its job.
+  selection = null;
+  refreshLinks();
 }
 
 // Click on the wall or door in front of the party (mouse in the view, or Space).
@@ -607,7 +610,12 @@ function showParty(party) {
 
 sim.on('partyMoved', ({ party, effects, loop }) => {
   showParty(party);
-  if (effects?.length) showInfo(effects.map(describeEffect).join(' · ') + (loop ? ' · boucle interrompue' : ''));
+  if (!effects?.length) return;
+  showInfo(effects.map(describeEffect).join(' · ') + (loop ? ' · boucle interrompue' : ''));
+  if (effects.some((e) => e.type === 'fall')) game?.window.flash(); // fell through a pit, as a bump
+});
+sim.on('itemsMoved', ({ to, items }) => {
+  showInfo(`${items.map(itemName).join(', ')} → niveau ${to.level} (${to.x}, ${to.y})`);
 });
 
 // Status bar text of an arrival effect (stairs, pit, teleporter), see src/sim/rules.js.
