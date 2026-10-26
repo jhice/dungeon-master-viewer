@@ -9,6 +9,10 @@
 //   'types'  only when states are hidden (types-only rendering, as in 005)
 //   'states' only when states are shown
 // The renderer toggles mesh visibility; nothing is rebuilt.
+//
+// `game: true` builds what the party sees instead (first-person view): only
+// the with-states look, and hidden things stay hidden (closed or imaginary
+// fake walls look like walls, invisible pits and teleporters are not drawn).
 
 import * as THREE from 'three';
 import { tileState } from '../../core/tile-states.js';
@@ -53,11 +57,15 @@ function partDefinitions(theme, h) {
 }
 
 /**
+ * @param {object} [options]
+ * @param {number} [options.wallHeight]
+ * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; the simulation passes its state)
+ * @param {boolean} [options.game=false] first-person look, see above
  * @returns {{ group: THREE.Group, meshes: Array<THREE.InstancedMesh|THREE.LineSegments> }}
  * Each mesh has userData.part, userData.variant, userData.baseOpacity and, for
  * instanced meshes, userData.tiles[instanceId] = tile info (for hovering).
  */
-export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeight = DEFAULT_WALL_HEIGHT } = {}) {
+export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeight = DEFAULT_WALL_HEIGHT, tileAt, game = false } = {}) {
   const map = dungeon.level(levelIndex);
   const h = dimensions(wallHeight);
   const parts = partDefinitions(theme, h);
@@ -82,7 +90,7 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
 
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
-      const tile = dungeon.tileAt(levelIndex, x, y);
+      const tile = tileAt ? tileAt(levelIndex, x, y) : dungeon.tileAt(levelIndex, x, y);
       const gx = x + map.offset.x;
       const gy = y + map.offset.y;
       const info = { level: levelIndex, x, y, gx, gy, type: tile.type, detail: tile.detail };
@@ -94,7 +102,8 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
         continue;
       }
       if (tile.type === 'fakewall') {
-        addFakewall(add, openWallCenters, info, px, pz, h);
+        if (game) addGameFakewall(add, info, px, pz, h);
+        else addFakewall(add, openWallCenters, info, px, pz, h);
         continue;
       }
       if (tile.type === 'stairs') {
@@ -102,9 +111,11 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
         continue;
       }
       add('floor', info, [px, -FLOOR_THICKNESS / 2, pz]);
-      if (tile.type === 'pit') addVariants('pit', pitPart(tile.detail), info, [px, 0.011, pz]);
-      if (tile.type === 'teleporter') add('teleporter', info, [px, h.door / 2, pz]);
-      if (tile.type === 'door') addDoor(add, info, px, pz, h);
+      if (tile.type === 'pit' && game) {
+        if (!tile.detail.invisible) add(pitPart(tile.detail), info, [px, 0.011, pz]);
+      } else if (tile.type === 'pit') addVariants('pit', pitPart(tile.detail), info, [px, 0.011, pz]);
+      if (tile.type === 'teleporter' && (!game || (tile.detail.visible && tile.detail.open))) add('teleporter', info, [px, h.door / 2, pz]);
+      if (tile.type === 'door') addDoor(add, info, px, pz, h, game);
     }
   }
 
@@ -149,11 +160,11 @@ function pitPart(detail) {
 // With states, an open door is raised like a portcullis: only its lower edge stays
 // in the doorway, the rest sticks out above the walls (there is no ceiling), so it
 // can be told apart from a closed door at any camera angle but straight down.
-function addDoor(add, info, px, pz, h) {
+function addDoor(add, info, px, pz, h, game) {
   const rotation = info.detail.orientation === 'NS' ? 0 : Math.PI / 2;
   const closed = [px, h.door / 2, pz];
   if (!info.detail.open) return add('door', info, closed, [1, 1, 1], rotation, 'all');
-  add('door', info, closed, [1, 1, 1], rotation, 'types');
+  if (!game) add('door', info, closed, [1, 1, 1], rotation, 'types');
   const bottom = h.wall - h.door * RAISED_DOOR_VISIBLE;
   add('door', info, [px, bottom + h.door / 2, pz], [1, 1, 1], rotation, 'states');
 }
@@ -169,6 +180,12 @@ function addFakewall(add, openWallCenters, info, px, pz, h) {
   add('floor', info, [px, -FLOOR_THICKNESS / 2, pz], [1, 1, 1], 0, 'states');
   if (open) openWallCenters.push([px, h.wall / 2, pz]);
   else add('fakewallImaginary', info, block, [1, 1, 1], 0, 'states');
+}
+
+// Fake wall as the party sees it: a wall while it is there (closed or imaginary), floor once it has vanished.
+function addGameFakewall(add, info, px, pz, h) {
+  if (info.detail.open) return add('floor', info, [px, -FLOOR_THICKNESS / 2, pz]);
+  add('wall', info, [px, h.wall / 2, pz]);
 }
 
 // Edges of unit wall boxes centred on `centers`, merged into one LineSegments.

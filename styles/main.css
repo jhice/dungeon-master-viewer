@@ -458,3 +458,83 @@ body {
   font: 0.78rem / 1.35 ui-monospace, monospace;
   letter-spacing: 0.03em;
 }
+
+/* --- Simulation: floating first-person window (src/ui/game-window.js) ------------ */
+
+.game-window {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #000;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.6);
+  overflow: hidden;
+  resize: horizontal; /* the viewport keeps its 4/3 ratio */
+}
+
+.game-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.6rem;
+  background: #1c1a17;
+  border-bottom: 1px solid #333;
+  font-size: 0.8rem;
+  cursor: move;
+  user-select: none;
+}
+
+.game-title {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.game-status {
+  flex: 1;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-bar button {
+  padding: 0 0.45rem;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #2a2723;
+  color: var(--fg);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.game-bar button:hover {
+  border-color: var(--accent);
+}
+
+.game-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.fp-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Blocked move: a short red outline. */
+.game-window.is-bumped {
+  animation: game-bump 0.25s ease-out;
+}
+
+@keyframes game-bump {
+  from {
+    box-shadow: 0 0 0 2px #c84030, 0 8px 28px rgb(0 0 0 / 0.6);
+  }
+}

@@ -49,6 +49,18 @@ export function createDomRenderer(
   let markedCells = []; // cells holding content markers, emptied on level change
   let highlighted = null;
 
+  // Party of the simulation: an arrow in its cell, when it is on the shown level.
+  const partyMark = document.createElement('span');
+  partyMark.className = 'party-mark';
+  let party = null;
+  function placeParty({ scroll = false } = {}) {
+    const cell = party && party.level === area?.level ? cells[cellIndexOf(party.x, party.y)] : null;
+    if (!cell) return partyMark.remove();
+    partyMark.style.setProperty('--facing', `${'NESW'.indexOf(party.facing) * 90}deg`);
+    if (partyMark.parentNode !== cell) cell.append(partyMark);
+    if (scroll) cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   function setLayers({ items = true, creatures = true, mechanisms = true, texts = true }) {
     grid.classList.toggle('hide-texts', !texts);
     grid.classList.toggle('hide-items', !items);
@@ -212,6 +224,12 @@ export function createDomRenderer(
       selected = null;
       drawContents(level);
       drawLinks();
+      placeParty();
+    },
+    /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
+    setParty(next) {
+      party = next;
+      placeParty({ scroll: true });
     },
     /** Links to draw (see src/core/logic.js), and the selected tile ({level,x,y} or null). */
     showLinks(links, selection = null) {

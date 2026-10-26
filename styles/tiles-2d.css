@@ -391,3 +391,18 @@
 .hide-texts .text-mark {
   display: none;
 }
+
+/* --- Party (simulation): an arrow pointing where it faces ------------------------- */
+
+.dom-view .party-mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  width: 80%;
+  height: 80%;
+  pointer-events: none;
+  background: var(--party, #ff4a3a);
+  clip-path: polygon(50% 0, 92% 92%, 50% 70%, 8% 92%);
+  transform: translate(-50%, -50%) rotate(var(--facing, 0deg));
+}

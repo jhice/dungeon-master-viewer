@@ -19,8 +19,9 @@ export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, 
 
 // Shown in the control panel; checkboxes with a `shortcut` are toggled by that key (main.js).
 const SETTINGS_SCHEMA = [
+  // E, like W/A/S/D/Q, moves the party (simulation): labels moved to N.
   { key: 'links', label: 'Liens escaliers / trappes', type: 'checkbox', shortcut: 'L' },
-  { key: 'labels', label: 'Étiquettes de niveau', type: 'checkbox', shortcut: 'E' },
+  { key: 'labels', label: 'Étiquettes de niveau', type: 'checkbox', shortcut: 'N' },
   // Re-frame the camera on each level change, as the 0 key does.
   { key: 'autoAdjust', label: 'Auto-ajustement', type: 'checkbox' },
   { key: 'levelGap', label: 'Espacement des niveaux', type: 'range', min: 1.5, max: 10, step: 0.5, format: (v) => v.toFixed(1) },
@@ -152,6 +153,7 @@ export function createThreeRenderer(
     });
     buildLinks();
     drawLogicLinks();
+    placeParty();
   }
 
   // --- Logic links (actuators, teleporters) and selection -------------------------
@@ -219,6 +221,30 @@ export function createThreeRenderer(
     selectionBox.position.set(p.x, levelY(tile.level) + (settings.wallHeight + 0.1) / 2, p.z);
   }
 
+  // --- Party of the simulation ---------------------------------------------------
+  // A red cone pointing where the party faces, and a vertical beam to spot it from afar.
+  const partyMarker = new THREE.Group();
+  partyMarker.name = 'party';
+  const partyMaterial = new THREE.MeshBasicMaterial({ color: 0xff4a3a });
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 16), partyMaterial);
+  cone.rotation.x = Math.PI / 2; // tip towards +z (south) before the facing rotation
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 6), partyMaterial);
+  partyMarker.add(cone, beam);
+  partyMarker.visible = false;
+  scene.add(partyMarker);
+  let party = null;
+  const PARTY_YAW = { S: 0, E: Math.PI / 2, N: Math.PI, W: -Math.PI / 2 };
+  function placeParty() {
+    partyMarker.visible = Boolean(party) && levels[party.level]?.group.visible;
+    if (!partyMarker.visible) return;
+    const m = dungeon.level(party.level);
+    const beamHeight = settings.wallHeight + 1.5;
+    partyMarker.position.set(m.offset.x + party.x + 0.5 - center.x, levelY(party.level) + 0.3, m.offset.y + party.y + 0.5 - center.z);
+    partyMarker.rotation.y = PARTY_YAW[party.facing];
+    beam.scale.y = beamHeight;
+    beam.position.y = beamHeight / 2;
+  }
+
   // --- State ------------------------------------------------------------------
   let currentLevel = 0;
   if (!DISPLAY_MODES.includes(settings.mode)) settings.mode = DEFAULT_SETTINGS.mode;
@@ -256,6 +282,7 @@ export function createThreeRenderer(
         mesh.material.needsUpdate = true;
       }
     });
+    placeParty();
   }
 
   // Outline of the tile located from the inventory (one at a time).
@@ -409,6 +436,11 @@ export function createThreeRenderer(
       drawLogicLinks();
       setSelection(selection);
     },
+    /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
+    setParty(next) {
+      party = next;
+      placeParty();
+    },
     setLayers(changes) {
       Object.assign(layers, changes);
       applyDisplayMode();
@@ -430,9 +462,10 @@ export function createThreeRenderer(
       camera.position.copy(controls.target).add(offset.setLength(length));
     },
     resetView,
-    keyHint: 'souris : orbite / zoom / clic droit déplacer · F mode',
+    keyHint: 'souris : orbite / zoom / clic droit déplacer · M mode',
     keys: {
-      f: () => {
+      // M (not F: F teleports the party to the selected tile, see main.js).
+      m: () => {
         mode = DISPLAY_MODES[(DISPLAY_MODES.indexOf(mode) + 1) % DISPLAY_MODES.length];
         settings.mode = mode;
         applyDisplayMode();
@@ -462,6 +495,9 @@ export function createThreeRenderer(
       for (const label of labels) label.element.remove();
       highlight.geometry.dispose();
       highlight.material.dispose();
+      cone.geometry.dispose();
+      beam.geometry.dispose();
+      partyMaterial.dispose();
       renderer.dispose();
       canvasHost.remove();
     },

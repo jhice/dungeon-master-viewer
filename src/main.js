@@ -14,6 +14,10 @@ import { createInventoryPanel } from './ui/inventory-panel.js';
 import { createTooltip } from './ui/tooltip.js';
 import { createTextsPanel } from './ui/texts-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
+import { createGameWindow } from './ui/game-window.js';
+import { createSimulation } from './sim/simulation.js';
+import { createControls } from './sim/controls.js';
+import { BLOCK_LABELS } from './sim/rules.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
 const RENDERERS = {
@@ -23,9 +27,12 @@ const RENDERERS = {
     frameless: true, // always shows every level in the global frame
     create: async (container, dungeon, opts) => (await import('./render/three/three-renderer.js')).createThreeRenderer(container, dungeon, opts),
   },
-  ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
+  // Out of the R rotation (docs/012-simulation.md): kept for the command-line tool.
+  ascii: { label: 'ASCII', hidden: true, create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ ou Maj + molette : niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes';
+const BASE_HINT = 'Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes · P jeu · F y aller';
+// ↑/↓ change the level outside the game, and move the party in the game.
+const LEVEL_HINT = { viewer: '↑/↓ ou Maj + molette : niveau', game: 'jeu : ZQSD + A/E (AZERTY), flèches, pavé num. · PgPréc/PgSuiv ou Maj + molette : niveau' };
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -53,6 +60,8 @@ const prefs = loadPreferences({
   textsOpen: false,
   panelOpen: true,
   inventoryOpen: false,
+  playing: false, // the game window is open
+  gameLayout: null, // its position and width
 });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
@@ -149,9 +158,15 @@ async function mountRenderer() {
     },
   });
   renderLegend(legend, id === 'ascii' ? 'ascii' : 'dom', { showStates: prefs.showStates });
-  hint.textContent = renderer.keyHint ? `${BASE_HINT} · ${renderer.keyHint}` : `${BASE_HINT} · G repère · +/− zoom · 0 ajuster`;
-  showLevel(level);
+  renderer.setParty?.(game ? sim.party : null);
+  updateHint();
+  showLevel(game ? sim.party.level : level);
   if (!renderer.zoom) setCell(prefs.cell);
+}
+
+function updateHint() {
+  const own = renderer.keyHint ?? 'G repère · +/− zoom · 0 ajuster';
+  hint.textContent = `${LEVEL_HINT[game ? 'game' : 'viewer']} · ${BASE_HINT} · ${own}`;
 }
 
 function showLevel(level) {
@@ -303,7 +318,7 @@ const go = (delta) => {
 };
 
 function nextRenderer() {
-  const ids = Object.keys(RENDERERS);
+  const ids = Object.keys(RENDERERS).filter((id) => !RENDERERS[id].hidden);
   prefs.renderer = ids[(ids.indexOf(prefs.renderer) + 1) % ids.length];
   mountRenderer();
 }
@@ -376,14 +391,15 @@ function panelSchema() {
       items: [
         { label: '▲ Haut', title: 'Niveau précédent (↑)', action: () => go(-1), disabled: () => renderer.currentLevel === 0 },
         { label: '▼ Bas', title: 'Niveau suivant (↓)', action: () => go(+1), disabled: () => renderer.currentLevel === dungeon.levelCount - 1 },
+        { label: '▶ Jeu', title: 'Ouvrir / fermer la simulation (P)', action: () => (game ? closeGame() : openGame()) },
       ],
     },
   ];
-  if (renderer.setShowStates) schema.push({ type: 'checkbox', key: 'showStates', label: 'États des tuiles', shortcut: 'S' });
+  if (renderer.setShowStates) schema.push({ type: 'checkbox', key: 'showStates', label: 'États des tuiles', shortcut: 'V' });
   if (renderer.setLayers) {
     schema.push({ type: 'checkbox', key: 'showItems', label: 'Objets', shortcut: 'O' });
     schema.push({ type: 'checkbox', key: 'showCreatures', label: 'Créatures', shortcut: 'C' });
-    schema.push({ type: 'checkbox', key: 'showMechanisms', label: 'Mécanismes', shortcut: 'M' });
+    schema.push({ type: 'checkbox', key: 'showMechanisms', label: 'Mécanismes', shortcut: 'K' });
     schema.push({ type: 'checkbox', key: 'showTexts', label: 'Textes', shortcut: 'X' });
     schema.push({ type: 'checkbox', key: 'allLinks', label: 'Tous les liens (sinon sélection)', shortcut: 'T' });
   }
@@ -447,10 +463,10 @@ const GLOBAL_KEYS = {
   End: () => showLevel(dungeon.levelCount - 1),
   r: nextRenderer,
   g: () => setFrame(prefs.frame !== 'global'),
-  s: () => setShowStates(!prefs.showStates),
+  v: () => setShowStates(!prefs.showStates), // S moves the party (simulation)
   o: () => setLayer('showItems', !prefs.showItems),
   c: () => setLayer('showCreatures', !prefs.showCreatures),
-  m: () => setLayer('showMechanisms', !prefs.showMechanisms),
+  k: () => setLayer('showMechanisms', !prefs.showMechanisms), // M: 3D display mode
   t: () => setAllLinks(!prefs.allLinks),
   Escape: () => selection && select(selection),
   i: () => inventory.toggle(),
@@ -460,13 +476,94 @@ const GLOBAL_KEYS = {
   '=': () => zoom(+1),
   '-': () => zoom(-1),
   0: resetZoom,
+  p: () => (game ? closeGame() : openGame()),
+  f: teleportToSelection,
 };
 
-bindKeys((key) => {
+bindKeys((key, event) => {
   if (mounting || !renderer) return undefined;
+  // In the game, movement keys (by physical key) come first.
+  const move = game && moveKey(event);
+  if (move) return move;
   const k = key.length === 1 ? key.toLowerCase() : key;
   return renderer.keys?.[k] ?? settingShortcut(k) ?? GLOBAL_KEYS[k];
 });
 window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell === null && setCell(null));
 
+// --- Simulation (docs/012-simulation.md) -------------------------------------------
+// One simulation shared by every view: the first-person window, and the party
+// marker of the 2D/3D renderers, whose shown level follows the party.
+const sim = createSimulation(dungeon);
+const moveKey = createControls((command) => sim.command(command));
+let game = null; // { window, view } while the game window is open
+let opening = false;
+
+async function openGame() {
+  if (game || opening) return;
+  opening = true;
+  const win = createGameWindow({
+    layout: prefs.gameLayout ?? undefined,
+    onLayoutChange: (layout) => {
+      prefs.gameLayout = layout;
+      savePreferences(prefs);
+    },
+    onClose: closeGame,
+    onReset: () => sim.reset(),
+  });
+  try {
+    const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
+    game = { window: win, view: createFirstPersonRenderer(win.viewport, dungeon, sim.state) };
+  } catch (error) {
+    console.error(error);
+    win.dispose();
+    showInfo(`Vue à la première personne indisponible : ${error.message}`);
+    return;
+  } finally {
+    opening = false;
+  }
+  prefs.playing = true;
+  savePreferences(prefs);
+  updateHint();
+  showParty(sim.party);
+}
+
+function closeGame() {
+  if (!game) return;
+  game.view.dispose();
+  game.window.dispose();
+  game = null;
+  prefs.playing = false;
+  savePreferences(prefs);
+  renderer?.setParty?.(null);
+  if (renderer) updateHint();
+}
+
+// F: the party jumps to the selected tile (to test a place directly), facing unchanged.
+async function teleportToSelection() {
+  if (!selection) return showInfo('F : sélectionnez d’abord une case (clic)');
+  const target = selection;
+  if (!game) await openGame();
+  const blocked = sim.teleport(target.level, target.x, target.y);
+  if (blocked) showInfo(`F : case infranchissable (${BLOCK_LABELS[blocked]})`);
+}
+
+const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
+
+function showParty(party) {
+  if (!game) return;
+  game.view.setParty(party);
+  game.window.setStatus(`niveau ${party.level} · (${party.x}, ${party.y}) · face ${FACING_LABELS[party.facing]}`);
+  if (!renderer) return; // being mounted: mountRenderer() places the party
+  if (renderer.currentLevel !== party.level) showLevel(party.level);
+  renderer.setParty?.(party);
+}
+
+sim.on('partyMoved', ({ party }) => showParty(party));
+sim.on('reset', ({ party }) => showParty(party));
+sim.on('blocked', ({ reason }) => {
+  game?.window.flash();
+  showInfo(`Bloqué : ${BLOCK_LABELS[reason]}`);
+});
+
 mountRenderer();
+if (prefs.playing) openGame();

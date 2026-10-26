@@ -5,6 +5,9 @@
 //   renderer.currentLevel;       // index of the level shown
 //   renderer.dispose();          // remove DOM nodes, listeners, GPU resources
 //
+// Optional, for the simulation (src/sim/):
+//   renderer.setParty(party);    // marker of the party { level, x, y, facing }, null to hide it
+//
 // Renderers only read the Dungeon model (src/core/dungeon.js); they never
 // mutate it, so they can be swapped at runtime.
 
