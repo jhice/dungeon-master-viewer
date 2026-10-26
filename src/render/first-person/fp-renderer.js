@@ -30,7 +30,7 @@ const CEILING_COLOR = '#1d1b18';
 /**
  * @param {HTMLElement} container element sized by the caller (4/3), the canvas fills it
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
- * @param {{ tileAt(level, x, y): object }} state simulation state (src/sim/state.js)
+ * @param {{ tileAt(level, x, y): object, textVisible(index): boolean }} state simulation state (src/sim/state.js)
  * @param {object} [options]
  * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
  */
@@ -68,11 +68,19 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       tileAt: state.tileAt,
       game: true,
     });
-    // Items, creatures (still), mechanisms and texts, as markers of the 3D renderer.
+    // Items, creatures (still) and mechanisms, as markers of the 3D renderer.
+    // Texts are drawn for real (inscriptions below), not as markers.
     for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT })) {
+      if (mesh.userData.layer === 'texts') {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+        continue;
+      }
       group.add(mesh);
       meshes.push(mesh);
     }
+    const inscriptions = buildInscriptions(dungeon, state, levelIndex);
+    for (const mesh of inscriptions) group.add(mesh);
     for (const mesh of meshes) {
       // `game` builds no types-only look, but stairs/doors share variants: hide what is not 'states'.
       mesh.visible = mesh.userData.variant !== 'types';
@@ -90,7 +98,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     ceiling.position.set(map.width / 2, WALL_HEIGHT, map.height / 2);
     group.add(ceiling);
     scene.add(group);
-    built = { group, meshes, ceiling };
+    built = { group, meshes, ceiling, inscriptions };
   }
 
   function clear() {
@@ -99,6 +107,11 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     disposeLevelMeshes(built.meshes);
     built.ceiling.geometry.dispose();
     built.ceiling.material.dispose();
+    for (const mesh of built.inscriptions) {
+      mesh.geometry.dispose();
+      mesh.material.map.dispose();
+      mesh.material.dispose();
+    }
     built = null;
   }
 
@@ -174,6 +187,66 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       renderer.domElement.remove();
     },
   };
+}
+
+// --- Inscriptions -------------------------------------------------------------------
+// Visible texts on a wall face, engraved in the stone: a transparent plane just in
+// front of the face, with the lines of the text centred. Messages hidden until a
+// mechanism shows them are drawn once visible (the level is rebuilt).
+
+// Plane position and rotation per face (N, E, S, W): offset from the tile centre, rotation around y.
+const FACE_PLANES = [
+  { dx: 0, dz: -0.5, rotation: Math.PI },
+  { dx: 0.5, dz: 0, rotation: Math.PI / 2 },
+  { dx: 0, dz: 0.5, rotation: 0 },
+  { dx: -0.5, dz: 0, rotation: -Math.PI / 2 },
+];
+const INSCRIPTION_GAP = 0.004; // in front of the face, against z-fighting
+
+function buildInscriptions(dungeon, state, levelIndex) {
+  const meshes = [];
+  for (const { x, y, detail } of dungeon.detailedTiles(levelIndex)) {
+    if (detail.type !== 'wall') continue;
+    for (const ref of detail.items ?? []) {
+      if (ref.kind !== 'text' || !state.textVisible(ref.index)) continue;
+      const lines = dungeon.data.texts[ref.index].text.split('\n');
+      const { dx, dz, rotation } = FACE_PLANES[ref.position];
+      const material = new THREE.MeshLambertMaterial({ map: inscriptionTexture(lines), transparent: true, depthWrite: false });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.43), material);
+      const out = 1 + INSCRIPTION_GAP / 0.5;
+      mesh.position.set(x + 0.5 + dx * out, WALL_HEIGHT * 0.55, y + 0.5 + dz * out);
+      mesh.rotation.y = rotation;
+      meshes.push(mesh);
+    }
+  }
+  return meshes;
+}
+
+// Pale letters with a dark lower edge (engraved look), as large as the longest line allows.
+function inscriptionTexture(lines) {
+  const width = 512;
+  const height = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const g = canvas.getContext('2d');
+  const longest = Math.max(...lines.map((l) => l.length), 1);
+  const size = Math.min(56, Math.floor((width * 0.92) / (longest * 0.62)), Math.floor((height * 0.9) / (lines.length * 1.15)));
+  g.font = `bold ${size}px ui-monospace, "DejaVu Sans Mono", monospace`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const top = height / 2 - ((lines.length - 1) * size * 1.15) / 2;
+  lines.forEach((line, i) => {
+    const y = top + i * size * 1.15;
+    g.fillStyle = 'rgb(20 16 10 / 0.75)';
+    g.fillText(line, width / 2 + 2, y + 3);
+    g.fillStyle = '#e8e0c8';
+    g.fillText(line, width / 2, y);
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }
 
 // --- Procedural textures (light patterns, tinted by the theme colour of each part) ---

@@ -9,6 +9,7 @@ import { createClock } from './clock.js';
 import { createLogic } from './logic.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
+import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
 export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
 
@@ -81,6 +82,16 @@ export function createSimulation(dungeon) {
     },
     command,
     teleport,
+    /** Visible texts on the wall face in front of the party (inscriptions, messages shown). */
+    facedTexts() {
+      const [dx, dy] = SIDE_DELTAS[party.facing];
+      const tile = dungeon.tileAt(party.level, party.x + dx, party.y + dy);
+      if (tile?.type !== 'wall') return [];
+      const face = (FACINGS.indexOf(party.facing) + 2) % 4;
+      return (tile.detail?.items ?? [])
+        .filter((ref) => ref.kind === 'text' && ref.position === face && state.textVisible(ref.index))
+        .map((ref) => dungeon.data.texts[ref.index].text);
+    },
     /** Click on what is in front of the party (wall face, door button). Phase E: item in hand. */
     clickFront: () => logic.clickFront(party, null),
     /** Advances the clock: delayed effects due by then are applied. */

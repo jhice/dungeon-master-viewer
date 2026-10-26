@@ -9,10 +9,12 @@
 //   teleporter  set = active, clear = inactive; the party on it is carried
 //   fakewall    set = vanished (open), clear = back
 //   wall        gates and counters of the wall; message (text) on the targeted face shown / hidden
-//   floor       creature generators: not simulated yet (no creatures)
+//   floor       texts of the tile shown / hidden (a message shown is printed: 'textShown');
+//               creature generators: not simulated yet (no creatures)
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { tileContents } from '../core/contents.js';
+import { decodeChampion } from '../core/texts.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
 const FLOOR_ANYTHING = 1; // TPCI: party, creatures, items
@@ -90,8 +92,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       case 'wall':
         return wallEvent(level, x, y, cell, effect);
       default:
-        // Floor targets drive creature generators: not simulated yet.
-        return undefined;
+        // Floor: messages. Creature generators are not simulated yet.
+        return floorEvent(level, x, y, effect);
     }
   }
 
@@ -124,7 +126,24 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       const visible = effect === 'toggle' ? !state.textVisible(ref.index) : effect === 'set';
       if (visible === state.textVisible(ref.index)) continue;
       state.setTextVisible(ref.index, visible);
-      emit('textChanged', { index: ref.index, visible, level, x, y, face: cell });
+      emit('textChanged', { index: ref.index, visible, level, x, y, face: cell, onWall: true });
+    }
+  }
+
+  // Texts lying on a floor tile (not the champion sheets of the Hall).
+  const floorTexts = (level, x, y) =>
+    (dungeon.tileAt(level, x, y).detail?.items ?? []).filter(
+      (ref) => ref.kind === 'text' && !decodeChampion(dungeon.data.texts[ref.index].text),
+    );
+
+  // Event on a floor: its texts appear or disappear; a text that appears is printed.
+  function floorEvent(level, x, y, effect) {
+    for (const ref of floorTexts(level, x, y)) {
+      const visible = effect === 'toggle' ? !state.textVisible(ref.index) : effect === 'set';
+      if (visible === state.textVisible(ref.index)) continue;
+      state.setTextVisible(ref.index, visible);
+      emit('textChanged', { index: ref.index, visible, level, x, y, onWall: false });
+      if (visible) emit('textShown', { index: ref.index, level, x, y });
     }
   }
 
@@ -223,6 +242,10 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       clock.flush();
     },
     partyEntered(p) {
+      // A visible text on the floor is printed when the party walks on it.
+      for (const ref of floorTexts(p.level, p.x, p.y)) {
+        if (state.textVisible(ref.index)) emit('textShown', { index: ref.index, level: p.level, x: p.x, y: p.y });
+      }
       floorActuators(p, true);
       clock.flush();
     },

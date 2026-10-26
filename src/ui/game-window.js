@@ -2,8 +2,12 @@
 // stays above the 2D/3D views, which remain visible. Width is resizable
 // (the viewport keeps its 4/3 ratio); position and width are reported to the
 // caller, which remembers them.
+// Below the viewport, a message area (as in DM) prints the messages of the
+// dungeon; over the viewport, a caption shows the inscription being faced.
 
 const MIN_WIDTH = 240;
+const MESSAGE_LINES = 3; // latest messages kept
+const MESSAGE_MS = 12000; // before a message fades out
 
 /**
  * @param {object} options
@@ -11,7 +15,7 @@ const MIN_WIDTH = 240;
  * @param {(layout: object) => void} [options.onLayoutChange] after a drag or a resize
  * @param {() => void} [options.onClose]
  * @param {() => void} [options.onReset] back to the start position
- * @returns {{ viewport: HTMLElement, setStatus(text: string): void, flash(): void, dispose(): void }}
+ * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setReading(text|null), flash(), dispose() }}
  */
 export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = {}) {
   const win = document.createElement('section');
@@ -29,7 +33,14 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = 
 
   const viewport = document.createElement('div');
   viewport.className = 'game-viewport';
-  win.append(bar, viewport);
+  const reading = document.createElement('div');
+  reading.className = 'game-reading';
+  reading.hidden = true;
+  viewport.append(reading);
+  const messages = document.createElement('div');
+  messages.className = 'game-messages';
+  messages.setAttribute('aria-live', 'polite');
+  win.append(bar, viewport, messages);
   document.body.append(win);
 
   const place = ({ left, top, width }) => {
@@ -75,6 +86,19 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset } = 
     viewport,
     setStatus(text) {
       status.textContent = text;
+    },
+    /** Prints a message of the dungeon in the message area (it fades out after a while). */
+    message(text) {
+      const line = document.createElement('p');
+      line.textContent = text;
+      messages.append(line);
+      while (messages.children.length > MESSAGE_LINES) messages.firstChild.remove();
+      setTimeout(() => line.classList.add('is-old'), MESSAGE_MS);
+    },
+    /** Caption over the view: the inscription faced by the party, or null. */
+    setReading(text) {
+      reading.hidden = !text;
+      reading.textContent = text ?? '';
     },
     /** Short visual feedback (blocked move). */
     flash() {
