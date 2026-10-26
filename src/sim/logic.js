@@ -5,8 +5,8 @@
 //
 // Effects: 'set' | 'clear' | 'toggle' ('hold' becomes set or clear when fired).
 //   door        set = open, clear = close
-//   pit         set = open (hole), clear = close
-//   teleporter  set = active, clear = inactive
+//   pit         set = open (hole), clear = close; the party on it falls
+//   teleporter  set = active, clear = inactive; the party on it is carried
 //   fakewall    set = vanished (open), clear = back
 //   wall        gates and counters of the wall; message (text) on the targeted face shown / hidden
 //   floor       creature generators: not simulated yet (no creatures)
@@ -35,9 +35,9 @@ const RETRY = 1;
  * @param {object} hooks
  * @param {(type: string, payload: object) => void} hooks.emit 'tileChanged', 'textChanged', 'actuatorFired'
  * @param {() => object} hooks.party current party
- * @param {(level, x, y) => void} hooks.onPitOpened a pit opened: the party may fall
+ * @param {() => void} hooks.onOpenedUnderParty a pit opened or a teleporter was activated under the party
  */
-export function createLogic(dungeon, state, clock, { emit, party, onPitOpened }) {
+export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty }) {
   const actuatorData = (index) => dungeon.data.actuators[index];
   const partyOn = (level, x, y) => {
     const p = party();
@@ -106,7 +106,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onPitOpened })
     }
     detail.open = open;
     emit('tileChanged', { level, x, y, type: tile.type, detail, source });
-    if (tile.type === 'pit' && open && partyOn(level, x, y)) onPitOpened(level, x, y);
+    // The party falls through a pit opening under it, and is carried by a teleporter activated under it.
+    if ((tile.type === 'pit' || tile.type === 'teleporter') && open && partyOn(level, x, y)) onOpenedUnderParty();
   }
 
   // Event on a wall: gates and counters of the wall (whatever their face: the event's

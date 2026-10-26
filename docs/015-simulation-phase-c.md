@@ -69,7 +69,7 @@ src/sim/
 |---|---|---|---|
 | Porte | ouvre | ferme (reporté d'un tick si le groupe est dessous) | inverse |
 | Trappe | ouvre (le groupe **tombe** s'il est dessus) | ferme | inverse |
-| Téléporteur | active | désactive | inverse |
+| Téléporteur | active (le groupe dessus est **emporté**) | désactive | inverse |
 | Faux mur | disparaît | revient (reporté si le groupe est dedans) | inverse |
 | Mur | voir ci-dessous | | |
 | Sol | générateurs de créatures : non simulés | | |
@@ -93,10 +93,21 @@ src/sim/
 ### Oscillateurs
 
 Certaines portes logiques s'envoient un `toggle` à elles-mêmes avec un délai : ce sont des **horloges** voulues par les auteurs du jeu.
-- Au niveau 11, le mur (19, 11) fait s'ouvrir et se fermer en rythme les 4 trappes (15–16, 11–12).
-- Au niveau 2, le mur (4, 27) fait clignoter le téléporteur (4, 28).
+- **Niveau 11, mur (19, 11) :** 4 portes logiques forment un compteur sur 2 bits (00 → 10 → 11 → 01, un pas tous les 2 ticks).
+  - 4 autres portes logiques en « hold » en décodent la valeur.
+  - Au départ, les 4 trappes (15–16, 11–12) sont **ouvertes et immobiles**.
+  - Le cycle est lancé par le **bouton à usage unique** de la face ouest du mur (19, 9), actionné depuis (18, 9) face à l'est.
+  - Ensuite, une seule trappe est ouverte à la fois, et elle tourne : (15, 11) → (16, 11) → (16, 12) → (15, 12).
+- **Niveau 2, mur (4, 27) :** il fait clignoter le téléporteur (4, 28).
+  - Le cycle est lancé par la plaque (10, 28).
+  - Le téléporteur est désactivé 4 ticks, puis réactivé.
+  - S'il se réactive sous le groupe, celui-ci est emporté en (10, 28), sur la plaque qui relance le cycle.
 
 Une fois lancés, ils tournent indéfiniment, comme dans le jeu.
+
+**Retours de test (utilisateur) :**
+- Un téléporteur réactivé sous le groupe ne l'emportait pas. C'est corrigé : un téléporteur activé sous le groupe l'emporte, comme une trappe qui s'ouvre le fait tomber. L'événement `partyMoved` porte alors `kind: 'mechanism'`.
+- « Les trappes du niveau 11 ne bougent pas » : sans le bouton (19, 9), c'est normal (voir ci-dessus).
 
 ## 4. Vérifications
 

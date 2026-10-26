@@ -23,7 +23,7 @@ export function createSimulation(dungeon) {
   const logic = createLogic(dungeon, state, clock, {
     emit: events.emit,
     party: () => party,
-    onPitOpened: fallThroughPit,
+    onOpenedUnderParty: applyTileUnderParty,
   });
 
   function command(name) {
@@ -51,9 +51,9 @@ export function createSimulation(dungeon) {
     logic.partyEntered(party);
   }
 
-  // A pit opened under the party (actuator): it falls.
-  function fallThroughPit() {
-    arrive(party, resolveArrival(dungeon, state, party), 'fall');
+  // A pit opened or a teleporter was activated under the party (actuator): its effect applies now.
+  function applyTileUnderParty() {
+    arrive(party, resolveArrival(dungeon, state, party), 'mechanism');
   }
 
   /**
