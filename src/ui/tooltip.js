@@ -29,14 +29,15 @@ export function createTooltip(container = document.body) {
   return {
     /**
      * Shows `title`, the tile contents (filtered by layers) and its mechanisms
-     * ([{ color, title, details: [] }]); hides if there is nothing to show.
+     * ([{ color, title, details: [] }]). With nothing to list, shows the title
+     * alone if `always`, otherwise hides.
      */
-    show(title, contents, { items = true, creatures = true, onWall = false, mechanisms = [] } = {}) {
+    show(title, contents, { items = true, creatures = true, onWall = false, mechanisms = [], always = false } = {}) {
       const body = [
         ...(contents ? contentLines(contents, { items, creatures, onWall }) : []),
         ...mechanisms.flatMap((m) => [line(m.color, m.title), ...m.details.map((d) => detailLine(d))]),
       ];
-      if (!body.length) return this.hide();
+      if (!body.length && !always) return this.hide();
       const heading = document.createElement('div');
       heading.className = 'tooltip-title';
       heading.textContent = title;

@@ -12,13 +12,17 @@ import { buildLevelMeshes, disposeLevelMeshes, DEFAULT_WALL_HEIGHT } from './lev
 import { buildLevelContents } from './level-contents.js';
 import { readTheme } from './theme.js';
 import { linkColor } from '../palette.js';
+import { bindShiftWheel } from '../shift-wheel.js';
 
-export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, links: true, labels: true };
+// `mode` (display mode, key F) is not in the panel but is kept with the other settings.
+export const DEFAULT_SETTINGS = { levelGap: 5, wallHeight: DEFAULT_WALL_HEIGHT, links: true, labels: true, autoAdjust: true, mode: 'focus' };
 
 // Shown in the control panel; checkboxes with a `shortcut` are toggled by that key (main.js).
 const SETTINGS_SCHEMA = [
   { key: 'links', label: 'Liens escaliers / trappes', type: 'checkbox', shortcut: 'L' },
   { key: 'labels', label: 'Étiquettes de niveau', type: 'checkbox', shortcut: 'E' },
+  // Re-frame the camera on each level change, as the 0 key does.
+  { key: 'autoAdjust', label: 'Auto-ajustement', type: 'checkbox' },
   { key: 'levelGap', label: 'Espacement des niveaux', type: 'range', min: 1.5, max: 10, step: 0.5, format: (v) => v.toFixed(1) },
   // 1 = a full cube; the original game is a corridor of tall walls.
   { key: 'wallHeight', label: 'Hauteur des murs', type: 'range', min: 0.1, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)} %` },
@@ -37,6 +41,8 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {object} [options.settings] { levelGap, wallHeight, links, labels }, see DEFAULT_SETTINGS
  * @param {{ items?: boolean, creatures?: boolean, mechanisms?: boolean }} [options.layers] layers shown (default: all)
  * @param {(info: object) => void} [options.onSelect] a tile was clicked (without dragging)
+ * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
+ * @param {(settings: object) => void} [options.onSettingsChange] settings changed by the renderer itself (key F)
  * @param {(info: object|null) => void} [options.onHover]
  * @param {(text: string) => void} [options.onInfo] short status messages (display mode…)
  * @param {(level: number) => void} [options.onRequestLevel] a level label was clicked
@@ -44,7 +50,7 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
 export function createThreeRenderer(
   container,
   dungeon,
-  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect } = {},
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
   const layers = { items: true, creatures: true, mechanisms: true, texts: true, ...initialLayers };
@@ -215,12 +221,15 @@ export function createThreeRenderer(
 
   // --- State ------------------------------------------------------------------
   let currentLevel = 0;
-  let mode = 'focus';
+  if (!DISPLAY_MODES.includes(settings.mode)) settings.mode = DEFAULT_SETTINGS.mode;
+  let mode = settings.mode;
   // Destination of the glide towards a newly focused level; null when no glide is running,
   // so the user's own pan (which moves controls.target) is never pulled back.
   let targetGoal = null;
+  let cameraGoal = null; // with auto-adjust: the framed camera position of the new level
   const stopGlide = () => {
     targetGoal = null;
+    cameraGoal = null;
   };
   controls.addEventListener('start', stopGlide);
 
@@ -266,13 +275,18 @@ export function createThreeRenderer(
     targetGoal = position; // glide to the tile
   }
 
-  function resetView() {
-    const target = levelCenter(currentLevel);
-    const m = dungeon.level(currentLevel);
+  // Camera position framing a whole level, seen from the south, above.
+  function framedCamera(level) {
+    const target = levelCenter(level);
+    const m = dungeon.level(level);
     const span = Math.max(m.width, m.height);
-    controls.target.copy(target);
+    return new THREE.Vector3(target.x, target.y + span * 1.1, target.z + span * 1.0);
+  }
+
+  function resetView() {
+    controls.target.copy(levelCenter(currentLevel));
     stopGlide();
-    camera.position.set(target.x, target.y + span * 1.1, target.z + span * 1.0);
+    camera.position.copy(framedCamera(currentLevel));
     controls.update();
   }
 
@@ -280,6 +294,7 @@ export function createThreeRenderer(
   function applySettings(changes) {
     const previousY = levelY(currentLevel);
     Object.assign(settings, changes);
+    if ('mode' in changes) mode = settings.mode;
     if ('wallHeight' in changes) buildLevels();
     if ('wallHeight' in changes || 'levelGap' in changes) {
       layoutLevels();
@@ -288,6 +303,7 @@ export function createThreeRenderer(
       controls.target.add(shift);
       camera.position.add(shift);
       if (targetGoal) targetGoal.add(shift);
+      if (cameraGoal) cameraGoal.add(shift);
     }
     applyDisplayMode();
   }
@@ -308,13 +324,16 @@ export function createThreeRenderer(
   const loop = () => {
     frame = requestAnimationFrame(loop);
     // Glide towards the focused level: move target and camera by the same delta.
+    // With auto-adjust, the camera also glides to the framed position of the level.
     if (targetGoal) {
       const remaining = targetGoal.clone().sub(controls.target);
       // Snap and stop once close enough, otherwise move 15 % of the remaining distance.
-      const delta = remaining.lengthSq() < 1e-4 ? remaining : remaining.multiplyScalar(0.15);
+      const done = remaining.lengthSq() < 1e-4 && (!cameraGoal || cameraGoal.distanceToSquared(camera.position) < 1e-4);
+      const delta = done ? remaining : remaining.multiplyScalar(0.15);
       controls.target.add(delta);
-      camera.position.add(delta);
-      if (delta === remaining) stopGlide();
+      if (cameraGoal) camera.position.lerp(cameraGoal, done ? 1 : 0.15);
+      else camera.position.add(delta);
+      if (done) stopGlide();
     }
     controls.update();
     renderer.render(scene, camera);
@@ -365,6 +384,8 @@ export function createThreeRenderer(
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
 
+  const unbindShiftWheel = bindShiftWheel(renderer.domElement, onStepLevel);
+
   buildLevels();
   layoutLevels();
   resize();
@@ -379,6 +400,7 @@ export function createThreeRenderer(
     showLevel(level) {
       currentLevel = level;
       targetGoal = levelCenter(level);
+      cameraGoal = settings.autoAdjust ? framedCamera(level) : null;
       highlight.visible = false;
       applyDisplayMode();
     },
@@ -412,7 +434,9 @@ export function createThreeRenderer(
     keys: {
       f: () => {
         mode = DISPLAY_MODES[(DISPLAY_MODES.indexOf(mode) + 1) % DISPLAY_MODES.length];
+        settings.mode = mode;
         applyDisplayMode();
+        onSettingsChange?.({ ...settings }); // remembered by main.js, across renderers and visits
         onInfo?.(`Mode : ${DISPLAY_MODE_LABELS[mode]}`);
       },
     },
@@ -423,6 +447,7 @@ export function createThreeRenderer(
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      unbindShiftWheel();
       logicLinks = [];
       drawLogicLinks();
       selectionBox.geometry.dispose();

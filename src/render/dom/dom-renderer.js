@@ -7,6 +7,7 @@
 // rebuilt for the tiles that have contents; layers are toggled by grid classes.
 
 import { assertRenderer } from '../renderer.js';
+import { bindShiftWheel } from '../shift-wheel.js';
 import { stateModifiers } from '../../core/tile-states.js';
 import { tileContents, subcellOffset, FACES } from '../../core/contents.js';
 import { actuatorFamily } from '../../core/logic.js';
@@ -24,11 +25,12 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * @param {(info: object|null) => void} [options.onHover] hovered tile, or null when leaving the grid
  * @param {(info: object) => void} [options.onSelect] a tile was clicked
  * @param {(to: {level,x,y}) => void} [options.onFollow] a cross-level link label was clicked
+ * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
  */
 export function createDomRenderer(
   container,
   dungeon,
-  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow } = {},
+  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel } = {},
 ) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
@@ -192,6 +194,8 @@ export function createDomRenderer(
   grid.addEventListener('pointerover', onPointer);
   grid.addEventListener('pointerleave', onLeave);
   grid.addEventListener('click', onClick);
+  // On the whole view (not only the grid), so it also works beside a small level.
+  const unbindShiftWheel = bindShiftWheel(container, onStepLevel);
 
   return assertRenderer({
     currentLevel: 0,
@@ -230,6 +234,7 @@ export function createDomRenderer(
       grid.removeEventListener('pointerover', onPointer);
       grid.removeEventListener('pointerleave', onLeave);
       grid.removeEventListener('click', onClick);
+      unbindShiftWheel();
       grid.remove();
     },
   });
@@ -254,7 +259,7 @@ export function tileClasses(tile) {
  * - floor items: one marker per occupied sub-tile, coloured by the category of
  *   the first item, with a count badge when several items are stacked;
  * - wall items: a marker against the face they lie on;
- * - creatures: one disc per member, in its sub-tile (or centred if alone).
+ * - creatures: one disc per member, in its sub-tile (or centred if alone, same size).
  * Chests with contents and creatures carrying items get a `has-contents` ring.
  */
 function contentMarkers(contents, onWall) {
@@ -286,7 +291,6 @@ function contentMarkers(contents, onWall) {
       disc.style.left = `${u * 100}%`;
       disc.style.top = `${v * 100}%`;
       disc.style.setProperty('--c', creatureColor(creature.type));
-      if (member.position === null) disc.classList.add('alone');
       if (creature.possessions.length) disc.classList.add('has-contents');
       markers.push(disc);
     }

@@ -25,7 +25,7 @@ const RENDERERS = {
   },
   ascii: { label: 'ASCII', create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = '↑/↓ niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes';
+const BASE_HINT = '↑/↓ ou Maj + molette : niveau · Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 
@@ -40,7 +40,9 @@ const dungeon = await loadDungeon('./data/dungeon.json');
 const prefs = loadPreferences({
   renderer: 'dom',
   level: 0,
-  frame: 'global',
+  frame: 'local',
+  autoFit: true, // 2D/ASCII: fit the zoom to the level after each level change (local frame)
+  alwaysTooltip: true, // tooltip even on empty tiles (tile info of the status bar)
   cell: null,
   showStates: true,
   showItems: true,
@@ -117,6 +119,8 @@ async function mountRenderer() {
         onHover: showHover,
         onInfo: showInfo,
         onRequestLevel: showLevel,
+        onStepLevel: go,
+        onSettingsChange: saveRendererSettings,
         onSelect: select,
         onFollow: follow,
       });
@@ -163,6 +167,8 @@ function showLevel(level) {
   refreshLinks();
   showHover(null);
   panel?.refresh();
+  // 2D/ASCII in the local frame: re-fit the zoom to the new level (the 3D renderer has its own setting).
+  if (!renderer.zoom && prefs.frame === 'local' && prefs.autoFit) setCell(null);
 }
 
 // --- Logic: selection and links ---------------------------------------------------
@@ -175,7 +181,12 @@ function refreshLinks() {
   renderer.showLinks(links, selection);
 }
 
-function select(info) {
+function select(info, { navigate = true } = {}) {
+  // Clicking stairs takes to the other end, as the labels of teleporters do.
+  if (navigate && info.type === 'stairs') {
+    const to = stairsTarget(info);
+    if (to) return follow(to);
+  }
   const same = selection && selection.level === info.level && selection.x === info.x && selection.y === info.y;
   selection = same ? null : { level: info.level, x: info.x, y: info.y };
   refreshLinks();
@@ -188,8 +199,16 @@ function select(info) {
 // Cross-level link label clicked: go to the other end and select it.
 function follow(to) {
   showLevel(to.level);
-  select({ ...to, type: dungeon.tileAt(to.level, to.x, to.y)?.type ?? '?' });
+  select({ ...to, type: dungeon.tileAt(to.level, to.x, to.y)?.type ?? '?' }, { navigate: false });
   renderer.highlightTile?.(to.x, to.y);
+}
+
+// Other end of a staircase: same global coordinates on the level above or below.
+function stairsTarget(info) {
+  const level = info.level + (info.detail.direction === 'up' ? -1 : 1);
+  const map = dungeon.level(level);
+  if (!map) return null;
+  return { level, x: info.gx - map.offset.x, y: info.gy - map.offset.y };
 }
 
 // Tooltip lines for the texts of a tile: inscription / message in full, champion sheet decoded.
@@ -228,20 +247,28 @@ function showHover(info) {
     tooltip.hide();
     return;
   }
+  const text = tileSummary(info);
+  status.textContent = text;
   if (renderer?.setLayers) {
     const contents = tileContents(dungeon, info.level, info.x, info.y);
-    tooltip.show(`Niveau ${info.level} (${info.x}, ${info.y}) · ${info.type}`, contents, {
+    // The tooltip title repeats the status bar, so it is useful even on an empty tile.
+    tooltip.show(text, contents, {
       ...layers(),
       onWall: info.type === 'wall',
       mechanisms: [...textLines(info), ...mechanismLines(info)],
+      always: prefs.alwaysTooltip,
     });
   }
+}
+
+// One-line description of a tile (status bar, tooltip title).
+function tileSummary(info) {
   let text = `niveau ${info.level} · (${info.x}, ${info.y}) local · [${info.gx}, ${info.gy}] global · ${info.type}`;
-  if (info.type === 'stairs') text += ` ${info.detail.direction === 'up' ? '↑ vers' : '↓ vers'} niveau ${info.level + (info.detail.direction === 'up' ? -1 : 1)}`;
+  if (info.type === 'stairs') text += ` ${info.detail.direction === 'up' ? '↑ vers' : '↓ vers'} niveau ${info.level + (info.detail.direction === 'up' ? -1 : 1)} (clic)`;
   if (info.type === 'door' || info.type === 'stairs') text += ` · axe ${info.detail.orientation}`;
   const state = prefs.showStates && info.detail ? describeState(info.type, info.detail) : null;
   if (state) text += ` · ${state}`;
-  status.textContent = text;
+  return text;
 }
 
 function showInfo(text) {
@@ -254,7 +281,9 @@ function fitCell() {
   const map = dungeon.level(renderer?.currentLevel ?? prefs.level);
   const cols = prefs.frame === 'global' ? b.maxX - b.minX : map.width;
   const rows = prefs.frame === 'global' ? b.maxY - b.minY : map.height;
-  const size = Math.floor(Math.min((view.clientWidth - 32) / cols, (view.clientHeight - 32) / rows));
+  // The right-hand panels overlay the view: keep the map beside them.
+  const width = view.clientWidth - 32 - side.offsetWidth - 12;
+  const size = Math.floor(Math.min(width / cols, (view.clientHeight - 32) / rows));
   return Math.min(MAX_CELL, Math.max(MIN_CELL, size));
 }
 
@@ -288,6 +317,12 @@ function setShowStates(enabled) {
   renderLegend(legend, prefs.renderer, { showStates: enabled });
   panel?.setValues({ showStates: enabled });
   showInfo(`États des tuiles : ${enabled ? 'affichés' : 'masqués'}`);
+}
+
+// Settings changed by the renderer itself (e.g. the 3D display mode, key F).
+function saveRendererSettings(settings) {
+  prefs.settings = { ...prefs.settings, [prefs.renderer]: settings };
+  savePreferences(prefs);
 }
 
 // Settings of the active renderer, saved per renderer id (prefs.settings.three…).
@@ -352,7 +387,11 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'showTexts', label: 'Textes', shortcut: 'X' });
     schema.push({ type: 'checkbox', key: 'allLinks', label: 'Tous les liens (sinon sélection)', shortcut: 'T' });
   }
-  if (!RENDERERS[prefs.renderer].frameless) schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
+  if (renderer.setLayers) schema.push({ type: 'checkbox', key: 'alwaysTooltip', label: 'Toujours afficher l’infobulle' });
+  if (!RENDERERS[prefs.renderer].frameless) {
+    schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
+    schema.push({ type: 'checkbox', key: 'autoFit', label: 'Auto-ajustement (repère local)' });
+  }
   return [...schema, ...(renderer.settingsSchema ?? [])];
 }
 
@@ -364,11 +403,20 @@ const panelValues = () => ({
   showTexts: prefs.showTexts,
   allLinks: prefs.allLinks,
   frameGlobal: prefs.frame === 'global',
+  alwaysTooltip: prefs.alwaysTooltip,
+  autoFit: prefs.autoFit,
   ...renderer.settings,
 });
 
 function onPanelChange(changes) {
-  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, ...settings } = changes;
+  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, ...settings } = changes;
+  // Simple viewer preferences (no immediate effect beyond the next hover / level change).
+  for (const [key, value] of Object.entries({ alwaysTooltip, autoFit })) {
+    if (value === undefined) continue;
+    prefs[key] = value;
+    savePreferences(prefs);
+    if (key === 'autoFit' && value && prefs.frame === 'local') setCell(null);
+  }
   if (showStates !== undefined) setShowStates(showStates);
   if (showItems !== undefined) setLayer('showItems', showItems);
   if (showCreatures !== undefined) setLayer('showCreatures', showCreatures);

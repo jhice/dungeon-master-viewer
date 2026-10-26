@@ -13,7 +13,7 @@ const CHAMPION_SHEET = /\n[MF]\n[A-P]{12}\n/;
 const ITEM_SIZE = 0.16;
 const ITEM_HEIGHT = 0.1;
 const CREATURE_RADIUS = 0.13;
-const CREATURE_HEIGHT = 0.36;
+const CREATURE_HEIGHT = 0.7;
 // Offset of a wall item from the wall centre, towards the face it lies on.
 const FACE_DIRECTION = [
   [0, -1], // N
@@ -102,10 +102,10 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
       for (const member of creature.members) {
         const alone = member.position === null;
         const [u, v] = alone ? [0.5, 0.5] : subcellOffset(member.position);
-        const scale = alone ? 1.5 : 1;
-        const position = [ox + u, (CREATURE_HEIGHT * scale) / 2, oz + v];
-        creatures.push({ position, scale, color: creatureColor(creature.type), info });
-        if (creature.possessions.length) rings.push({ position: [position[0], CREATURE_HEIGHT * scale + 0.06, position[2]], info });
+        // A lone creature stands in the centre, with the same size as a group member.
+        const position = [ox + u, CREATURE_HEIGHT / 2, oz + v];
+        creatures.push({ position, color: creatureColor(creature.type), info });
+        if (creature.possessions.length) rings.push({ position: [position[0], CREATURE_HEIGHT + 0.06, position[2]], info });
       }
     }
   }
@@ -115,13 +115,14 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight }) 
     meshes.push(instanced('items', 'items', new THREE.BoxGeometry(ITEM_SIZE, ITEM_HEIGHT, ITEM_SIZE), items, levelIndex));
   }
   if (creatures.length) {
-    meshes.push(instanced('creatures', 'creatures', new THREE.ConeGeometry(CREATURE_RADIUS, CREATURE_HEIGHT, 12), creatures, levelIndex));
+    // meshes.push(instanced('creatures', 'creatures', new THREE.ConeGeometry(CREATURE_RADIUS, CREATURE_HEIGHT, 12), creatures, levelIndex));
+    meshes.push(instanced('creatures', 'creatures', new THREE.CylinderGeometry(CREATURE_RADIUS, CREATURE_RADIUS, CREATURE_HEIGHT * wallHeight, 12), creatures, levelIndex));
   }
   if (rings.length) {
     // Rings follow the items layer (chests) or the creatures layer (possessions): keep them in their own
     // layer 'contents', visible when either layer is on.
     const withColor = rings.map((r) => ({ ...r, color: HAS_CONTENTS_COLOR }));
-    meshes.push(instanced('hasContents', 'contents', new THREE.SphereGeometry(0.045, 10, 8), withColor, levelIndex));
+    meshes.push(instanced('hasContents', 'contents', new THREE.SphereGeometry(0.1, 10, 8), withColor, levelIndex));
   }
   if (plates.length) {
     meshes.push(instanced('floorTriggers', 'mechanisms', new THREE.BoxGeometry(0.8, 0.02, 0.8), plates, levelIndex));

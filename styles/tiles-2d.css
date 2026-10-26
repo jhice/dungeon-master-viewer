@@ -78,12 +78,11 @@
   box-shadow: inset 0 0 0 1px var(--tile-wall-dark);
 }
 
-/* Pit: a dark hole, drawn in ::after (states change its look and opacity). */
+/* Pit: a dark square hole, drawn in ::after (states change its look and opacity). */
 .t-pit::after {
   content: '';
   position: absolute;
   inset: 21%;
-  border-radius: 50%;
   background: var(--tile-pit);
 }
 
@@ -145,8 +144,15 @@
   right: 35%;
 }
 
-.t-teleporter {
-  background-image: radial-gradient(circle, var(--tile-teleporter) 0 20%, rgb(76 195 255 / 0.35) 45%, transparent 70%);
+/* Teleporter: a block narrower than the tile (70 %, as in 3D), hatched vertically like the fake walls. */
+.t-teleporter::after {
+  content: '';
+  position: absolute;
+  inset: 15%;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 2px, rgb(0 0 0 / 0.3) 2px 3px),
+    var(--tile-teleporter);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35);
 }
 
 /* --- States (only inside .show-states, toggled with the S key) -------------- */
@@ -234,10 +240,6 @@
   border: 1px solid rgb(0 0 0 / 0.7);
 }
 
-.creature-mark.alone {
-  width: 56%;
-  height: 56%;
-}
 
 /* Chest with contents, creature carrying items. */
 .mark.has-contents {
@@ -328,13 +330,13 @@
 }
 
 .link-line {
-  stroke-width: 0.12;
+  stroke-width: 0.08;
   stroke-linecap: round;
   opacity: 0.9;
 }
 
 .link-line.is-teleporter {
-  stroke-width: 0.1;
+  stroke-width: 0.08;
   stroke-dasharray: 0.35 0.18;
 }
 
@@ -343,10 +345,10 @@
 }
 
 .link-label {
-  font: 700 0.6px system-ui, sans-serif;
+  font: 700 0.5px system-ui, sans-serif;
   paint-order: stroke;
   stroke: #000;
-  stroke-width: 0.12;
+  stroke-width: 0.08;
   pointer-events: auto;
   cursor: pointer;
 }

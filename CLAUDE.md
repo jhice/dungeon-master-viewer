@@ -78,6 +78,32 @@ Réponses à tes questions :
 
 textes (inscriptions murales, parchemins, fiches des champions encodées)
 
+### 011 - fine tuning 2D/3D
+
+Quelques réglages à faire sur les vues 2D et 3D.
+
+#### 2D et 3D
+
+- les créatures seules sur une tuile restent au centre, mais font la même taille qu'une créature en groupe (plus petite).
+- pouvoir naviguer d'un niveau à l'autre en cliquant sur les escaliers (comme pour les téléporteurs)
+- les trappes sont des carrés plutôt que des ronds (dimensions conservées)
+- tooltip : toujours afficher les infos de la statusbar dans le tooltip, même si la tile ne contient rien
+  - ajouter une option dans le panel "always show tooltip" pour gérer ce comportement
+
+#### 2D
+
+- css des téléporteurs : conserver la couleur, créer des hachures verticales (dans l'esprit des des fakewall), réduire la largeur par rapport à la taille de la tile (comme sur la version 3D)
+- liens : j'ai réduit leur épaisseur (css modifiée)
+- repère : commencer par défaut en local
+  - en mode local, toujours ajuster (touche 0) après changement de niveau
+    - ajouter l'option "auto-adjust" dans le panel 2D
+
+#### 3D
+
+- shift + mousewheel = change de niveau
+- toujours ajuster (touche 0) après changement de niveau
+  - ajouter l'option "auto-adjust" dans le panel 3d
+
 ### plus tard
 
 Vue « à la première personne » vers un mode jouable.
