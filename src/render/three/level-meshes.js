@@ -55,13 +55,16 @@ function partDefinitions(theme, h) {
       emissive: true,
       opacity: 0.45,
     },
-    // First-person view: the whole tile, wall high (a hair smaller, so that its faces do
-    // not fight with the neighbouring walls), translucent.
+    // First-person view: a full cube, the whole tile from floor to ceiling (a hair smaller,
+    // so that its faces do not fight with the walls, floor and ceiling), translucent, and
+    // seen from inside too (both sides): a party standing on a teleporter that does not
+    // carry it (items only, creatures only) is in a coloured volume.
     teleporterGame: {
-      geometry: new THREE.BoxGeometry(0.998, h.wall * 0.998, 0.998),
+      geometry: new THREE.BoxGeometry(0.996, h.wall - 0.004, 0.996),
       color: theme.teleporter,
       emissive: true,
       opacity: TELEPORTER_GAME_OPACITY,
+      doubleSide: true,
     },
   };
 }
@@ -141,6 +144,7 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
       ...(def.emissive && { emissive: def.color, emissiveIntensity: 0.6 }),
       // The first-person view does not restyle its meshes: its translucent parts are set here.
       ...(game && def.opacity !== undefined && { transparent: true, opacity: def.opacity, depthWrite: false }),
+      ...(game && def.doubleSide && { side: THREE.DoubleSide }),
     });
     // Each part may appear in several variants: they need their own geometry to be disposed independently.
     const mesh = new THREE.InstancedMesh(def.geometry.clone(), material, list.length);

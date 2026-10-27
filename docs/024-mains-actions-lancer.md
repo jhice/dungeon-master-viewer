@@ -212,6 +212,11 @@ Le rendu 3D des niveaux superposés garde son bloc de 70 %. Un téléporteur inv
 
 **Chrome :** en N1, le téléporteur (26, 29) vu depuis (24, 29) remplit sa case, et on voit le fond du couloir à travers lui.
 
+**Ensuite, un cube complet visible de l'intérieur :**
+- le volume est un **cube fermé**, du sol au plafond, réduit de 4 millièmes pour ne toucher ni les murs, ni le sol, ni le plafond ;
+- il est **dessiné des deux côtés** (`side: DoubleSide`). Un groupe qui se tient sur un téléporteur qui ne l'emporte pas (portée `items` ou `creatures`) voit donc tout teinté de sa couleur, avec les bords du cube autour de lui.
+- **Exemple :** N1 (13, 16), un téléporteur de portée `items` vers (14, 14). Le groupe y reste, la vue est teintée de cyan, et on voit le couloir à travers.
+
 ## Sources
 
 - *Dungeon Master Encyclopaedia*, **Dungeon Master Items** : http://dmweb.free.fr/games/dungeon-master/solutions/items/.
