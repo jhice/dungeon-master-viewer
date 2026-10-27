@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents } from '../three/level-contents.js';
+import { createDecor } from './fp-decor.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
@@ -62,6 +63,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   scene.add(camera);
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
+  const decor = createDecor(dungeon, state, WALL_HEIGHT);
 
   let level = null; // level index currently built
   let built = null; // { group, meshes, ceiling }
@@ -85,10 +87,11 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       tileAt: state.tileAt,
       game: true,
     });
-    // Items, creatures (still) and mechanisms, as markers of the 3D renderer.
-    // Texts are drawn for real (inscriptions below), not as markers.
+    // Items and creatures (still), as markers of the 3D renderer. Mechanisms and texts
+    // are not markers here: the party sees the ornaments, inscriptions and doors drawn
+    // by fp-decor.js (a plate or a button without graphic stays invisible, as in DM).
     for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents })) {
-      if (mesh.userData.layer === 'texts') {
+      if (mesh.userData.layer === 'texts' || mesh.userData.layer === 'mechanisms') {
         mesh.geometry.dispose();
         mesh.material.dispose();
         continue;
@@ -96,12 +99,13 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       group.add(mesh);
       meshes.push(mesh);
     }
-    // Wall details drawn for real: inscriptions and alcoves.
-    const inscriptions = [...buildInscriptions(dungeon, state, levelIndex), ...buildAlcoves(dungeon, state, levelIndex)];
-    for (const mesh of inscriptions) group.add(mesh);
+    const { meshes: decorMeshes, doors } = decor.build(levelIndex);
+    for (const mesh of [...decorMeshes, ...doors]) group.add(mesh);
+    meshes.push(...doors); // pickable, disposed with the level meshes
     for (const mesh of meshes) {
-      // `game` builds no types-only look, but stairs/doors share variants: hide what is not 'states'.
-      mesh.visible = mesh.userData.variant !== 'types';
+      // `game` builds no types-only look, but stairs share variants: hide what is not 'states'.
+      // The generic door leaves are replaced by the textured ones of fp-decor.js.
+      mesh.visible = mesh.userData.variant !== 'types' && mesh.userData.part !== 'door';
       const texture = textures[mesh.userData.part];
       if (texture) {
         mesh.material.map = texture;
@@ -116,7 +120,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     ceiling.position.set(map.width / 2, WALL_HEIGHT, map.height / 2);
     group.add(ceiling);
     scene.add(group);
-    built = { group, meshes, ceiling, inscriptions };
+    built = { group, meshes, ceiling, decorMeshes };
   }
 
   function clear() {
@@ -125,9 +129,9 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     disposeLevelMeshes(built.meshes);
     built.ceiling.geometry.dispose();
     built.ceiling.material.dispose();
-    for (const mesh of built.inscriptions) {
+    // Decor textures stay in the decor's cache.
+    for (const mesh of built.decorMeshes) {
       mesh.geometry.dispose();
-      mesh.material.map?.dispose();
       mesh.material.dispose();
     }
     built = null;
@@ -229,96 +233,12 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       renderer.domElement.removeEventListener('click', onClick);
       renderer.domElement.removeEventListener('pointermove', onMove);
       clear();
+      decor.dispose();
       for (const texture of Object.values(textures)) texture.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
   };
-}
-
-// --- Inscriptions -------------------------------------------------------------------
-// Visible texts on a wall face, engraved in the stone: a transparent plane just in
-// front of the face, with the lines of the text centred. Messages hidden until a
-// mechanism shows them are drawn once visible (the level is rebuilt).
-
-// Plane position and rotation per face (N, E, S, W): offset from the tile centre, rotation around y.
-const FACE_PLANES = [
-  { dx: 0, dz: -0.5, rotation: Math.PI },
-  { dx: 0.5, dz: 0, rotation: Math.PI / 2 },
-  { dx: 0, dz: 0.5, rotation: 0 },
-  { dx: -0.5, dz: 0, rotation: -Math.PI / 2 },
-];
-const INSCRIPTION_GAP = 0.004; // in front of the face, against z-fighting
-
-function buildInscriptions(dungeon, state, levelIndex) {
-  const meshes = [];
-  for (const { x, y, detail } of dungeon.detailedTiles(levelIndex)) {
-    if (detail.type !== 'wall') continue;
-    for (const ref of detail.items ?? []) {
-      if (ref.kind !== 'text' || !state.textVisible(ref.index)) continue;
-      const lines = dungeon.data.texts[ref.index].text.split('\n');
-      const { dx, dz, rotation } = FACE_PLANES[ref.position];
-      const material = new THREE.MeshLambertMaterial({ map: inscriptionTexture(lines), transparent: true, depthWrite: false });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.43), material);
-      const out = 1 + INSCRIPTION_GAP / 0.5;
-      mesh.position.set(x + 0.5 + dx * out, WALL_HEIGHT * 0.55, y + 0.5 + dz * out);
-      mesh.rotation.y = rotation;
-      meshes.push(mesh);
-    }
-  }
-  return meshes;
-}
-
-// Alcove: a dark niche on the face, with a stone sill where its items lie
-// (items on a wall stand at 35 % of its height, see level-contents.js).
-const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 }; // fractions of the wall height for bottom / top
-
-function buildAlcoves(dungeon, state, levelIndex) {
-  const meshes = [];
-  for (const { x, y, detail } of dungeon.detailedTiles(levelIndex)) {
-    if (detail.type !== 'wall') continue;
-    for (let face = 0; face < 4; face++) {
-      if (!isAlcove(dungeon, levelIndex, x, y, face, state.actuatorsAt)) continue;
-      const { dx, dz, rotation } = FACE_PLANES[face];
-      const out = 1 + INSCRIPTION_GAP / 0.5;
-      const height = (NICHE.top - NICHE.bottom) * WALL_HEIGHT;
-      const niche = new THREE.Mesh(new THREE.PlaneGeometry(NICHE.width, height), new THREE.MeshLambertMaterial({ color: 0x0c0a08 }));
-      niche.position.set(x + 0.5 + dx * out, NICHE.bottom * WALL_HEIGHT + height / 2, y + 0.5 + dz * out);
-      niche.rotation.y = rotation;
-      const sill = new THREE.Mesh(new THREE.BoxGeometry(NICHE.width + 0.06, 0.025, 0.05), new THREE.MeshLambertMaterial({ color: 0x8a8070 }));
-      sill.position.set(x + 0.5 + dx * (1 + 0.05), NICHE.bottom * WALL_HEIGHT, y + 0.5 + dz * (1 + 0.05));
-      sill.rotation.y = rotation;
-      meshes.push(niche, sill);
-    }
-  }
-  return meshes;
-}
-
-// Pale letters with a dark lower edge (engraved look), as large as the longest line allows.
-function inscriptionTexture(lines) {
-  const width = 512;
-  const height = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const g = canvas.getContext('2d');
-  const longest = Math.max(...lines.map((l) => l.length), 1);
-  const size = Math.min(56, Math.floor((width * 0.92) / (longest * 0.62)), Math.floor((height * 0.9) / (lines.length * 1.15)));
-  g.font = `bold ${size}px ui-monospace, "DejaVu Sans Mono", monospace`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  const top = height / 2 - ((lines.length - 1) * size * 1.15) / 2;
-  lines.forEach((line, i) => {
-    const y = top + i * size * 1.15;
-    g.fillStyle = 'rgb(20 16 10 / 0.75)';
-    g.fillText(line, width / 2 + 2, y + 3);
-    g.fillStyle = '#e8e0c8';
-    g.fillText(line, width / 2, y);
-  });
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
 }
 
 // --- Procedural textures (light patterns, tinted by the theme colour of each part) ---

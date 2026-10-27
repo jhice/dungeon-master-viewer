@@ -32,3 +32,34 @@ export function shownOrnament(dungeon, level, x, y, face, actuatorsAt) {
 export function isAlcove(dungeon, level, x, y, face, actuatorsAt) {
   return ALCOVES.test(shownOrnament(dungeon, level, x, y, face, actuatorsAt) ?? '');
 }
+
+/**
+ * Name of the ornament shown on a floor tile, or null: the graphic of its last floor
+ * actuator that has one (pressure pads…), else the tile decoration (moss, puddle…).
+ * A floor actuator without graphic stays invisible, as in DM. Index into map.floorDecorations.
+ */
+export function shownFloorOrnament(dungeon, level, x, y, actuatorsAt) {
+  const tile = dungeon.tileAt(level, x, y);
+  if (!tile?.detail || tile.type === 'wall') return null;
+  const names = dungeon.level(level).floorDecorations;
+  const refs = actuatorsAt ? actuatorsAt(level, x, y) : (tile.detail.items ?? []).filter((ref) => ref.kind === 'actuator');
+  const graphics = refs
+    .map((ref) => dungeon.data.actuators[ref.index])
+    .filter((a) => a.kind === 'floor' && a.graphic > 0)
+    .map((a) => a.graphic);
+  const graphic = graphics.at(-1) ?? (tile.detail.decorations ?? []).at(-1)?.graphic;
+  return graphic ? (names[graphic - 1]?.name ?? null) : null;
+}
+
+/** Look of a door tile: { type: 'Porticullis'|'Wooden'|'Ra'|'Iron', ornament: name|null, button }, or null. */
+export function doorLook(dungeon, level, x, y) {
+  const ref = dungeon.tileAt(level, x, y)?.detail?.items?.find((item) => item.kind === 'door');
+  if (!ref) return null;
+  const door = dungeon.data.doors[ref.index];
+  const map = dungeon.level(level);
+  return {
+    type: map.doorTypes[door.type] ?? null,
+    ornament: door.ornate ? (map.doorDecorations[door.ornate - 1]?.name ?? null) : null,
+    button: door.button,
+  };
+}
