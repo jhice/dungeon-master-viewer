@@ -6,7 +6,7 @@
 //   to a random neighbouring tile it may enter (rules.js), then falls and teleporters.
 // - When it is due, it first looks for the party (perception.js): seen, it walks towards
 //   it every `moveTicks` and stays next to it, facing it; smelled or heard, it turns to
-//   it; lost from sight, it goes where it saw it last, then wanders again.
+//   it; with no way to it, or lost from sight once where it saw it last, it wanders.
 // - One group per tile; a group never enters the party's tile.
 // - Generators, triggered by another actuator (a plate of the party, often a few tiles
 //   away), create their group on their own tile; if it is taken, the group appears as
@@ -90,8 +90,13 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
         if (!group.target) emit('groupAlerted', { group, seen: sense.seen });
         group.target = { x: p.x, y: p.y };
       }
-      if (sense.seen && !sense.adjacent && approach(group, info, group.target, false)) return true;
-      // Next to it, smelled, heard, or no way to it: it turns to it.
+      if (sense.seen && !sense.adjacent) {
+        if (approach(group, info, group.target, false)) return true;
+        // No way to it (other groups in the way…): it wanders, and will look again.
+        wander(group, info);
+        return false;
+      }
+      // Next to it, smelled or heard: it turns to it.
       turn(group, facingTowards(group.x, group.y, p.x, p.y));
       return true;
     }

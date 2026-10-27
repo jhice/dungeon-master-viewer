@@ -176,6 +176,18 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
   }
 }
 
+// 5b. Level 2, party in (1, 18): Trolins in the corridor block the others, which see the
+// party with no way to it; they wander instead of waiting in place (feedback on C2).
+{
+  sim.reset();
+  sim.teleport(2, 1, 18);
+  const stuck = [...sim.state.groups].filter((g) => g.level === 2 && g.x <= 1 && g.y >= 13 && g.y <= 15);
+  const start = new Map(stuck.map((g) => [g.id, `${g.x},${g.y}`]));
+  sim.tick(6 * 30);
+  const moved = stuck.filter((g) => `${g.x},${g.y}` !== start.get(g.id)).length;
+  check(moved > 0, `N2 (1, 18) : ${moved} des ${stuck.length} groupes bloqués derrière les autres ont bougé en 30 s`);
+}
+
 // 6. Sight through the first two closed doors met: a wooden or iron door hides the party, a grate or a Ra door does not.
 {
   sim.reset();

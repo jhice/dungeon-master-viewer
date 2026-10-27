@@ -65,7 +65,9 @@ Un groupe actif (du niveau du groupe de joueurs, doc 021) regarde **à chaque fo
   - sur une case voisine du groupe de joueurs, elle ne bouge plus, et **se tourne vers lui** chaque fois qu'elle doit agir ;
   - si le groupe se décale, elle le suit.
 - **Groupe perdu de vue** (porte refermée, groupe parti) : elle va jusqu'à la dernière case où elle l'a vu, puis reprend l'errance.
-- **Pas de chemin :** elle se tourne vers le groupe et attend.
+- **Pas de chemin** (par exemple, d'autres groupes bouchent le couloir) : elle **erre**, avec la pause aléatoire, puis regarde de nouveau au pas suivant.
+  - Avant les retours sur C2, elle se tournait vers le groupe et attendait.
+  - Au niveau 2, avec le groupe en (1, 18), les Trolins bloqués derrière les autres restaient alors figés.
 
 ### Ce qui n'est pas repris
 
@@ -96,6 +98,7 @@ Un groupe actif (du niveau du groupe de joueurs, doc 021) regarde **à chaque fo
 | Niveau 2, Trolin en (10, 20) face au nord, groupe en (10, 18) | Il le voit, `groupAlerted`, contact en 2 ticks en (10, 19) |
 | 20 s plus tard | Toujours au contact, face au nord (vers le groupe) |
 | Le groupe se décale en (9, 18) | Le Trolin suit en (10, 18), face à l'ouest |
+| N2, groupe en (1, 18), Trolins bloqués derrière d'autres Trolins | Les 4 groupes bloqués errent : tous ont bougé en 30 s |
 | Ligne de vue à travers une porte fermée | Grille N0 (5, 9) : on voit à travers. Porte en bois N0 (1, 14) : elle cache le groupe |
 | Tests de C1 | Inchangés, tous bons |
 | Marche aléatoire, 100 000 actions | Aucune exception, invariants tenus, 9,7 s (dont la lenteur des actuators, doc 021) |
@@ -111,7 +114,7 @@ Un groupe actif (du niveau du groupe de joueurs, doc 021) regarde **à chaque fo
 - Une créature lente ne regarde qu'à l'échéance de son pas : un Screamer (120 ticks) met jusqu'à 20 s à réagir.
   C'est logique dans ce modèle. Dans DM, les créatures du niveau du groupe sont aussi traitées par événements, mais leurs délais exacts restent à vérifier.
 - Tous les membres d'un groupe partagent son orientation (doc 021).
-- **À vérifier dans le jeu :** la formule de distance, le cône de vue, la réaction quand il n'y a pas de chemin.
+- **À vérifier dans le jeu :** la formule de distance, le cône de vue, la réaction quand il n'y a pas de chemin (ici l'errance, un choix pour rendre le donjon plus vivant).
 - **Suite : C3, le combat.** La question « groupe abstrait ou vrais champions » (doc 020, § 4, Q4) est à trancher en début de session.
 
 ## Sources
