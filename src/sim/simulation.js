@@ -10,7 +10,14 @@ import { createLogic } from './logic.js';
 import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
+import { createChampion, championMirror, regenerate } from './champion.js';
+import { ACTIONS, championStrikes, creatureStrikes } from './combat.js';
+import { creatureInfo } from '../core/creature-info.js';
+import { mulberry32 } from './random.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
+
+// Seed of the combat random draws (a game replays the same way).
+const COMBAT_SEED = 0xc3a;
 
 export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
 
@@ -22,6 +29,8 @@ export function createSimulation(dungeon) {
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
+  let champion;
+  let random;
   const logic = createLogic(dungeon, state, clock, {
     emit: events.emit,
     party: () => party,
@@ -29,9 +38,69 @@ export function createSimulation(dungeon) {
     onOpenedUnderGroup: (level, x, y) => creatures.settle(level, x, y),
     generate: (index) => creatures.generate(index),
   });
-  const creatures = createCreatures(dungeon, state, clock, logic, { emit: events.emit, party: () => party });
+  const creatures = createCreatures(dungeon, state, clock, logic, {
+    emit: events.emit,
+    party: () => party,
+    partyAlive: () => !champion.dead,
+    attack: creatureAttacks,
+  });
+
+  // The champion, Zed (docs/023), with the items of his mirror in the inventory.
+  function startChampion() {
+    champion = createChampion(dungeon);
+    random = mulberry32(COMBAT_SEED);
+    const mirror = championMirror(dungeon);
+    if (!mirror) return;
+    const lying = state.itemsAt(mirror.level, mirror.x, mirror.y);
+    state.inventory.push(...lying.splice(0).map(({ kind, index }) => ({ kind, index })));
+  }
+  startChampion();
+  const championChanged = () => events.emit('championChanged', { champion });
+
+  // A creature group next to the party, facing it, attacks the champion.
+  function creatureAttacks(group, info) {
+    if (champion.dead) return;
+    const outcome = creatureStrikes(champion, info, random);
+    if (outcome.result === 'hit') champion.health = Math.max(0, champion.health - outcome.damage);
+    champion.dead = champion.health === 0;
+    events.emit('championHit', { group, ...outcome });
+    championChanged();
+    if (champion.dead) events.emit('championDied', { champion, group });
+  }
+
+  /**
+   * The champion strikes the group in front of him with the action "Frapper".
+   * @returns {{ result: 'dead'|'nothing'|'busy'|'exhausted'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
+   */
+  function attack() {
+    if (champion.dead) return { result: 'dead' };
+    const [dx, dy] = SIDE_DELTAS[party.facing];
+    const group = state.groupAt(party.level, party.x + dx, party.y + dy);
+    if (!group) return { result: 'nothing' };
+    if (clock.now < champion.readyAt) return { result: 'busy', group };
+    const action = ACTIONS.hit;
+    if (champion.stamina < action.stamina) return { result: 'exhausted', group };
+    champion.stamina -= action.stamina;
+    champion.readyAt = clock.now + action.fatigue;
+    const info = creatureInfo(group.type);
+    const member = group.members[Math.floor(random() * group.members.length)];
+    const outcome = championStrikes(champion, info, action, random);
+    let killed = false;
+    let destroyed = false;
+    if (outcome.result === 'hit') {
+      member.hp = Math.max(0, member.hp - outcome.damage);
+      killed = member.hp === 0;
+      if (killed) destroyed = creatures.kill(group, member);
+    }
+    if (!destroyed) creatures.provoke(group);
+    const result = { ...outcome, group, killed, destroyed };
+    events.emit('creatureHit', result);
+    championChanged();
+    return result;
+  }
 
   function command(name) {
+    if (champion.dead) return;
     const from = party;
     if (name === 'turnLeft' || name === 'turnRight') {
       party = turn(party, name === 'turnLeft' ? -1 : 1);
@@ -86,8 +155,17 @@ export function createSimulation(dungeon) {
     },
     command,
     teleport,
+    /** The champion (createChampion(), champion.js): read only for the views. */
+    get champion() {
+      return champion;
+    },
+    attack,
+    /** Ticks before the champion can act again (fatigue of his last action). */
+    get fatigue() {
+      return Math.max(0, champion.readyAt - clock.now);
+    },
     /** Click on what is in front of the party (wall face, door, alcove), with the item in hand. */
-    clickFront: () => logic.clickFront(party),
+    clickFront: () => (champion.dead ? { target: null, fired: 0 } : logic.clickFront(party)),
     /** Items carried: [{ kind, index }]. */
     get inventory() {
       return state.inventory;
@@ -128,12 +206,14 @@ export function createSimulation(dungeon) {
       for (let i = 0; i < ticks; i++) {
         clock.advance(1);
         creatures.update();
+        if (regenerate(champion, clock.now)) championChanged();
       }
     },
     reset() {
       clock.clear();
       state.reset();
       creatures.reset();
+      startChampion();
       party = createParty(dungeon.start);
       events.emit('reset', { party });
     },

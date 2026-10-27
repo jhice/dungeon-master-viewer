@@ -195,7 +195,8 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     if (!info) return null;
     const [dx, dy] = SIDE_DELTAS[party.facing];
     const front = info.x === party.x + dx && info.y === party.y + dy;
-    if (info.type === 'wall' || info.type === 'door') return front ? { kind: 'front' } : null;
+    // A creature in front: the champion strikes it (main.js).
+    if (info.type === 'wall' || info.type === 'door' || hit.object.userData.creatures) return front ? { kind: 'front' } : null;
     // Sub-tile under the pointer (items: their own), 0..3 = NW, NE, SE, SW.
     const u = hit.point.x - info.x;
     const v = hit.point.z - info.y;

@@ -41,7 +41,7 @@ export function createState(dungeon) {
     groupTiles = new Map();
     dungeon.data.creatures.forEach((group, id) => {
       const { map: level, x, y } = group.at;
-      addGroup({ id, type: group.type, level, x, y, facing: group.facing, members: structuredClone(group.members), items: group.items ?? [] });
+      addGroup({ id, type: group.type, level, x, y, facing: group.facing, members: structuredClone(group.members), items: [...(group.items ?? [])] });
     });
     nextGroupId = dungeon.data.creatures.length;
     for (let level = 0; level < dungeon.levelCount; level++) {
@@ -122,6 +122,11 @@ export function createState(dungeon) {
       groupTiles.delete(`${group.level}:${group.x},${group.y}`);
       Object.assign(group, { level, x, y, facing });
       groupTiles.set(`${level}:${x},${y}`, group);
+    },
+    /** Removes a group (killed). */
+    removeGroup(group) {
+      groups.delete(group.id);
+      if (groupTiles.get(`${group.level}:${group.x},${group.y}`) === group) groupTiles.delete(`${group.level}:${group.x},${group.y}`);
     },
     /** Adds a new group (generator): { type, level, x, y, facing, members }; returns it with its id. */
     createGroup(group) {

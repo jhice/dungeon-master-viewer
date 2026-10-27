@@ -1,5 +1,5 @@
-// Creature groups (phases C1 and C2, docs/021 and 022): presence, movement, perception
-// and pursuit of the party, no combat yet.
+// Creature groups (phases C1 to C3, docs/021 to 023): presence, movement, perception,
+// pursuit of the party and melee attacks.
 // - Only the groups on the party's level are active, as in DM (the engine keeps
 //   "extended" data for them only); the others wait, frozen, for the party.
 // - An active group wanders: every `moveTicks` (species) and a random extra, one step
@@ -7,6 +7,9 @@
 // - When it is due, it first looks for the party (perception.js): seen, it walks towards
 //   it every `moveTicks` and stays next to it, facing it; smelled or heard, it turns to
 //   it; with no way to it, or lost from sight once where it saw it last, it wanders.
+// - Next to the party and facing it, it attacks every `attackTicks` (hook `attack`).
+//   An immobile species (Black Flame) does not turn, and attacks whatever its facing.
+// - Killed (`kill()`): its possessions fall on its tile, its plate is released.
 // - One group per tile; a group never enters the party's tile.
 // - Generators, triggered by another actuator (a plate of the party, often a few tiles
 //   away), create their group on their own tile; if it is taken, the group appears as
@@ -17,6 +20,7 @@ import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { creaturePassage, resolveCreatureArrival } from './rules.js';
 import { perceiveParty, facingTowards, stepTowards } from './perception.js';
+import { mulberry32 } from './random.js';
 
 const SEED = 0x0d4e0;
 // Members per tile by size (creature-info.js), and their sub-tiles (0..3 = NW, NE, SE, SW).
@@ -31,8 +35,10 @@ const POSITIONS = [[0, 1, 2, 3], [0, 2], [null]];
  * @param {object} hooks
  * @param {(type: string, payload: object) => void} hooks.emit 'creaturesMoved', 'groupAlerted'
  * @param {() => object} hooks.party current party
+ * @param {() => boolean} hooks.partyAlive false once the champion is dead: creatures ignore the party
+ * @param {(group, info) => void} hooks.attack a group attacks the party (simulation.js)
  */
-export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
+export function createCreatures(dungeon, state, clock, logic, { emit, party, partyAlive, attack }) {
   let random;
   let activeLevel; // level whose groups are active (the party's), null before the first update
   let pending; // generated groups waiting for their tile to be free: [{ group, level, x, y }]
@@ -53,6 +59,8 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
 
   // Next move: the minimum of the species plus a random extra (wandering), see docs/021.
   const nextMove = (info) => clock.now + info.moveTicks + randomInt(info.moveTicks + 1);
+  // An immobile species only checks every so often whether the party is next to it.
+  const IMMOBILE_CHECK = 6;
 
   // Groups of the party's level become active when the party arrives there.
   function activate(level) {
@@ -60,7 +68,7 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
     for (const group of state.groups) {
       if (group.level !== level) continue;
       const info = creatureInfo(group.type);
-      group.nextMove = info.immobile ? null : clock.now + 1 + randomInt(info.moveTicks);
+      group.nextMove = clock.now + 1 + randomInt(info.immobile ? IMMOBILE_CHECK : info.moveTicks);
       group.target = null;
     }
   }
@@ -73,17 +81,26 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
     for (const group of [...state.groups]) {
       if (group.level !== activeLevel || group.nextMove === null || group.nextMove > clock.now) continue;
       const info = creatureInfo(group.type);
-      const busy = behave(group, info);
+      const delay = behave(group, info);
+      if (state.groupAt(group.level, group.x, group.y) !== group) continue; // killed meanwhile
       // Carried to another level: frozen there until the party comes. Busy with the party: no idle time.
-      group.nextMove = group.level !== activeLevel ? null : busy ? clock.now + info.moveTicks : nextMove(info);
+      group.nextMove = group.level !== activeLevel ? null : delay !== null ? clock.now + delay : nextMove(info);
     }
   }
 
   // What a due group does: deal with the party if it notices it or remembers where it
-  // saw it, else wander. Returns true when busy with the party.
+  // saw it, else wander. Returns the delay before it acts again, or null when it wanders
+  // (the delay of wandering applies).
   function behave(group, info) {
     const p = party();
-    const sense = perceiveParty(dungeon, state, info, group, p);
+    const sense = partyAlive() ? perceiveParty(dungeon, state, info, group, p) : null;
+    if (info.immobile) {
+      if (sense?.adjacent && info.attackType !== 'none') {
+        attack(group, info);
+        return info.attackTicks;
+      }
+      return IMMOBILE_CHECK;
+    }
     if (sense) {
       // Seen, or met (next to it): it remembers where the party stands.
       if (sense.seen || sense.adjacent) {
@@ -91,22 +108,57 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
         group.target = { x: p.x, y: p.y };
       }
       if (sense.seen && !sense.adjacent) {
-        if (approach(group, info, group.target, false)) return true;
+        if (approach(group, info, group.target, false)) return info.moveTicks;
         // No way to it (other groups in the way…): it wanders, and will look again.
         wander(group, info);
-        return false;
+        return null;
       }
-      // Next to it, smelled or heard: it turns to it.
-      turn(group, facingTowards(group.x, group.y, p.x, p.y));
-      return true;
+      // Next to it, smelled or heard: it turns to it; next to it and facing it, it attacks.
+      const facing = facingTowards(group.x, group.y, p.x, p.y);
+      if (sense.adjacent && group.facing === facing && info.attackType !== 'none') {
+        attack(group, info);
+        return info.attackTicks;
+      }
+      turn(group, facing);
+      return sense.adjacent ? Math.min(info.moveTicks, info.attackTicks) : info.moveTicks;
     }
     if (group.target) {
       // Lost from sight: to the place where it saw the party last.
-      if (approach(group, info, group.target, true)) return true;
+      if (approach(group, info, group.target, true)) return info.moveTicks;
       group.target = null;
     }
     wander(group, info);
-    return false;
+    return null;
+  }
+
+  /** The party struck the group: it notices the party and acts at once (turns, attacks). */
+  function provoke(group) {
+    if (group.level !== activeLevel) return;
+    const p = party();
+    if (!group.target) emit('groupAlerted', { group, seen: true });
+    group.target = { x: p.x, y: p.y };
+    if (group.nextMove === null || group.nextMove > clock.now + 1) group.nextMove = clock.now + 1;
+  }
+
+  /**
+   * A member of the group dies (health at 0). The last one: the group vanishes, its
+   * possessions fall on its tile and its plate is released. Returns true if the group is gone.
+   */
+  function kill(group, member) {
+    group.members = group.members.filter((m) => m !== member);
+    const at = { level: group.level, x: group.x, y: group.y, facing: group.facing };
+    if (group.members.length) {
+      emit('creaturesMoved', { group, from: at, to: at, killed: true });
+      return false;
+    }
+    logic.groupVanished(group, () => state.removeGroup(group));
+    if (group.items.length) {
+      const items = group.items.map((ref) => ({ kind: ref.kind, index: ref.index, position: member.position ?? randomInt(4) }));
+      group.items = [];
+      logic.itemsDropped(at.level, at.x, at.y, items);
+    }
+    emit('creaturesMoved', { group, from: at, to: null, killed: true });
+    return true;
   }
 
   // One step on a shortest way towards `goal` (next to it, or onto it); false if none.
@@ -191,22 +243,10 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
     let created;
     logic.groupAppeared(level, x, y, () => (created = state.createGroup(group)));
     const info = creatureInfo(created.type);
-    created.nextMove = info.immobile || level !== activeLevel ? null : nextMove(info);
+    created.nextMove = level !== activeLevel ? null : info.immobile ? clock.now + IMMOBILE_CHECK : nextMove(info);
     emit('creaturesMoved', { group: created, from: null, to: { level, x, y, facing: created.facing }, generated: true });
     return true;
   }
 
-  return { update, settle, generate, reset };
-}
-
-// Small seeded generator (mulberry32): uniform in [0, 1).
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  return { update, settle, generate, provoke, kill, reset };
 }

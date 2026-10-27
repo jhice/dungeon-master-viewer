@@ -47,7 +47,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - la simulation (phases A à E faites, voir docs 013 à 017) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/` ;
 - les décors (murs, sols, portes) de la vue à la première personne, dessinés dans `ornament-art.js` (doc 018) ;
 - main et inventaire, coffres, portes cassables (doc 019) ;
-- plan des créatures en 4 phases (C1 à C4, doc 020) : C1 faite (déplacement, plaques, générateurs, doc 021), C2 faite (perception et poursuite, `src/sim/perception.js`, doc 022), C3 (combat) à démarrer dans une nouvelle session ; tests Node : `node tools/test-creatures.mjs`
+- plan des créatures en 4 phases (C1 à C4, doc 020) : C1 faite (déplacement, plaques, générateurs, doc 021), C2 faite (perception et poursuite, `src/sim/perception.js`, doc 022), C3 découpée en C3a / C3b / C3c : C3a faite (champion Zed, « Frapper », attaques des créatures, `src/sim/champion.js`, `src/sim/combat.js`, cadre `src/ui/champion-panel.js`, doc 023), C3b (projectiles) à démarrer dans une nouvelle session ; tests Node : `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`
 
 ## Simulation
 

@@ -7,6 +7,11 @@
 //   'creaturesMoved' { group, from, to, carried?, generated?, turned? } a group stepped, fell, was carried,
 //                appeared (from = null) or turned on the spot; from / to = { level, x, y, facing } (creatures.js)
 //   'groupAlerted' { group, seen } a group noticed the party (seen, or met next to it) and goes after it
+//                (creaturesMoved also carries `killed: true` when a member dies; to = null: the group is gone)
+//   'championChanged' { champion } health, stamina, mana or state of the champion changed (champion.js)
+//   'creatureHit' { result, damage, group, killed, destroyed } the champion struck a group (combat.js)
+//   'championHit' { group, result: 'hit'|'miss', damage } a group attacked the champion
+//   'championDied' { champion, group }
 //   'reset'      { party }
 
 export function createEmitter() {

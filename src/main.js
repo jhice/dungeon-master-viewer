@@ -1,4 +1,4 @@
-import { loadDungeon } from './core/dungeon.js';
+import { loadDungeon, SIDE_DELTAS } from './core/dungeon.js';
 import { describeState } from './core/tile-states.js';
 import { tileContents, buildInventory } from './core/contents.js';
 import { buildLogic, describeActuator, describeTeleporter, actuatorFamily } from './core/logic.js';
@@ -15,6 +15,7 @@ import { createTooltip } from './ui/tooltip.js';
 import { createTextsPanel } from './ui/texts-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 import { createGameWindow } from './ui/game-window.js';
+import { createChampionPanel } from './ui/champion-panel.js';
 import { createSimulation } from './sim/simulation.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
@@ -507,7 +508,7 @@ const sim = createSimulation(dungeon);
 // Duration of a game tick (actuator delays are in ticks). About 1/6 s in DM, to be checked.
 const TICK_MS = 1000 / 6;
 const moveKey = createControls((command) => sim.command(command));
-let game = null; // { window, view } while the game window is open
+let game = null; // { window, view, panel } while the game window is open
 let opening = false;
 
 async function openGame() {
@@ -535,9 +536,13 @@ async function openGame() {
       labelOf: (t) => (sim.hand ? itemName(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
       contentsAt,
     });
-    game = { window: win, view };
+    const panel = createChampionPanel(win.viewport, { onAction: attackFront, onRestart: () => sim.reset() });
+    game = { window: win, view, panel };
     showInventory();
-    game.clock = setInterval(() => sim.tick(), TICK_MS);
+    game.clock = setInterval(() => {
+      sim.tick();
+      game.panel.setReady(sim.fatigue === 0);
+    }, TICK_MS);
   } catch (error) {
     console.error(error);
     win.dispose();
@@ -555,6 +560,7 @@ async function openGame() {
 function closeGame() {
   if (!game) return;
   clearInterval(game.clock);
+  game.panel.dispose();
   game.view.dispose();
   game.window.dispose();
   game = null;
@@ -576,8 +582,11 @@ async function teleportToSelection() {
   refreshLinks();
 }
 
-// Click on the wall or door in front of the party (mouse in the view, or Space).
+// Click on the wall or door in front of the party (mouse in the view, or Space); on a
+// creature in front, the champion strikes it.
 function clickFront() {
+  const [dx, dy] = SIDE_DELTAS[sim.party.facing];
+  if (sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) return attackFront();
   const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
   if (broken) {
     showInfo('La porte vole en éclats');
@@ -586,6 +595,26 @@ function clickFront() {
   else if (took) showInfo(`Pris : ${itemName(sim.hand)}`);
   else if (placed) showInfo('Objet posé');
   else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
+}
+
+// The champion strikes the creature in front ("Frapper", docs/023): the result shows in
+// the action area (damage done), the status bar says when a creature dies.
+function attackFront() {
+  const { result, damage, group, killed, destroyed } = sim.attack();
+  if (result === 'nothing') return showInfo('Personne à frapper');
+  if (result === 'exhausted') return showInfo('Trop fatigué');
+  if (result === 'dead' || result === 'busy') return;
+  game?.panel.showStrike(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');
+  const { name } = describeGroup(dungeon, group);
+  if (destroyed) showInfo(`${name} : groupe anéanti`);
+  else if (killed) showInfo(`${name} tué`);
+  else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
+}
+
+// The champion's box: bars, hands (the item in hand is in the action hand).
+function showChampion() {
+  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind] };
+  game?.panel.update(sim.champion, hand);
 }
 
 // Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
@@ -618,6 +647,7 @@ function showInventory() {
   );
   game?.view.setHandCursor(hand?.color ?? null);
   game?.view.refreshPointer();
+  showChampion();
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
@@ -663,6 +693,9 @@ sim.on('itemsChanged', ({ level, x, y }) => {
   renderer?.updateTile?.(level, x, y);
 });
 sim.on('inventoryChanged', () => showInventory());
+sim.on('championChanged', showChampion);
+sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
+sim.on('championDied', ({ champion, group }) => showInfo(`${champion.name} est mort, tué par ${describeGroup(dungeon, group).name}`));
 
 // Creatures moved: their tiles are redrawn in 2D, only the creature markers of their level
 // in 3D and in the first person view; once per frame, as several move in the same tick.

@@ -476,6 +476,18 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       const p = party();
       floorChanges([{ level: group.level, x: group.x, y: group.y }, to], p, p, () => state.moveGroup(group, to));
     },
+    /** A group vanishes from its tile (`remove` takes it out of the state): its plates are released. */
+    groupVanished(group, remove) {
+      const p = party();
+      floorChange(group.level, group.x, group.y, p, p, remove);
+    },
+    /** Items fall on a floor tile (possessions of a dead creature): its plates notice them, then falls and teleporters. */
+    itemsDropped(level, x, y, items) {
+      const p = party();
+      floorChange(level, x, y, p, p, () => state.itemsAt(level, x, y).push(...items));
+      changedItems(level, x, y);
+      settleItems(level, x, y);
+    },
     /** A new group appears on a tile (`create` adds it to the state): the plates of the tile notice it. */
     groupAppeared(level, x, y, create) {
       const p = party();

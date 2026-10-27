@@ -97,6 +97,9 @@ A noter : les champions peuvent lancer un "cri de guerre" qui fait fuir certaine
 
 ### Phase C3 — Combat
 
+> **Découpée en C3a, C3b et C3c** (voir [023-combat-phase-c3a.md](023-combat-phase-c3a.md), § 6). **C3a faite** : un seul champion, Zed,
+> son cadre dans la vue, « Frapper », attaques des créatures, mort des deux côtés. C3b : projectiles. C3c : fidélité (formules, combos, expérience).
+
 **Objectif :** attaquer et être attaqué. C'est la plus grosse phase.
 
 - **Prérequis, à décider en début de phase :** le groupe a besoin de **caractéristiques**.

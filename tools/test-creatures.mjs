@@ -17,6 +17,10 @@ const check = (ok, label) => {
   if (!ok) failures++;
 };
 
+// Tests of movement and pursuit: the champion must not die (creatures attack since C3).
+const immortal = () => Object.assign(sim.champion, { health: 1e9, maxHealth: 1e9 });
+immortal();
+
 // Invariants: each group on a tile it may stand on, the tile index matches, one group per tile.
 function invariants() {
   const seen = new Set();
@@ -57,6 +61,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // 2. The party is blocked by a creature in front of it.
 {
   sim.reset();
+  immortal();
   const group = [...sim.state.groups].find((g) => g.level === 1 && creatureInfo(g.type).immobile === false);
   // Find a free tile next to it, facing it.
   const side = Object.entries(SIDE_DELTAS).find(([, [dx, dy]]) => !blockReason(sim.state, 1, group.x - dx, group.y - dy));
@@ -75,6 +80,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // 3. N3 (7, 5): the mummy leaves its plate -> "YOU WILL REGRET THAT".
 {
   sim.reset();
+  immortal();
   const texts = [];
   const offText = sim.on('textChanged', ({ index, visible }) => visible && texts.push(dungeon.data.texts[index].text.replaceAll('\n', ' ')));
   const mummy = sim.state.groupAt(3, 7, 5);
@@ -100,6 +106,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // on the generator tile; then it rests, and a second press does nothing.
 {
   sim.reset();
+  immortal();
   const index = dungeon.data.actuators.findIndex((a) => a.generator && a.at.map === 3 && a.at.x === 4 && a.at.y === 23);
   const a = dungeon.data.actuators[index];
   const { x, y } = a.at;
@@ -131,6 +138,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // 5. Level 2: a group that sees the party comes into contact, then stays facing it.
 {
   sim.reset();
+  immortal();
   // A mobile group, and a free tile 3 squares in front of it, in sight.
   let found = null;
   for (const group of [...sim.state.groups].filter((g) => g.level === 2)) {
@@ -180,6 +188,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // party with no way to it; they wander instead of waiting in place (feedback on C2).
 {
   sim.reset();
+  immortal();
   sim.teleport(2, 1, 18);
   const stuck = [...sim.state.groups].filter((g) => g.level === 2 && g.x <= 1 && g.y >= 13 && g.y <= 15);
   const start = new Map(stuck.map((g) => [g.id, `${g.x},${g.y}`]));
@@ -191,6 +200,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // 6. Sight through the first two closed doors met: a wooden or iron door hides the party, a grate or a Ra door does not.
 {
   sim.reset();
+  immortal();
   let checked = 0;
   for (let level = 0; level < dungeon.levelCount && checked < 2; level++) {
     const map = dungeon.level(level);
@@ -212,6 +222,7 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
 // 7. Random walk on every level: no exception, invariants kept.
 {
   sim.reset();
+  immortal();
   const commands = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
   let seed = 7;
   const rnd = (n) => {

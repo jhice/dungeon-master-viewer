@@ -522,6 +522,160 @@ body {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
+  container-type: inline-size; /* the champion's box scales with the view (cqw) */
+}
+
+/* --- Champion's box over the view, top left, as in DM (src/ui/champion-panel.js) --- */
+
+.champion-panel {
+  --champion: #4cb050; /* colour of the first champion's slot */
+  position: absolute;
+  top: 1.5cqw;
+  left: 1.5cqw;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  width: 22cqw;
+  font: 700 2.4cqw/1 ui-monospace, monospace;
+  user-select: none;
+}
+
+.champion-box {
+  position: relative;
+  padding: 0.8cqw;
+  border: 0.3cqw solid #555;
+  background: #000c;
+}
+
+.champion-name {
+  margin-bottom: 0.8cqw;
+  color: #e8c050;
+  letter-spacing: 0.1em;
+}
+
+.champion-body {
+  display: flex;
+  gap: 1cqw;
+}
+
+.champion-hands {
+  display: flex;
+  gap: 0.8cqw;
+}
+
+/* A hand: a grey square, with the colour of the item it holds. */
+.champion-hand {
+  width: 5.2cqw;
+  height: 5.2cqw;
+  border: 0.3cqw solid #777;
+  background:
+    linear-gradient(var(--c, transparent), var(--c, transparent)) center / 55% 55% no-repeat,
+    #3a3a3a;
+}
+
+.champion-hand.is-action {
+  border-color: #aaa;
+}
+
+.champion-hand.is-empty {
+  background: #2a2a2a;
+}
+
+.champion-bars {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 0.7cqw;
+  height: 5.8cqw;
+}
+
+/* Health, stamina, mana: three vertical bars in the champion's colour. */
+.champion-bar {
+  position: relative;
+  width: 1.4cqw;
+  background: #222;
+}
+
+.champion-bar i {
+  position: absolute;
+  inset: auto 0 0;
+  background: var(--champion);
+  transition: height 0.2s;
+}
+
+/* Damage taken: a red badge with the number, on the box. */
+.champion-wound {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #b0201899;
+  color: #fff;
+  font-size: 4cqw;
+  text-shadow: 0 0 0.4cqw #000;
+}
+
+.champion-box.is-dead {
+  opacity: 0.5;
+}
+
+/* The action: "Frapper", or the result of the last strike for a moment. */
+.champion-action {
+  padding: 0.8cqw;
+  border: 0.3cqw solid #555;
+  background: #000c;
+  color: #d8d0b8;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.champion-action:hover {
+  border-color: var(--champion);
+}
+
+.champion-action.is-tired {
+  color: #777;
+}
+
+.champion-action.is-result {
+  color: #ffd84a;
+  text-align: center;
+}
+
+/* Death of the champion: a dark veil over the view. */
+.champion-dead {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  gap: 2cqw;
+  background: #200000c0;
+  color: #e8c050;
+  font: 700 5cqw/1.2 ui-monospace, monospace;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.champion-wound[hidden],
+.champion-dead[hidden] {
+  display: none;
+}
+
+.champion-dead p {
+  margin: 0;
+}
+
+.champion-dead button {
+  justify-self: center;
+  padding: 1cqw 2.5cqw;
+  border: 0.3cqw solid #e8c050;
+  background: #000;
+  color: #e8c050;
+  font: 700 2.6cqw ui-monospace, monospace;
+  cursor: pointer;
 }
 
 .fp-canvas {
