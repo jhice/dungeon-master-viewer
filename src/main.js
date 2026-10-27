@@ -3,7 +3,7 @@ import { describeState } from './core/tile-states.js';
 import { tileContents, buildInventory } from './core/contents.js';
 import { buildLogic, describeActuator, describeTeleporter, actuatorFamily } from './core/logic.js';
 import { buildTexts, textsAt, championSummary } from './core/texts.js';
-import { FACE_LABELS, describeItem } from './core/contents.js';
+import { FACE_LABELS, describeItem, describeGroup } from './core/contents.js';
 import { FAMILY_COLORS, TELEPORTER_COLORS, TEXT_COLORS, CATEGORY_COLORS } from './render/palette.js';
 import { createAsciiRenderer } from './render/ascii/ascii-renderer.js';
 import { createDomRenderer } from './render/dom/dom-renderer.js';
@@ -598,12 +598,12 @@ function clickFloor({ level, x, y, position, item }) {
   }
 }
 
-// Contents of a tile for the views: items lying there now (simulation), creatures of dungeon.json.
+// Contents of a tile for the views: items lying there now and creature group standing there (simulation).
 const itemName = (ref) => describeItem(dungeon, ref).name;
 // A chest stowed once has given its contents to the inventory: it is shown empty
 // (dungeon.json keeps its list of contents).
 function contentsAt(level, x, y) {
-  const contents = tileContents(dungeon, level, x, y, sim.state.itemsAt(level, x, y));
+  const contents = tileContents(dungeon, level, x, y, sim.state.itemsAt(level, x, y), sim.state.groupAt(level, x, y));
   for (const item of contents?.items ?? []) {
     if (item.kind === 'container' && sim.state.emptiedChests.has(item.index)) item.contents = [];
   }
@@ -663,6 +663,32 @@ sim.on('itemsChanged', ({ level, x, y }) => {
   renderer?.updateTile?.(level, x, y);
 });
 sim.on('inventoryChanged', () => showInventory());
+
+// Creatures moved: their tiles are redrawn in 2D, only the creature markers of their level
+// in 3D and in the first person view; once per frame, as several move in the same tick.
+const movedTiles = new Map(); // "level:x,y" -> { level, x, y }
+let movedFrame = 0;
+sim.on('creaturesMoved', ({ group, from, to, generated }) => {
+  if (generated) {
+    const { count, name } = describeGroup(dungeon, group);
+    showInfo(`Générateur : ${count} × ${name} en (${to.x}, ${to.y})`);
+  }
+  for (const tile of [from, to]) if (tile) movedTiles.set(`${tile.level}:${tile.x},${tile.y}`, tile);
+  movedFrame ||= requestAnimationFrame(redrawCreatures);
+});
+function redrawCreatures() {
+  movedFrame = 0;
+  const levels = new Set();
+  for (const { level, x, y } of movedTiles.values()) {
+    levels.add(level);
+    if (!renderer?.updateCreatures) renderer?.updateTile?.(level, x, y);
+  }
+  movedTiles.clear();
+  for (const level of levels) {
+    renderer?.updateCreatures?.(level);
+    game?.view.updateCreatures(level);
+  }
+}
 
 // A rotation changed the ornament shown on a wall face (lever, torch holder, alcove revealed).
 sim.on('ornamentChanged', ({ level }) => game?.view.updateTile(level));

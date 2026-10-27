@@ -5,7 +5,8 @@
 //   value, gate bits) and each tile its own order of actuators (rotations);
 // - texts get their current visibility (messages shown by a mechanism);
 // - items lie on tiles (floor: sub-tile position, wall: face), in the party's
-//   inventory, or in its hand (one item, apart from the inventory).
+//   inventory, or in its hand (one item, apart from the inventory);
+// - creature groups have a position, a facing and members (health), one group per tile.
 
 import { ITEM_POOLS } from '../core/contents.js';
 
@@ -23,6 +24,9 @@ export function createState(dungeon) {
   let inventory; // [{ kind, index }] items carried by the party
   let hand; // { kind, index } held in hand, or null
   let emptiedChests; // container indexes whose contents went into the inventory
+  let groups; // id -> { id, type, level, x, y, facing, members: [{ hp, position }], items, nextMove }
+  let groupTiles; // "level:x,y" -> group
+  let nextGroupId; // ids of generated groups follow those of dungeon.json
 
   function reset() {
     details = new Map();
@@ -33,6 +37,13 @@ export function createState(dungeon) {
     inventory = [];
     hand = null;
     emptiedChests = new Set();
+    groups = new Map();
+    groupTiles = new Map();
+    dungeon.data.creatures.forEach((group, id) => {
+      const { map: level, x, y } = group.at;
+      addGroup({ id, type: group.type, level, x, y, facing: group.facing, members: structuredClone(group.members), items: group.items ?? [] });
+    });
+    nextGroupId = dungeon.data.creatures.length;
     for (let level = 0; level < dungeon.levelCount; level++) {
       for (const { x, y, detail } of dungeon.detailedTiles(level)) {
         if (MUTABLE_TYPES.has(detail.type)) details.set(`${level}:${x},${y}`, structuredClone(detail));
@@ -43,6 +54,14 @@ export function createState(dungeon) {
       }
     }
   }
+
+  function addGroup(group) {
+    group.nextMove ??= null; // tick of the next move (src/sim/creatures.js), null = not scheduled
+    groups.set(group.id, group);
+    groupTiles.set(`${group.level}:${group.x},${group.y}`, group);
+    return group;
+  }
+
   reset();
 
   return {
@@ -89,6 +108,24 @@ export function createState(dungeon) {
     /** Chests already stowed with their contents (Set of container indexes, mutable). */
     get emptiedChests() {
       return emptiedChests;
+    },
+    /** Creature group standing on a tile (mutable record), or null. */
+    groupAt(level, x, y) {
+      return groupTiles.get(`${level}:${x},${y}`) ?? null;
+    },
+    /** Every creature group, on every level. */
+    get groups() {
+      return groups.values();
+    },
+    /** Moves a group to a tile (which must be free of groups), with its new facing. */
+    moveGroup(group, { level, x, y, facing = group.facing }) {
+      groupTiles.delete(`${group.level}:${group.x},${group.y}`);
+      Object.assign(group, { level, x, y, facing });
+      groupTiles.set(`${level}:${x},${y}`, group);
+    },
+    /** Adds a new group (generator): { type, level, x, y, facing, members }; returns it with its id. */
+    createGroup(group) {
+      return addGroup({ items: [], ...group, id: nextGroupId++ });
     },
     textVisible(index) {
       return textVisibility.get(index) ?? dungeon.data.texts[index].visible;

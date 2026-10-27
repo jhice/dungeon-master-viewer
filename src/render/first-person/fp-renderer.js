@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
-import { buildLevelContents } from '../three/level-contents.js';
+import { buildLevelContents, buildLevelCreatures } from '../three/level-contents.js';
 import { createDecor } from './fp-decor.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
@@ -92,13 +92,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     // Items and creatures (still), as markers of the 3D renderer. Mechanisms and texts
     // are not markers here: the party sees the ornaments, inscriptions and doors drawn
     // by fp-decor.js (a plate or a button without graphic stays invisible, as in DM).
-    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents })) {
-      // Not seen by the party either: the "has contents" rings of chests and creatures.
-      if (['texts', 'mechanisms', 'contents'].includes(mesh.userData.layer)) {
-        mesh.geometry.dispose();
-        mesh.material.dispose();
-        continue;
-      }
+    for (const mesh of seenMeshes(buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents }))) {
       group.add(mesh);
       meshes.push(mesh);
     }
@@ -124,6 +118,30 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     group.add(ceiling);
     scene.add(group);
     built = { group, meshes, ceiling, decorMeshes };
+  }
+
+  // Not seen by the party either: the "has contents" rings of chests and creatures (disposed).
+  function seenMeshes(meshes) {
+    return meshes.filter((mesh) => {
+      if (!['texts', 'mechanisms', 'contents'].includes(mesh.userData.layer)) return true;
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      return false;
+    });
+  }
+
+  // Creatures moved: rebuild their meshes only, not the level.
+  function rebuildCreatures() {
+    const old = built.meshes.filter((mesh) => mesh.userData.creatures);
+    for (const mesh of old) built.group.remove(mesh);
+    disposeLevelMeshes(old);
+    built.meshes = built.meshes.filter((mesh) => !mesh.userData.creatures);
+    const map = dungeon.level(level);
+    const center = { x: map.offset.x, z: map.offset.y };
+    for (const mesh of seenMeshes(buildLevelCreatures(dungeon, level, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents }))) {
+      built.group.add(mesh);
+      built.meshes.push(mesh);
+    }
   }
 
   function clear() {
@@ -252,6 +270,11 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     updateTile(levelIndex) {
       if (levelIndex !== level) return;
       build(level);
+      render();
+    },
+    updateCreatures(levelIndex) {
+      if (levelIndex !== level || !built) return;
+      rebuildCreatures();
       render();
     },
     dispose() {

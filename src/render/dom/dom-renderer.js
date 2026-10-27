@@ -296,7 +296,8 @@ export function tileClasses(tile) {
  * - floor items: one marker per occupied sub-tile, coloured by the category of
  *   the first item, with a count badge when several items are stacked;
  * - wall items: a marker against the face they lie on;
- * - creatures: one disc per member, in its sub-tile (or centred if alone, same size).
+ * - creatures: one disc per member, in its sub-tile (or centred if alone, same size),
+ *   with a point towards the facing of the group.
  * Chests with contents and creatures carrying items get a `has-contents` ring.
  */
 function contentMarkers(contents, onWall) {
@@ -328,6 +329,7 @@ function contentMarkers(contents, onWall) {
       disc.style.left = `${u * 100}%`;
       disc.style.top = `${v * 100}%`;
       disc.style.setProperty('--c', creatureColor(creature.type));
+      disc.style.setProperty('--facing', `${FACES.indexOf(creature.facing) * 90}deg`);
       if (creature.possessions.length) disc.classList.add('has-contents');
       markers.push(disc);
     }

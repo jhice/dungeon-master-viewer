@@ -240,6 +240,16 @@
   border: 1px solid rgb(0 0 0 / 0.7);
 }
 
+/* Facing of the group: a point on the rim of each disc. */
+.creature-mark::after {
+  content: '';
+  position: absolute;
+  inset: -65%;
+  background: var(--c);
+  clip-path: polygon(50% 0, 66% 27%, 34% 27%);
+  transform: rotate(var(--facing, 0deg));
+}
+
 
 /* Chest with contents, creature carrying items. */
 .mark.has-contents {

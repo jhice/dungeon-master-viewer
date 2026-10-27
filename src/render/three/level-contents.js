@@ -1,10 +1,11 @@
 // Contents of one level in 3D: items and creatures, as three InstancedMeshes
 // with per-instance colours (items, creatures, "has contents" markers), so the
 // contents cost 3 draw calls per level whatever the number of objects.
+// Creatures have their own meshes (buildLevelCreatures()), rebuilt alone when they move.
 // Same frame as level-meshes.js: x = east, z = south, y = up, floor at y = 0.
 
 import * as THREE from 'three';
-import { tileContents, subcellOffset } from '../../core/contents.js';
+import { tileContents, subcellOffset, FACES } from '../../core/contents.js';
 import { actuatorFamily } from '../../core/logic.js';
 import { CATEGORY_COLORS, FAMILY_COLORS, HAS_CONTENTS_COLOR, TEXT_COLORS, creatureColor } from '../palette.js';
 
@@ -14,6 +15,8 @@ const ITEM_SIZE = 0.16;
 const ITEM_HEIGHT = 0.1;
 const CREATURE_RADIUS = 0.13;
 const CREATURE_HEIGHT = 0.7;
+const NOSE_SIZE = [0.07, 0.07, 0.1]; // facing marker, in front of the cylinder
+const NOSE_COLOR = '#1a1a1a';
 // Offset of a wall item from the wall centre, towards the face it lies on.
 const FACE_DIRECTION = [
   [0, -1], // N
@@ -28,12 +31,11 @@ const FACE_DIRECTION = [
  * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (default: dungeon.json;
  *   the simulation passes the items lying there now)
  * @returns {Array<THREE.InstancedMesh>} meshes with userData { part, layer, variant: 'all', tiles, baseOpacity };
- *   for items, tiles[i].item is the item ({ kind, index, position })
+ *   for items, tiles[i].item is the item ({ kind, index, position }); creatures: see buildLevelCreatures()
  */
 export function buildLevelContents(dungeon, levelIndex, center, { wallHeight, contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) }) {
   const map = dungeon.level(levelIndex);
   const items = []; // { position: [x, y, z], color, info }
-  const creatures = []; // { position, scale, color, info }
   const rings = []; // { position, info }
   const plates = []; // floor triggers: thin plate under the tile contents
   const gizmos = []; // other mechanisms: small octahedrons (on the wall face, or centred)
@@ -103,27 +105,11 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight, co
       stack.push(item);
     }
 
-    const creature = contents.creature;
-    if (creature) {
-      for (const member of creature.members) {
-        const alone = member.position === null;
-        const [u, v] = alone ? [0.5, 0.5] : subcellOffset(member.position);
-        // A lone creature stands in the centre, with the same size as a group member.
-        // Standing on the floor: the cylinder is CREATURE_HEIGHT × wallHeight tall.
-        const position = [ox + u, (CREATURE_HEIGHT * wallHeight) / 2, oz + v];
-        creatures.push({ position, color: creatureColor(creature.type), info });
-        if (creature.possessions.length) rings.push({ position: [position[0], CREATURE_HEIGHT * wallHeight + 0.06, position[2]], info });
-      }
-    }
   }
 
   const meshes = [];
   if (items.length) {
     meshes.push(instanced('items', 'items', new THREE.BoxGeometry(ITEM_SIZE, ITEM_HEIGHT, ITEM_SIZE), items, levelIndex));
-  }
-  if (creatures.length) {
-    // meshes.push(instanced('creatures', 'creatures', new THREE.ConeGeometry(CREATURE_RADIUS, CREATURE_HEIGHT, 12), creatures, levelIndex));
-    meshes.push(instanced('creatures', 'creatures', new THREE.CylinderGeometry(CREATURE_RADIUS, CREATURE_RADIUS, CREATURE_HEIGHT * wallHeight, 12), creatures, levelIndex));
   }
   if (rings.length) {
     // Rings follow the items layer (chests) or the creatures layer (possessions): keep them in their own
@@ -140,6 +126,48 @@ export function buildLevelContents(dungeon, levelIndex, center, { wallHeight, co
   if (writings.length) {
     meshes.push(instanced('texts', 'texts', new THREE.BoxGeometry(1, 1, 1), writings, levelIndex));
   }
+  meshes.push(...buildLevelCreatures(dungeon, levelIndex, center, { wallHeight, contentsAt }));
+  return meshes;
+}
+
+/**
+ * Creatures of one level: a cylinder per member (in its sub-tile, or centred if alone),
+ * a dark "nose" towards the facing of its group, and a ring above the members of a group
+ * carrying items. Same options as buildLevelContents().
+ * @returns {Array<THREE.InstancedMesh>} meshes with userData.creatures = true (and the userData above)
+ */
+export function buildLevelCreatures(dungeon, levelIndex, center, { wallHeight, contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) }) {
+  const creatures = []; // { position, color, info }
+  const noses = []; // { position, rotation, color, info }
+  const rings = []; // { position, info }
+  const height = CREATURE_HEIGHT * wallHeight; // standing on the floor
+  for (const { x, y, gx, gy, detail } of allTiles(dungeon, levelIndex)) {
+    const creature = contentsAt(levelIndex, x, y)?.creature;
+    if (!creature) continue;
+    const info = { level: levelIndex, x, y, gx, gy, type: detail.type, detail };
+    const [fx, fz] = FACE_DIRECTION[FACES.indexOf(creature.facing)];
+    for (const member of creature.members) {
+      // A lone creature stands in the centre, with the same size as a group member.
+      const [u, v] = member.position === null ? [0.5, 0.5] : subcellOffset(member.position);
+      const position = [gx - center.x + u, height / 2, gy - center.z + v];
+      creatures.push({ position, color: creatureColor(creature.type), info });
+      noses.push({
+        position: [position[0] + fx * CREATURE_RADIUS, height * 0.8, position[2] + fz * CREATURE_RADIUS],
+        scale: fx ? [NOSE_SIZE[2], NOSE_SIZE[1], NOSE_SIZE[0]] : NOSE_SIZE,
+        color: NOSE_COLOR,
+        info,
+      });
+      if (creature.possessions.length) rings.push({ position: [position[0], height + 0.06, position[2]], color: HAS_CONTENTS_COLOR, info });
+    }
+  }
+  const meshes = [];
+  if (creatures.length) {
+    meshes.push(instanced('creatures', 'creatures', new THREE.CylinderGeometry(CREATURE_RADIUS, CREATURE_RADIUS, height, 12), creatures, levelIndex));
+    meshes.push(instanced('creatureFacing', 'creatures', new THREE.BoxGeometry(1, 1, 1), noses, levelIndex));
+  }
+  // Rings follow the items layer (chests) or the creatures layer (possessions): layer 'contents'.
+  if (rings.length) meshes.push(instanced('creatureContents', 'contents', new THREE.SphereGeometry(0.1, 10, 8), rings, levelIndex));
+  for (const mesh of meshes) mesh.userData.creatures = true;
   return meshes;
 }
 

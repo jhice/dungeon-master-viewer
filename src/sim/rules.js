@@ -1,6 +1,8 @@
 // Rules of the dungeon, as pure functions of the state (docs/012-simulation.md § 3).
-// Phase A: passage between tiles. Creatures are not obstacles (answer Q4).
+// Phase A: passage between tiles. Creature groups block the party (docs/021, Q4 revised):
+// see step() in party.js; teleport() (key F) ignores them.
 // Phase B: what happens on arrival on a tile (stairs, pits, teleporters), chained.
+// Phase C1: the same for creatures (creaturePassage(), resolveCreatureArrival()).
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
@@ -25,12 +27,30 @@ export function blockReason(state, level, x, y) {
   }
 }
 
-export const BLOCK_LABELS = { outside: 'bord de la carte', wall: 'mur', fakewall: 'mur', door: 'porte fermée' };
+export const BLOCK_LABELS = { outside: 'bord de la carte', wall: 'mur', fakewall: 'mur', door: 'porte fermée', creature: 'créature' };
+
+/**
+ * Whether a creature of species `info` (src/core/creature-info.js) may step onto a tile
+ * by itself: as the party, except that non-material creatures pass through doors, that
+ * creatures never take stairs, and that only levitating ones go over an open pit
+ * (the others fall only when a pit opens under them). Other groups and the party are
+ * checked by the caller.
+ */
+export function creaturePassage(state, info, level, x, y) {
+  const reason = blockReason(state, level, x, y);
+  if (reason === 'door' && info.nonMaterial) return true;
+  if (reason) return false;
+  const tile = state.tileAt(level, x, y);
+  if (tile.type === 'stairs') return false;
+  if (tile.type === 'pit' && tile.detail.open && !tile.detail.imaginary && !info.levitation) return false;
+  return true;
+}
 
 // Teleporter scopes that carry the party.
 const PARTY_SCOPES = new Set(['all', 'items_party']);
-// Teleporter scopes that carry items.
+// Teleporter scopes that carry items, creatures.
 const ITEM_SCOPES = new Set(['all', 'items', 'items_party']);
+const CREATURE_SCOPES = new Set(['all', 'creatures']);
 // Longest chain of arrivals (pit -> teleporter -> …) before it is considered a loop.
 const MAX_CHAIN = 32;
 
@@ -84,20 +104,41 @@ export function resolveArrival(dungeon, state, party) {
  * @returns {{ level, x, y }|null} the final tile, or null if the item stays
  */
 export function resolveItemArrival(dungeon, state, { level, x, y }) {
+  const end = carry(dungeon, state, { level, x, y, facing: 'N' }, ITEM_SCOPES, true);
+  const moved = end && (end.level !== level || end.x !== x || end.y !== y);
+  return moved ? { level: end.level, x: end.x, y: end.y } : null;
+}
+
+/**
+ * Where a creature group standing on a tile ends up: it falls through open pits
+ * (unless it levitates) and is carried by open teleporters of scope `all` or
+ * `creatures`, in chain, turning with them.
+ * @returns {{ level, x, y, facing }|null} the final place, or null if the group stays
+ */
+export function resolveCreatureArrival(dungeon, state, info, place) {
+  return carry(dungeon, state, place, CREATURE_SCOPES, !info.levitation);
+}
+
+// Chain of falls and teleporters for items and creatures (stairs are for the party only).
+function carry(dungeon, state, place, scopes, falls) {
   const seen = new Set();
-  let current = { level, x, y, facing: 'N' };
+  let current = place;
   for (let i = 0; i < MAX_CHAIN; i++) {
     const key = `${current.level}:${current.x},${current.y}`;
     if (seen.has(key)) break;
     seen.add(key);
     const tile = state.tileAt(current.level, current.x, current.y);
     const effect =
-      tile?.type === 'pit' ? fall(dungeon, current, tile.detail) : tile?.type === 'teleporter' ? teleport(dungeon, current, tile.detail, ITEM_SCOPES) : null;
+      tile?.type === 'pit' && falls
+        ? fall(dungeon, current, tile.detail)
+        : tile?.type === 'teleporter'
+          ? teleport(dungeon, current, tile.detail, scopes)
+          : null;
     if (!effect) break;
     current = effect.party;
   }
-  const moved = current.level !== level || current.x !== x || current.y !== y;
-  return moved ? { level: current.level, x: current.x, y: current.y } : null;
+  const moved = current.level !== place.level || current.x !== place.x || current.y !== place.y || current.facing !== place.facing;
+  return moved ? current : null;
 }
 
 // Stairs: the matching stairs of the adjacent level are at the same global

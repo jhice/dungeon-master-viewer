@@ -47,7 +47,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - la simulation (phases A à E faites, voir docs 013 à 017) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/` ;
 - les décors (murs, sols, portes) de la vue à la première personne, dessinés dans `ornament-art.js` (doc 018) ;
 - main et inventaire, coffres, portes cassables (doc 019) ;
-- plan des créatures en 4 phases (C1 à C4), à démarrer dans une nouvelle session (doc 020)
+- plan des créatures en 4 phases (C1 à C4, doc 020) : C1 faite (déplacement, plaques, générateurs, doc 021), C2 (perception et poursuite) à démarrer dans une nouvelle session ; tests Node : `node tools/test-creatures.mjs`
 
 ## Simulation
 

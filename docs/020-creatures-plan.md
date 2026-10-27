@@ -48,6 +48,8 @@ Les **caractéristiques des espèces** font partie du moteur, pas de `Dungeon.xm
 
 ### Phase C1 — Présence et déplacement
 
+> **Faite**, voir [021-creatures-phase-c1.md](021-creatures-phase-c1.md). Q1 : bloquantes ; Q2 : documentation, strict minimum ; Q3 : pas instantané.
+
 **Objectif :** le donjon vit. Les créatures se déplacent et interagissent avec les mécanismes, sans combat.
 
 - **État** (`src/sim/state.js`) : les groupes deviennent mutables, avec leur position, leur orientation et leurs membres (PV restants). On copie `dungeon.data.creatures` comme les objets, et les vues lisent l'état, plus `dungeon.json`.

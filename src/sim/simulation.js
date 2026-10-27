@@ -7,6 +7,7 @@ import { createEmitter } from './events.js';
 import { createState } from './state.js';
 import { createClock } from './clock.js';
 import { createLogic } from './logic.js';
+import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
@@ -25,7 +26,10 @@ export function createSimulation(dungeon) {
     emit: events.emit,
     party: () => party,
     onOpenedUnderParty: applyTileUnderParty,
+    onOpenedUnderGroup: (level, x, y) => creatures.settle(level, x, y),
+    generate: (index) => creatures.generate(index),
   });
+  const creatures = createCreatures(dungeon, state, clock, logic, { emit: events.emit, party: () => party });
 
   function command(name) {
     const from = party;
@@ -119,13 +123,17 @@ export function createSimulation(dungeon) {
       if (!state.hand || !this.reachable(level, x, y, position)) return false;
       return logic.drop(party, level, x, y, position);
     },
-    /** Advances the clock: delayed effects due by then are applied. */
+    /** Advances the clock: delayed effects due by then are applied, and the creatures of the party's level act. */
     tick(ticks = 1) {
-      clock.advance(ticks);
+      for (let i = 0; i < ticks; i++) {
+        clock.advance(1);
+        creatures.update();
+      }
     },
     reset() {
       clock.clear();
       state.reset();
+      creatures.reset();
       party = createParty(dungeon.start);
       events.emit('reset', { party });
     },

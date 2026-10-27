@@ -55,13 +55,17 @@ export function describeItem(dungeon, { kind, index, position }) {
 }
 
 export function describeCreature(dungeon, index) {
-  const group = dungeon.data.creatures[index];
+  return describeGroup(dungeon, { ...dungeon.data.creatures[index], id: index });
+}
+
+/** A creature group of dungeon.json or of the simulation ({ id, type, members, facing, items }). */
+export function describeGroup(dungeon, group) {
   return {
-    index,
+    index: group.id,
     category: 'creature',
     type: group.type,
-    name: group.name ?? `Creature ${group.type}`,
-    count: group.count,
+    name: dungeon.data.catalog.creature[group.type] ?? `Creature ${group.type}`,
+    count: group.members.length,
     members: group.members, // [{ hp, position }], position null = alone in the centre
     facing: group.facing,
     possessions: (group.items ?? []).map((ref) => describeItem(dungeon, ref)),
@@ -71,13 +75,18 @@ export function describeCreature(dungeon, index) {
 /**
  * Contents of a tile: { items: [...describeItem], creature: describeCreature | null }.
  * Items keep the original stacking order. Returns null for an empty tile.
- * `itemRefs` replaces the items of dungeon.json (the simulation passes the items lying there now).
+ * `itemRefs` replaces the items of dungeon.json (the simulation passes the items lying there now),
+ * and `group` its creature group (the simulation passes the group standing there now, or null).
  */
-export function tileContents(dungeon, level, x, y, itemRefs) {
+export function tileContents(dungeon, level, x, y, itemRefs, group) {
   const refs = dungeon.tileAt(level, x, y)?.detail?.items ?? [];
   const items = (itemRefs ?? refs.filter((r) => ITEM_POOLS[r.kind])).map((r) => describeItem(dungeon, r));
-  const creatureRef = refs.find((r) => r.kind === 'creature');
-  const creature = creatureRef ? describeCreature(dungeon, creatureRef.index) : null;
+  let creature;
+  if (group !== undefined) creature = group && describeGroup(dungeon, group);
+  else {
+    const creatureRef = refs.find((r) => r.kind === 'creature');
+    creature = creatureRef ? describeCreature(dungeon, creatureRef.index) : null;
+  }
   return items.length || creature ? { items, creature } : null;
 }
 

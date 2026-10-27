@@ -9,19 +9,21 @@
 //   teleporter  set = active, clear = inactive; the party on it is carried
 //   fakewall    set = vanished (open), clear = back
 //   wall        gates and counters of the wall; message (text) on the targeted face shown / hidden
-//   floor       texts of the tile shown / hidden (a message shown is printed: 'textShown');
-//               creature generators: not simulated yet (no creatures)
+//   floor       texts of the tile shown / hidden (a message shown is printed: 'textShown')
+// Creature generators act on their own tile, through the hook `generate` (src/sim/creatures.js).
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
 import { isAlcove } from '../core/ornaments.js';
 import { resolveItemArrival } from './rules.js';
 import { decodeChampion } from '../core/texts.js';
+import { creatureInfo } from '../core/creature-info.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
 const FLOOR_ANYTHING = 1; // TPCI: party, creatures, items
 const FLOOR_NO_ITEMS = 2; // TPC: party, creatures
 const FLOOR_ITEM = 4; // I: a given item lying on the tile
+const FLOOR_GENERATOR = 6; // creature generator, pressed by the party
 const FLOOR_POSSESSION = 8; // party carrying a given item
 const WALL_CLICK = 1; // any item / empty hand
 const WALL_CLICK_HOLDING = 2; // any item / no empty hand
@@ -36,6 +38,10 @@ const LOCAL_ROTATION = 1;
 // type, without adding up; the party being abstract, a fixed count stands for it.
 const DOOR_HITS = { Wooden: 3, Porticullis: 6 };
 
+// Rest of a creature generator, in ticks: values above 127 count by 64 ticks
+// ((delay - 126) × 64), from ReDMCSB as remembered, to be checked (docs/021).
+const generatorDelay = (delay) => (delay > 127 ? (delay - 126) * 64 : delay);
+
 // Retry delay (ticks) when a door or a fake wall cannot close on the party.
 const RETRY = 1;
 
@@ -47,12 +53,19 @@ const RETRY = 1;
  * @param {(type: string, payload: object) => void} hooks.emit 'tileChanged', 'textChanged', 'actuatorFired'
  * @param {() => object} hooks.party current party
  * @param {() => void} hooks.onOpenedUnderParty a pit opened or a teleporter was activated under the party
+ * @param {(level, x, y) => void} hooks.onOpenedUnderGroup the same under a creature group
+ * @param {(index: number) => void} hooks.generate a creature generator (actuator index) was pressed
  */
-export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty }) {
+export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty, onOpenedUnderGroup, generate }) {
   const actuatorData = (index) => dungeon.data.actuators[index];
   const partyOn = (level, x, y) => {
     const p = party();
     return p.level === level && p.x === x && p.y === y;
+  };
+  // A material creature keeps a door open; a fake wall does not come back on any creature.
+  const groupKeepsOpen = (type, level, x, y) => {
+    const group = state.groupAt(level, x, y);
+    return Boolean(group) && (type === 'fakewall' || !creatureInfo(group.type).nonMaterial);
   };
 
   // --- Firing an actuator ---------------------------------------------------------
@@ -69,6 +82,15 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (a.onceOnly) runtime.disabled = true;
     firedCount++;
     emit('actuatorFired', { index, actuator: a, effect });
+    if (a.kind === 'floor' && a.type === FLOOR_GENERATOR) {
+      // The generator then rests for `delay` before it can act again.
+      generate?.(index);
+      if (!a.onceOnly && a.delay) {
+        runtime.disabled = true;
+        clock.schedule(generatorDelay(a.delay), () => (runtime.disabled = false));
+      }
+      return;
+    }
     if (a.local) {
       if (a.local.action === LOCAL_ROTATION) rotate(a.at.map, a.at.x, a.at.y, index);
       return;
@@ -114,17 +136,18 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (detail.broken) return; // a broken door stays open
     const open = effect === 'toggle' ? !detail.open : effect === 'set';
     if (open === detail.open) return;
-    // A door or a wall does not close on the party: try again a bit later.
-    if (!open && (tile.type === 'door' || tile.type === 'fakewall') && partyOn(level, x, y)) {
+    // A door or a wall does not close on the party or a creature: try again a bit later.
+    if (!open && (tile.type === 'door' || tile.type === 'fakewall') && (partyOn(level, x, y) || groupKeepsOpen(tile.type, level, x, y))) {
       clock.schedule(RETRY, () => setOpen(level, x, y, state.tileAt(level, x, y), open ? 'set' : 'clear', source));
       return;
     }
     detail.open = open;
     emit('tileChanged', { level, x, y, type: tile.type, detail, source });
     // The party falls through a pit opening under it, and is carried by a teleporter activated under it;
-    // so are the items lying there.
+    // so are the items lying there, and the creatures.
     if ((tile.type === 'pit' || tile.type === 'teleporter') && open) {
       settleItems(level, x, y);
+      if (state.groupAt(level, x, y)) onOpenedUnderGroup?.(level, x, y);
       if (partyOn(level, x, y)) onOpenedUnderParty();
     }
   }
@@ -191,10 +214,12 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   // --- Floor actuators: pressed or released ---------------------------------------------
   // A floor actuator is pressed by what stands on its tile (party, items, creature,
   // or an item carried by the party); it acts when that changes, not on every arrival.
+  // Levitating creatures do not press plates (docs/021).
   function pressedOn(level, x, y, p) {
     const here = p && p.level === level && p.x === x && p.y === y ? p : null;
     const items = state.itemsAt(level, x, y);
-    const creature = (dungeon.tileAt(level, x, y)?.detail?.items ?? []).some((ref) => ref.kind === 'creature');
+    const group = state.groupAt(level, x, y);
+    const creature = Boolean(group) && !creatureInfo(group.type).levitation;
     const pressed = new Map();
     for (const { index } of state.actuatorsAt(level, x, y)) {
       const a = actuatorData(index);
@@ -214,11 +239,14 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
         case FLOOR_ITEM:
           on = items.some((item) => itemIdOf(dungeon, item) === a.data);
           break;
+        case FLOOR_GENERATOR:
+          on = Boolean(here);
+          break;
         case FLOOR_POSSESSION:
           on = Boolean(here) && [...state.inventory, state.hand].some((item) => item && itemIdOf(dungeon, item) === a.data);
           break;
         default:
-          continue; // creatures only, generators: no creatures yet
+          continue; // creatures only: none in this dungeon
       }
       pressed.set(index, on);
     }
@@ -228,12 +256,17 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   // Applies `change` (the party comes or goes, items move) and fires the floor
   // actuators of the tile whose state changed: pressed = triggered, released = not.
   function floorChange(level, x, y, partyBefore, partyAfter, change) {
-    const before = pressedOn(level, x, y, partyBefore);
+    floorChanges([{ level, x, y }], partyBefore, partyAfter, change);
+  }
+  // The same for several tiles changed at once (a creature leaving one and reaching another).
+  function floorChanges(tiles, partyBefore, partyAfter, change) {
+    const before = tiles.map(({ level, x, y }) => pressedOn(level, x, y, partyBefore));
     change?.();
-    const after = pressedOn(level, x, y, partyAfter);
-    for (const [index, on] of after) {
-      if (on !== before.get(index)) fire(index, on !== actuatorData(index).revert);
-    }
+    tiles.forEach(({ level, x, y }, i) => {
+      for (const [index, on] of pressedOn(level, x, y, partyAfter)) {
+        if (on !== before[i].get(index)) fire(index, on !== actuatorData(index).revert);
+      }
+    });
     clock.flush();
   }
 
@@ -434,6 +467,16 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
         if (state.textVisible(ref.index)) emit('textShown', { index: ref.index, level: p.level, x: p.x, y: p.y });
       }
       floorChange(p.level, p.x, p.y, null, p);
+    },
+    /** Moves a creature group (state.moveGroup()); the plates of both tiles notice it. */
+    moveGroup(group, to) {
+      const p = party();
+      floorChanges([{ level: group.level, x: group.x, y: group.y }, to], p, p, () => state.moveGroup(group, to));
+    },
+    /** A new group appears on a tile (`create` adds it to the state): the plates of the tile notice it. */
+    groupAppeared(level, x, y, create) {
+      const p = party();
+      floorChange(level, x, y, p, p, create);
     },
     partyTurned(from, to) {
       // Only the plates with a facing condition notice it.

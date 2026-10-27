@@ -25,6 +25,6 @@ export function step(state, party, direction) {
   const [dx, dy] = SIDE_DELTAS[rotate(party.facing, STEP_TURNS[direction])];
   const x = party.x + dx;
   const y = party.y + dy;
-  const blocked = blockReason(state, party.level, x, y);
+  const blocked = blockReason(state, party.level, x, y) ?? (state.groupAt(party.level, x, y) ? 'creature' : null);
   return blocked ? { party, blocked } : { party: { ...party, x, y }, blocked: null };
 }

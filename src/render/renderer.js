@@ -7,6 +7,8 @@
 //
 // Optional, for the simulation (src/sim/):
 //   renderer.setParty(party);    // marker of the party { level, x, y, facing }, null to hide it
+//   renderer.updateTile(level, x, y);  // a tile changed (state, items, creatures)
+//   renderer.updateCreatures(level);   // creatures moved on a level: redraw them only
 //
 // Renderers only read the Dungeon model (src/core/dungeon.js); they never
 // mutate it, so they can be swapped at runtime.

@@ -9,7 +9,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { assertRenderer } from '../renderer.js';
 import { findConnections } from '../../core/connections.js';
 import { buildLevelMeshes, disposeLevelMeshes, DEFAULT_WALL_HEIGHT } from './level-meshes.js';
-import { buildLevelContents } from './level-contents.js';
+import { buildLevelContents, buildLevelCreatures } from './level-contents.js';
 import { readTheme } from './theme.js';
 import { linkColor } from '../palette.js';
 import { bindShiftWheel } from '../shift-wheel.js';
@@ -126,6 +126,20 @@ export function createThreeRenderer(
     levels[i] = buildLevel(i);
     levels[i].group.position.y = levelY(i);
     applyDisplayMode();
+  }
+
+  // Creatures moved (simulation): rebuild their meshes only, not the level.
+  function rebuildCreatures(i) {
+    const level = levels[i];
+    const old = level.meshes.filter((mesh) => mesh.userData.creatures);
+    for (const mesh of old) level.group.remove(mesh);
+    disposeLevelMeshes(old);
+    level.meshes = level.meshes.filter((mesh) => !mesh.userData.creatures);
+    for (const mesh of buildLevelCreatures(dungeon, i, center, { wallHeight: settings.wallHeight, contentsAt })) {
+      styleMesh(mesh, i === currentLevel);
+      level.group.add(mesh);
+      level.meshes.push(mesh);
+    }
   }
 
   // One LineSegments per departure level, so solo mode can keep only the links of the shown level.
@@ -283,19 +297,21 @@ export function createThreeRenderer(
       labels[i].visible = settings.labels && group.visible;
       labels[i].element.classList.toggle('is-current', focused);
       labels[i].element.classList.toggle('is-faded', mode === 'focus' && !focused);
-      for (const mesh of meshes) {
-        // Meshes specific to the types-only or the with-states rendering (see level-meshes.js).
-        const { variant, layer } = mesh.userData;
-        mesh.visible = (variant === 'all' || (variant === 'states') === showStates) && layerVisible(layer);
-        const opacity = mode === 'focus' && !focused ? FADED_OPACITY * mesh.userData.baseOpacity : mesh.userData.baseOpacity;
-        mesh.material.opacity = opacity;
-        mesh.material.transparent = opacity < 1;
-        // Faded levels must not hide what is behind them.
-        mesh.material.depthWrite = opacity === 1;
-        mesh.material.needsUpdate = true;
-      }
+      for (const mesh of meshes) styleMesh(mesh, focused);
     });
     placeParty();
+  }
+
+  function styleMesh(mesh, focused) {
+    // Meshes specific to the types-only or the with-states rendering (see level-meshes.js).
+    const { variant, layer } = mesh.userData;
+    mesh.visible = (variant === 'all' || (variant === 'states') === showStates) && layerVisible(layer);
+    const opacity = mode === 'focus' && !focused ? FADED_OPACITY * mesh.userData.baseOpacity : mesh.userData.baseOpacity;
+    mesh.material.opacity = opacity;
+    mesh.material.transparent = opacity < 1;
+    // Faded levels must not hide what is behind them.
+    mesh.material.depthWrite = opacity === 1;
+    mesh.material.needsUpdate = true;
   }
 
   // Outline of the tile located from the inventory (one at a time).
@@ -451,6 +467,9 @@ export function createThreeRenderer(
     },
     updateTile(level) {
       rebuildLevel(level);
+    },
+    updateCreatures(level) {
+      rebuildCreatures(level);
     },
     /** Party of the simulation ({ level, x, y, facing }), or null to hide it. */
     setParty(next) {
