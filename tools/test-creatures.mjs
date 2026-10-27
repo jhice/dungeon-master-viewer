@@ -94,32 +94,36 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
   check(texts.some((text) => text.includes('REGRET')), `N3 : textes affichés : ${JSON.stringify(texts)}`);
 }
 
-// 4. A generator: the party steps on it, the group appears once the party has left.
+// 4. A generator: a party plate a few tiles away triggers it, its group appears at once
+// on the generator tile; then it rests, and a second press does nothing.
 {
   sim.reset();
-  const index = dungeon.data.actuators.findIndex((a) => a.generator && a.at.map === 3);
+  const index = dungeon.data.actuators.findIndex((a) => a.generator && a.at.map === 3 && a.at.x === 4 && a.at.y === 23);
   const a = dungeon.data.actuators[index];
   const { x, y } = a.at;
-  const side = Object.entries(SIDE_DELTAS).find(([, [dx, dy]]) => !blockReason(sim.state, 3, x - dx, y - dy));
+  const plate = dungeon.data.actuators.find((p) => p.target === 'remote' && p.at.map === 3 && p.remote.x === x && p.remote.y === y);
+  const { x: px, y: py } = plate.at;
+  const side = Object.entries(SIDE_DELTAS).find(([, [dx, dy]]) => !blockReason(sim.state, 3, px - dx, py - dy));
   const [facing, [dx, dy]] = side;
-  sim.teleport(3, x - dx, y - dy);
+  sim.teleport(3, px - dx, py - dy);
   while (sim.party.facing !== facing) sim.command('turnRight');
-  // Clear the way: no group on the generator tile.
   check(!sim.state.groupAt(3, x, y), `générateur (${x}, ${y}) niveau 3 : case libre`);
   let generated = null;
   const offGen = sim.on('creaturesMoved', (e) => e.generated && (generated = e.group));
   sim.command('forward');
-  check(sim.party.x === x && sim.party.y === y, 'le groupe est sur le générateur');
-  sim.tick(5);
-  check(!generated, 'rien n’apparaît tant que le groupe y est');
-  sim.command('back');
-  sim.tick(1);
-  offGen();
+  check(sim.party.x === px && sim.party.y === py, `le groupe est sur la plaque (${px}, ${py})`);
+  sim.tick(plate.delay + 1);
   check(
     generated && generated.type === a.data && generated.x === x && generated.y === y,
-    `apparu : ${generated && `${generated.members.length} × ${creatureInfo(generated.type).name}, PV ${generated.members.map((m) => m.hp)}`}`,
+    `apparu sans attendre : ${generated && `${generated.members.length} × ${creatureInfo(generated.type).name}, PV ${generated.members.map((m) => m.hp)}`}`,
   );
   check(sim.state.actuator(index).disabled, 'générateur au repos ensuite');
+  generated = null;
+  sim.command('back');
+  sim.command('forward');
+  sim.tick(plate.delay + 1);
+  offGen();
+  check(!generated, 'pendant le repos, la plaque ne produit rien');
 }
 
 // 5. Random walk on every level: no exception, invariants kept.

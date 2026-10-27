@@ -9,8 +9,9 @@
 //   teleporter  set = active, clear = inactive; the party on it is carried
 //   fakewall    set = vanished (open), clear = back
 //   wall        gates and counters of the wall; message (text) on the targeted face shown / hidden
-//   floor       texts of the tile shown / hidden (a message shown is printed: 'textShown')
-// Creature generators act on their own tile, through the hook `generate` (src/sim/creatures.js).
+//   floor       texts of the tile shown / hidden (a message shown is printed: 'textShown');
+//               creature generators of the tile create their group, whatever the effect,
+//               through the hook `generate` (src/sim/creatures.js)
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
@@ -23,7 +24,7 @@ const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
 const FLOOR_ANYTHING = 1; // TPCI: party, creatures, items
 const FLOOR_NO_ITEMS = 2; // TPC: party, creatures
 const FLOOR_ITEM = 4; // I: a given item lying on the tile
-const FLOOR_GENERATOR = 6; // creature generator, pressed by the party
+const FLOOR_GENERATOR = 6; // creature generator, triggered by another actuator (remote event)
 const FLOOR_POSSESSION = 8; // party carrying a given item
 const WALL_CLICK = 1; // any item / empty hand
 const WALL_CLICK_HOLDING = 2; // any item / no empty hand
@@ -39,7 +40,7 @@ const LOCAL_ROTATION = 1;
 const DOOR_HITS = { Wooden: 3, Porticullis: 6 };
 
 // Rest of a creature generator, in ticks: values above 127 count by 64 ticks
-// ((delay - 126) × 64), from ReDMCSB as remembered, to be checked (docs/021).
+// ((delay - 126) × 64), Encyclopaedia, "Dungeon Files" (docs/021).
 const generatorDelay = (delay) => (delay > 127 ? (delay - 126) * 64 : delay);
 
 // Retry delay (ticks) when a door or a fake wall cannot close on the party.
@@ -54,7 +55,7 @@ const RETRY = 1;
  * @param {() => object} hooks.party current party
  * @param {() => void} hooks.onOpenedUnderParty a pit opened or a teleporter was activated under the party
  * @param {(level, x, y) => void} hooks.onOpenedUnderGroup the same under a creature group
- * @param {(index: number) => void} hooks.generate a creature generator (actuator index) was pressed
+ * @param {(index: number) => void} hooks.generate a creature generator (actuator index) was triggered
  */
 export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty, onOpenedUnderGroup, generate }) {
   const actuatorData = (index) => dungeon.data.actuators[index];
@@ -126,7 +127,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       case 'wall':
         return wallEvent(level, x, y, cell, effect);
       default:
-        // Floor: messages. Creature generators are not simulated yet.
+        // Floor: messages and creature generators.
         return floorEvent(level, x, y, effect);
     }
   }
@@ -185,6 +186,11 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       emit('textChanged', { index: ref.index, visible, level, x, y, onWall: false });
       if (visible) emit('textShown', { index: ref.index, level, x, y });
     }
+    // A generator resting (or used, once only) ignores the event: it is lost.
+    for (const { index } of [...state.actuatorsAt(level, x, y)]) {
+      const a = actuatorData(index);
+      if (a.kind === 'floor' && a.type === FLOOR_GENERATOR) fire(index, true);
+    }
   }
 
   // AND/OR gate: the event sets, clears or toggles the bit of its cell; the gate is
@@ -238,9 +244,6 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
           break;
         case FLOOR_ITEM:
           on = items.some((item) => itemIdOf(dungeon, item) === a.data);
-          break;
-        case FLOOR_GENERATOR:
-          on = Boolean(here);
           break;
         case FLOOR_POSSESSION:
           on = Boolean(here) && [...state.inventory, state.hand].some((item) => item && itemIdOf(dungeon, item) === a.data);

@@ -89,13 +89,31 @@ Elle suit la même chaîne que pour les objets : chute par les trappes ouvertes 
 
 ### Générateurs (50 actuators au sol, type 6)
 
+> **Corrigé après les retours sur C1.** Au départ, le générateur se déclenchait quand le groupe de joueurs
+> marchait sur sa case, et la créature apparaissait quand il en sortait. C'était une hypothèse de ma part, et elle était fausse.
+
 | Étape | Règle | Origine |
 |---|---|---|
-| Déclenchement | Le groupe de joueurs entre sur la plaque | Connaissance du moteur |
+| Déclenchement | Le générateur est activé par **un autre actuator**, qui lui envoie une action à distance, quelle qu'elle soit. Il ne réagit pas au passage du groupe sur sa propre case | Encyclopaedia, *Dungeon Files* (« Activated by: Another sensor ») |
+| Dans ce donjon | 49 des 50 générateurs sont la cible d'une plaque **P** (groupe de joueurs seul), placée en général à quelques cases. La créature apparaît donc **dès qu'on marche sur la plaque**, après le délai de la plaque (1 tick le plus souvent). Le générateur restant, une Black Flame au niveau 12 (12, 10), n'est la cible d'aucun actuator et ne produit jamais rien | Données |
+| Emplacement | La case du générateur. Si elle est occupée (créature, ou groupe de joueurs), l'événement **attend** que la case se libère | Encyclopaedia, *Dungeon Files* |
 | Nombre | `count`, ou un tirage entre 1 et `count` si `isMax`. Limité par la taille de l'espèce | Données (008) |
 | PV de chaque membre | `multiplicateur × PV de base + aléa(PV de base / 4 + 1)`. Multiplicateur : `hpMultiplier`, ou à défaut la `difficulty` du niveau | Encyclopaedia, *Creature Generators*. Les PV des groupes posés dans `dungeon.json` le confirment : Magenta Worm du niveau 3 (difficulté 2) ≈ 2 × 70 |
-| Emplacement | La case du générateur. Comme le groupe de joueurs s'y trouve, la créature **apparaît quand il en part** | Connaissance du moteur (ReDMCSB), à vérifier |
-| Repos | Le générateur est ensuite désactivé pendant `delay`. Au-delà de 127, le délai compte par 64 ticks : `(delay − 126) × 64`, soit environ 3 min pour 145 | **Formule de mémoire (ReDMCSB), à vérifier** |
+| Repos | Le générateur est ensuite désactivé, puis réactivé au bout de `delay` ticks. Au-delà de 127, le délai compte par 64 ticks : `(delay − 126) × 64`, soit environ 3 min pour 145. Une action reçue pendant le repos est **perdue** | Encyclopaedia, *Dungeon Files* (le moteur change le capteur en type 0, puis un événement 65 le rétablit) |
+| Une seule fois | `onceOnly` : le générateur est désactivé définitivement. Aucun générateur de DM n'a ce drapeau | Encyclopaedia, *Dungeon Files*, et données |
+
+**Conditions pour générer :**
+- une action reçue d'un autre actuator ;
+- le générateur n'est pas au repos ;
+- la case du générateur est libre, sinon la création attend.
+
+**Hors du niveau du groupe :**
+- les plaques qui déclenchent les générateurs sont des plaques P, sur le même niveau. Un générateur ne se déclenche donc que là où se trouve le groupe ;
+- le temps de repos, lui, s'écoule partout. L'horloge est globale, comme la file d'événements de DM.
+
+> **Non repris, de mémoire (ReDMCSB, non vérifié) :** le moteur refuserait de générer quand le niveau compte déjà
+> trop de groupes actifs, ou quand le donjon n'a plus de place libre pour un groupe. Avec 50 générateurs au repos
+> d'au moins 2 minutes, ce cas ne devrait pas se présenter ici.
 
 ## 4. Vues
 
@@ -120,7 +138,7 @@ Les maillages des créatures sont construits par `buildLevelCreatures()` (`level
 | Niveau 2 pendant ce temps | Tous les groupes figés |
 | Groupe face à un Screamer | « Bloqué : créature ». `F` reste possible sur la case |
 | N3 (7, 5), la momie | Voir ci-dessous |
-| Générateur N3 (4, 23) | Rien n'apparaît tant que le groupe est sur la plaque. Il en sort : 2 Magenta Worms (PV 140 et 147), puis le générateur est au repos |
+| Générateur N3 (4, 23) | Le groupe marche sur la plaque (2, 27) : 2 Magenta Worms (PV 140 et 147) apparaissent aussitôt en (4, 23). Le générateur est ensuite au repos, et une seconde pression ne produit rien |
 | Marche aléatoire, 100 000 actions sur les 14 niveaux | Aucune exception, invariants tenus (un groupe par case, aucun dans un mur), 9,6 s |
 
 **La momie de N3 (7, 5) est enfermée.** Elle a un mur à l'est et au sud, un faux mur fermé à l'ouest (que sa propre plaque ouvre),
@@ -145,7 +163,7 @@ pour 123 000 ticks, contre environ 700 ms pour les créatures. Un oscillateur s'
 - Une créature qui **arrive sur une case occupée** à la suite d'une chute ou d'un téléporteur reste où elle est.
   Dans DM, d'autres règles s'appliquent, à voir en C2 et C3.
 - Le critère **Intelligence**, qui empêche une créature de prendre un téléporteur vers un niveau où son espèce n'est pas admise, n'est pas repris.
-- **À vérifier dans le jeu :** le délai d'errance, le repos des générateurs, les escaliers et les trappes pour les créatures.
+- **À vérifier dans le jeu :** le délai d'errance, les escaliers et les trappes pour les créatures, la limite du nombre de groupes par niveau.
 
 ## Sources
 
@@ -155,4 +173,6 @@ pour 123 000 ticks, contre environ 700 ms pour les créatures. Un oscillateur s'
   Formule des PV des créatures générées.
 - *Dungeon Master Encyclopaedia*, **Graphics.dat Item 559** : http://dmweb.free.fr/community/documentation/dungeon-master-and-chaos-strikes-back/graphics.dat-item-559/.
   Seules les créatures du niveau du groupe ont des « données étendues ».
-- **Connaissance du moteur, sans consultation de ReDMCSB** : escaliers et trappes pour les créatures, emplacement et repos des générateurs. À vérifier.
+- *Dungeon Master Encyclopaedia*, **Dungeon Files** : http://dmweb.free.fr/community/documentation/file-formats/dungeon-files/.
+  Capteur de type 6 (générateur) : déclenchement par un autre capteur, attente si la case est occupée, délai de repos, drapeau « une seule fois ».
+- **Connaissance du moteur, sans consultation de ReDMCSB** : escaliers et trappes pour les créatures, limite du nombre de groupes. À vérifier.

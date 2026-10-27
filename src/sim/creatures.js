@@ -4,8 +4,9 @@
 // - An active group wanders: every `moveTicks` (species) and a random extra, one step
 //   to a random neighbouring tile it may enter (rules.js), then falls and teleporters.
 // - One group per tile; a group never enters the party's tile.
-// - Generators create their group on their own tile; as the party stands on it,
-//   the group appears when the tile is free (as in DM).
+// - Generators, triggered by another actuator (a plate of the party, often a few tiles
+//   away), create their group on their own tile; if it is taken, the group appears as
+//   soon as it is free (as in DM: the event waits in the queue).
 // Randomness is seeded: a game replays the same way.
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
