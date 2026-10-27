@@ -119,6 +119,9 @@ A noter : les champions peuvent lancer un "cri de guerre" qui fait fuir certaine
 
 ### Phase C4 — Mort et butin
 
+> **Faite**, voir [025-creatures-phase-c4.md](025-creatures-phase-c4.md) : butin des espèces, Giggler voleur, peur et fuite après une mort.
+> C3b et C3c sont mises de côté en attendant le système de sorts du groupe.
+
 **Objectif :** les conséquences du combat.
 
 - **Mort d'un membre :** il disparaît de sa sous-case. À la mort du dernier, le groupe disparaît, et sa plaque éventuelle se relâche (`floorChange()`).

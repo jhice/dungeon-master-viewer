@@ -7,7 +7,9 @@
 // - items lie on tiles (floor: sub-tile position, wall: face), in the party's
 //   inventory, in its hand (the item held by the mouse cursor, apart from the inventory),
 //   or in the champion's two hands (docs/024);
-// - creature groups have a position, a facing and members (health), one group per tile.
+// - creature groups have a position, a facing and members (health), one group per tile;
+// - items created during the game (what a dead creature leaves, docs/025) are appended
+//   to the item pools of the loaded dungeon (in memory only), and removed on reset.
 
 import { ITEM_POOLS } from '../core/contents.js';
 
@@ -29,8 +31,11 @@ export function createState(dungeon) {
   let groups; // id -> { id, type, level, x, y, facing, members: [{ hp, position }], items, nextMove }
   let groupTiles; // "level:x,y" -> group
   let nextGroupId; // ids of generated groups follow those of dungeon.json
+  // Sizes of the item pools of dungeon.json: entries past them were created during the game.
+  const poolSizes = Object.fromEntries(Object.values(ITEM_POOLS).map((pool) => [pool, dungeon.data[pool].length]));
 
   function reset() {
+    for (const [pool, size] of Object.entries(poolSizes)) dungeon.data[pool].length = size;
     details = new Map();
     actuators = new Map();
     orders = new Map();
@@ -60,6 +65,7 @@ export function createState(dungeon) {
 
   function addGroup(group) {
     group.nextMove ??= null; // tick of the next move (src/sim/creatures.js), null = not scheduled
+    group.fleeUntil ??= 0; // tick until which it flees (src/sim/creatures.js)
     groups.set(group.id, group);
     groupTiles.set(`${group.level}:${group.x},${group.y}`, group);
     return group;
@@ -129,6 +135,15 @@ export function createState(dungeon) {
       groupTiles.delete(`${group.level}:${group.x},${group.y}`);
       Object.assign(group, { level, x, y, facing });
       groupTiles.set(`${level}:${x},${y}`, group);
+    },
+    /**
+     * Creates an item of a category (`kind`) and type, with its name: a new entry of its
+     * pool (no place: it is put somewhere by the caller). Returns its { kind, index }.
+     */
+    createItem(kind, type, name, { cursed = false } = {}) {
+      const pool = dungeon.data[ITEM_POOLS[kind]];
+      pool.push({ type, name, cursed, broken: false, important: false, created: true, at: null });
+      return { kind, index: pool.length - 1 };
     },
     /** Removes a group (killed). */
     removeGroup(group) {

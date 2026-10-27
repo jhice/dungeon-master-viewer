@@ -737,6 +737,8 @@ sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown }) => 
   else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
   else if (thrown) showInfo(result === 'hit' ? `${name} touché : ${damage} PV` : `${name} : sans dégâts`);
 });
+sim.on('itemStolen', ({ group, item }) => showInfo(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));
+sim.on('groupFled', ({ group, reason }) => reason === 'fear' && showInfo(`${describeGroup(dungeon, group).name} : le groupe prend peur et s’enfuit`));
 // Items in flight: redrawn in the first-person view once per frame.
 let projectileFrame = 0;
 sim.on('projectilesMoved', () => {

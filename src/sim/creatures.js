@@ -1,5 +1,5 @@
-// Creature groups (phases C1 to C3, docs/021 to 023): presence, movement, perception,
-// pursuit of the party and melee attacks.
+// Creature groups (phases C1 to C4, docs/021 to 025): presence, movement, perception,
+// pursuit of the party, melee attacks, death, fear and theft.
 // - Only the groups on the party's level are active, as in DM (the engine keeps
 //   "extended" data for them only); the others wait, frozen, for the party.
 // - An active group wanders: every `moveTicks` (species) and a random extra, one step
@@ -9,7 +9,11 @@
 //   it; with no way to it, or lost from sight once where it saw it last, it wanders.
 // - Next to the party and facing it, it attacks every `attackTicks` (hook `attack`).
 //   An immobile species (Black Flame) does not turn, and attacks whatever its facing.
-// - Killed (`kill()`): its possessions fall on its tile, its plate is released.
+// - A member killed (`kill()`) leaves the items of its species (creature-drops.js); the
+//   survivors may flee, by their fear resistance. The last one killed: the group's
+//   possessions fall on its tile too, its plate is released.
+// - A Giggler next to the party steals the item of a hand (hook `steal`), then flees.
+// - A fleeing group steps away from the party for a while; cornered, it fights.
 // - One group per tile; a group never enters the party's tile.
 // - Generators, triggered by another actuator (a plate of the party, often a few tiles
 //   away), create their group on their own tile; if it is taken, the group appears as
@@ -21,8 +25,12 @@ import { creatureInfo } from '../core/creature-info.js';
 import { creaturePassage, resolveCreatureArrival } from './rules.js';
 import { perceiveParty, facingTowards, stepTowards } from './perception.js';
 import { mulberry32 } from './random.js';
+import { creatureDrops } from '../core/creature-drops.js';
 
 const SEED = 0x0d4e0;
+const THIEF = 2; // Giggler: steals instead of attacking (hard-coded in DM)
+// Flight: at least this many ticks, plus as many at random (provisional, docs/025).
+const FLEE_TICKS = 60;
 // Members per tile by size (creature-info.js), and their sub-tiles (0..3 = NW, NE, SE, SW).
 const MAX_MEMBERS = [4, 2, 1];
 const POSITIONS = [[0, 1, 2, 3], [0, 2], [null]];
@@ -37,8 +45,10 @@ const POSITIONS = [[0, 1, 2, 3], [0, 2], [null]];
  * @param {() => object} hooks.party current party
  * @param {() => boolean} hooks.partyAlive false once the champion is dead: creatures ignore the party
  * @param {(group, info) => void} hooks.attack a group attacks the party (simulation.js)
+ * @param {(group, info) => object|null} hooks.steal a Giggler tries to steal an item of the champion
+ * Also emits 'groupFled' { group, reason: 'fear'|'theft' }.
  */
-export function createCreatures(dungeon, state, clock, logic, { emit, party, partyAlive, attack }) {
+export function createCreatures(dungeon, state, clock, logic, { emit, party, partyAlive, attack, steal }) {
   let random;
   let activeLevel; // level whose groups are active (the party's), null before the first update
   let pending; // generated groups waiting for their tile to be free: [{ group, level, x, y }]
@@ -101,6 +111,11 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
       }
       return IMMOBILE_CHECK;
     }
+    if (group.fleeUntil > clock.now) {
+      if (flee(group, info, p)) return info.moveTicks;
+      // Cornered: it fights if the party is next to it, else it waits.
+      if (!sense?.adjacent) return info.moveTicks;
+    }
     if (sense) {
       // Seen, or met (next to it): it remembers where the party stands.
       if (sense.seen || sense.adjacent) {
@@ -115,6 +130,14 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
       }
       // Next to it, smelled or heard: it turns to it; next to it and facing it, it attacks.
       const facing = facingTowards(group.x, group.y, p.x, p.y);
+      if (sense.adjacent && group.facing === facing && group.type === THIEF) {
+        const item = steal(group, info);
+        if (item) {
+          group.items.push(item);
+          scare(group, 'theft');
+        }
+        return info.attackTicks;
+      }
       if (sense.adjacent && group.facing === facing && info.attackType !== 'none') {
         attack(group, info);
         return info.attackTicks;
@@ -131,32 +154,65 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     return null;
   }
 
-  /** The party struck the group: it notices the party and acts at once (turns, attacks). */
+  /** The party struck the group: it notices the party and acts at once (turns, attacks), unless it flees. */
   function provoke(group) {
-    if (group.level !== activeLevel) return;
+    if (group.level !== activeLevel || group.fleeUntil > clock.now) return;
     const p = party();
     if (!group.target) emit('groupAlerted', { group, seen: true });
     group.target = { x: p.x, y: p.y };
     if (group.nextMove === null || group.nextMove > clock.now + 1) group.nextMove = clock.now + 1;
   }
 
+  // The group flees for a while (fear after a death, or a Giggler with its loot).
+  function scare(group, reason) {
+    group.fleeUntil = clock.now + FLEE_TICKS + randomInt(FLEE_TICKS);
+    group.target = null;
+    emit('groupFled', { group, reason });
+  }
+
+  // One step that takes the group farther from the party; false if none does.
+  function flee(group, info, p) {
+    const distance = (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y);
+    const here = distance(group.x, group.y);
+    const steps = FACINGS.map((facing) => {
+      const [dx, dy] = SIDE_DELTAS[facing];
+      return { level: group.level, x: group.x + dx, y: group.y + dy, facing };
+    })
+      .filter((s) => distance(s.x, s.y) > here && creaturePassage(state, info, s.level, s.x, s.y) && free(s.level, s.x, s.y))
+      .sort(() => random() - 0.5);
+    for (const step of steps) {
+      const to = resolveCreatureArrival(dungeon, state, info, step) ?? step;
+      if (to !== step && !free(to.level, to.x, to.y)) continue;
+      move(group, to, step);
+      return true;
+    }
+    return false;
+  }
+
   /**
-   * A member of the group dies (health at 0). The last one: the group vanishes, its
-   * possessions fall on its tile and its plate is released. Returns true if the group is gone.
+   * A member of the group dies (health at 0): the items of its species fall on its
+   * sub-tile, and the survivors may flee (fear resistance, 0..15: they flee if a draw
+   * from 0 to 14 reaches it; provisional). The last one: the group vanishes, its
+   * possessions fall too and its plate is released. Returns true if the group is gone.
    */
   function kill(group, member) {
     group.members = group.members.filter((m) => m !== member);
     const at = { level: group.level, x: group.x, y: group.y, facing: group.facing };
+    const position = () => member.position ?? randomInt(4);
+    const items = creatureDrops(group.type, random).map(({ kind, type, name, cursed }) => ({
+      ...state.createItem(kind, type, name, { cursed }),
+      position: position(),
+    }));
     if (group.members.length) {
+      if (items.length) logic.itemsDropped(at.level, at.x, at.y, items);
       emit('creaturesMoved', { group, from: at, to: at, killed: true });
+      if (group.fleeUntil <= clock.now && randomInt(15) >= creatureInfo(group.type).fear) scare(group, 'fear');
       return false;
     }
     logic.groupVanished(group, () => state.removeGroup(group));
-    if (group.items.length) {
-      const items = group.items.map((ref) => ({ kind: ref.kind, index: ref.index, position: member.position ?? randomInt(4) }));
-      group.items = [];
-      logic.itemsDropped(at.level, at.x, at.y, items);
-    }
+    items.push(...group.items.map((ref) => ({ kind: ref.kind, index: ref.index, position: position() })));
+    group.items = [];
+    if (items.length) logic.itemsDropped(at.level, at.x, at.y, items);
     emit('creaturesMoved', { group, from: at, to: null, killed: true });
     return true;
   }

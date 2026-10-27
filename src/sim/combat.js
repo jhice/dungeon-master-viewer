@@ -42,13 +42,16 @@ export function championStrikes(champion, info, action, random, weaponStrength =
   return damage > 0 ? { result: 'hit', damage } : { result: 'miss', damage: 0 };
 }
 
+/** Whether a creature of species `info` reaches the champion (an attack, a theft): dexterity test or 1/4. */
+export const creatureReaches = (champion, info, random) =>
+  randomInt(random, info.dexterity + champion.dexterity + 1) >= champion.dexterity || randomInt(random, 4) === 0;
+
 /**
  * A creature of species `info` attacks the champion.
  * @returns {{ result: 'miss'|'hit', damage: number }}
  */
 export function creatureStrikes(champion, info, random) {
-  const hits = randomInt(random, info.dexterity + champion.dexterity + 1) >= champion.dexterity || randomInt(random, 4) === 0;
-  if (!hits) return { result: 'miss', damage: 0 };
+  if (!creatureReaches(champion, info, random)) return { result: 'miss', damage: 0 };
   // A quarter of the attack plus a random quarter, minus a part of the defending statistic.
   const quarter = info.attack >> 2;
   const defence = champion[DEFENCE_STAT[info.attackType]] ?? 0;

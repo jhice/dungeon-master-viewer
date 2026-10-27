@@ -11,7 +11,7 @@ import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
 import { createChampion, championMirror, regenerate } from './champion.js';
-import { ACTIONS, championStrikes, creatureStrikes, projectileStrikes } from './combat.js';
+import { ACTIONS, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
 import { createProjectiles } from './projectiles.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
@@ -45,6 +45,7 @@ export function createSimulation(dungeon) {
     party: () => party,
     partyAlive: () => !champion.dead,
     attack: creatureAttacks,
+    steal: creatureSteals,
   });
 
   const projectiles = createProjectiles(state, {
@@ -110,6 +111,23 @@ export function createSimulation(dungeon) {
     if (!item) return ['hit'];
     const info = itemInfo(dungeon, item);
     return [...(info.throwable ? ['throw'] : []), ...(info.melee ? ['hit'] : [])];
+  }
+
+  /**
+   * A Giggler next to the champion tries to steal the item of a hand: the action hand
+   * 7 times out of 8, the ready hand otherwise (DM for PC and Amiga 3.6, "Dungeon Master
+   * Creatures"). It needs to reach him (same test as an attack, provisional) and the
+   * hand must hold something. Returns the item stolen, or null.
+   */
+  function creatureSteals(group, info) {
+    if (champion.dead) return null;
+    const hand = random() < 7 / 8 ? 1 : 0;
+    const item = state.hands[hand];
+    if (!item || !creatureReaches(champion, info, random)) return null;
+    state.hands[hand] = null;
+    events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
+    events.emit('itemStolen', { group, item, hand });
+    return item;
   }
 
   /**

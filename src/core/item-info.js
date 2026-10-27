@@ -35,6 +35,7 @@ const WEAPONS = [
   [21, 4.1, 42, 13, 'Swing:16 Bash:50 Stun:16'], // Mace Of Order
   [22, 5.0, 60, 15, 'Swing:16 Stun:16 Melee:60'], // Morningstar
   [23, 3.6, 19, 10, 'Throw:0 Bash:50'], // Club
+  [24, 11.0, 44, 22, 'Throw:0 Bash:50'], // Stone Club (dropped by Stone Golems)
   [25, 1.0, 1, 50, 'Shoot:0'], // Bow
   [26, 2.8, 1, 180, 'Shoot:0'], // Crossbow
   [27, 0.2, 2, 10, 'Throw:0 Stab:48'], // Arrow
@@ -164,6 +165,7 @@ const WEIGHTS = {
   [31, 0.3], // Bread
   [32, 0.8], // Cheese
   [33, 0.5], // Screamer Slice
+  [34, 1.1], // Worm Round (dropped by Magenta Worms)
   [35, 0.4], // Drumstick
   [36, 0.6], // Dragon Steak
   [37, 0.2], // Gem Of Ages
