@@ -26,8 +26,8 @@ const FLOOR_GAP = 0.003;
 // Alcove: niche bottom / top, as fractions of the wall height (items on a wall stand
 // at 35 % of its height, see level-contents.js).
 const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 };
-const DOOR_THICKNESS = 0.12;
-const RAISED_DOOR_VISIBLE = 0.25; // part of an open door still in the doorway, as in level-meshes.js
+const DOOR_THICKNESS = 0.03;
+const RAISED_DOOR_VISIBLE = 0.15; // part of an open door still in the doorway, as in level-meshes.js
 const TEXTURE_SIZE = 256;
 
 /**
