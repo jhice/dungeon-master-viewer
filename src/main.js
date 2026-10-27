@@ -394,6 +394,13 @@ function panelSchema() {
         { label: '▲ Haut', title: 'Niveau précédent (↑)', action: () => go(-1), disabled: () => renderer.currentLevel === 0 },
         { label: '▼ Bas', title: 'Niveau suivant (↓)', action: () => go(+1), disabled: () => renderer.currentLevel === dungeon.levelCount - 1 },
         { label: '▶ Jeu', title: 'Ouvrir / fermer la simulation (P)', action: () => (game ? closeGame() : openGame()) },
+        {
+          type: 'select',
+          title: 'Aller directement à un niveau',
+          options: dungeon.levels.map((_, i) => ({ value: i, label: `Niveau ${i}` })),
+          value: () => renderer.currentLevel,
+          onChange: (value) => showLevel(Number(value)),
+        },
       ],
     },
   ];

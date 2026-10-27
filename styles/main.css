@@ -189,7 +189,8 @@ body {
   grid-template-columns: 1fr 1fr;
 }
 
-.control-buttons button {
+.control-buttons button,
+.control-buttons select {
   padding: 0.3rem 0.5rem;
   border: 1px solid #555;
   border-radius: 4px;
@@ -199,7 +200,8 @@ body {
   cursor: pointer;
 }
 
-.control-buttons button:hover:not(:disabled) {
+.control-buttons button:hover:not(:disabled),
+.control-buttons select:hover {
   border-color: var(--accent);
 }
 

@@ -3,7 +3,8 @@
 // active renderer's own settings (`renderer.settingsSchema`).
 //
 // Schema items:
-//   { type: 'buttons', items: [{ label, title?, action(), disabled?() }] }
+//   { type: 'buttons', items: [{ label, title?, action(), disabled?() }
+//                              | { type: 'select', title?, options: [{ value, label }], value(), onChange(value) }] }
 //   { type: 'checkbox', key, label, shortcut? }
 //   { type: 'range', key, label, min, max, step, format?(v) }
 
@@ -28,12 +29,25 @@ export function createControlPanel(container, schema, values, onChange, { open =
 
   const setters = {}; // key -> (value) => void, to reflect changes made elsewhere (keyboard)
   const buttons = []; // [{ element, disabled }] re-evaluated by refresh()
+  const selects = []; // [{ element, value }] re-synchronised by refresh()
 
   for (const field of schema) {
     if (field.type === 'buttons') {
       const row = document.createElement('div');
       row.className = 'control-row control-buttons';
       for (const item of field.items) {
+        if (item.type === 'select') {
+          const select = document.createElement('select');
+          if (item.title) select.title = item.title;
+          for (const { value, label } of item.options) select.add(new Option(label, value));
+          select.addEventListener('change', () => {
+            item.onChange(select.value);
+            select.blur(); // keep the keyboard for the viewer
+          });
+          row.append(select);
+          selects.push({ element: select, value: item.value });
+          continue;
+        }
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = item.label;
@@ -90,14 +104,15 @@ export function createControlPanel(container, schema, values, onChange, { open =
     panel.append(row);
   }
 
-  // Arrows on a focused slider move it instead of changing level.
+  // Arrows on a focused slider or list move it instead of changing level.
   panel.addEventListener('keydown', (event) => {
-    if (event.target.matches('input[type=range]')) event.stopPropagation();
+    if (event.target.matches('input[type=range], select')) event.stopPropagation();
   });
   container.append(panel);
 
   const refresh = () => {
     for (const { element, disabled } of buttons) element.disabled = Boolean(disabled?.());
+    for (const { element, value } of selects) element.value = String(value());
   };
   refresh();
 
