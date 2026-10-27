@@ -41,9 +41,11 @@ const CEILING_COLOR = '#696660';
  * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
  * @param {(spot: object) => void} [options.onClickFloor] a floor sub-tile was clicked: { level, x, y, position, item? }
  * @param {(spot: object) => boolean} [options.canReach] is this floor spot within reach (pointer cursor)?
+ * @param {(target: object|null) => string|null} [options.labelOf] text shown next to the pointer for what it
+ *   designates ({ kind: 'front' } or { kind: 'floor', spot }, or null): the item in hand, the item pointed at…
  * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (items lying there now)
  */
-export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickFloor, canReach, contentsAt } = {}) {
+export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickFloor, canReach, labelOf, contentsAt } = {}) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -186,6 +188,10 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     if (t?.kind === 'floor') onClickFloor?.(t.spot);
     else if (t?.kind === 'front') onClickFront?.();
   };
+  const tooltip = document.createElement('div');
+  tooltip.className = 'fp-tooltip';
+  tooltip.hidden = true;
+  container.append(tooltip);
   let hoverPending = false;
   const onMove = (event) => {
     if (hoverPending) return;
@@ -195,7 +201,17 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       const t = target(event);
       const active = t?.kind === 'front' || (t?.kind === 'floor' && canReach?.(t.spot));
       renderer.domElement.style.cursor = handCursor ?? (active ? 'pointer' : '');
+      const label = labelOf?.(t) ?? null;
+      tooltip.hidden = !label;
+      if (!label) return;
+      const rect = container.getBoundingClientRect();
+      tooltip.textContent = label;
+      tooltip.style.left = `${event.clientX - rect.left + 16}px`;
+      tooltip.style.top = `${event.clientY - rect.top + 14}px`;
     });
+  };
+  const onLeave = () => {
+    tooltip.hidden = true;
   };
   // Item in hand: a square of its colour replaces the cursor.
   let handCursor = null;
@@ -210,6 +226,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   }
   renderer.domElement.addEventListener('click', onClick);
   renderer.domElement.addEventListener('pointermove', onMove);
+  renderer.domElement.addEventListener('pointerleave', onLeave);
 
   let party = null;
   return {
@@ -232,6 +249,8 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('click', onClick);
       renderer.domElement.removeEventListener('pointermove', onMove);
+      renderer.domElement.removeEventListener('pointerleave', onLeave);
+      tooltip.remove();
       clear();
       decor.dispose();
       for (const texture of Object.values(textures)) texture.dispose();

@@ -4,7 +4,8 @@
 // - actuators get a runtime record (disabled after a once-only use, counter
 //   value, gate bits) and each tile its own order of actuators (rotations);
 // - texts get their current visibility (messages shown by a mechanism);
-// - items lie on tiles (floor: sub-tile position, wall: face) or in the party's inventory.
+// - items lie on tiles (floor: sub-tile position, wall: face), in the party's
+//   inventory, or in its hand (one item, apart from the inventory).
 
 import { ITEM_POOLS } from '../core/contents.js';
 
@@ -20,6 +21,8 @@ export function createState(dungeon) {
   let textVisibility; // text index -> visible
   let items; // "level:x,y" -> [{ kind, index, position }] items lying on the tile, bottom first
   let inventory; // [{ kind, index }] items carried by the party
+  let hand; // { kind, index } held in hand, or null
+  let emptiedChests; // container indexes whose contents went into the inventory
 
   function reset() {
     details = new Map();
@@ -28,6 +31,8 @@ export function createState(dungeon) {
     textVisibility = new Map();
     items = new Map();
     inventory = [];
+    hand = null;
+    emptiedChests = new Set();
     for (let level = 0; level < dungeon.levelCount; level++) {
       for (const { x, y, detail } of dungeon.detailedTiles(level)) {
         if (MUTABLE_TYPES.has(detail.type)) details.set(`${level}:${x},${y}`, structuredClone(detail));
@@ -73,6 +78,17 @@ export function createState(dungeon) {
     /** Items carried by the party: [{ kind, index }] (mutable). */
     get inventory() {
       return inventory;
+    },
+    /** Item held in hand ({ kind, index }) or null. */
+    get hand() {
+      return hand;
+    },
+    set hand(item) {
+      hand = item;
+    },
+    /** Chests already stowed with their contents (Set of container indexes, mutable). */
+    get emptiedChests() {
+      return emptiedChests;
     },
     textVisible(index) {
       return textVisibility.get(index) ?? dungeon.data.texts[index].visible;

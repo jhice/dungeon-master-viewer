@@ -521,8 +521,9 @@ async function openGame() {
     },
     onClose: closeGame,
     onReset: () => sim.reset(),
-    // Inventory: a click takes the item in hand, or puts it back.
-    onSelectItem: (i) => sim.setHand(sim.hand === sim.inventory[i] ? null : sim.inventory[i]),
+    // Inventory: a click takes the item in hand (the one held goes back); "Ranger" stows the hand.
+    onSelectItem: (i) => sim.takeFromInventory(i),
+    onStow: () => sim.stow(),
   });
   try {
     const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
@@ -530,6 +531,8 @@ async function openGame() {
       onClickFront: clickFront,
       onClickFloor: clickFloor,
       canReach: ({ level, x, y, position, item }) => sim.reachable(level, x, y, position) && Boolean(item || sim.hand),
+      // Next to the pointer: the item in hand, or else the item pointed at.
+      labelOf: (t) => (sim.hand ? itemName(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
       contentsAt,
     });
     game = { window: win, view };
@@ -575,14 +578,18 @@ async function teleportToSelection() {
 
 // Click on the wall or door in front of the party (mouse in the view, or Space).
 function clickFront() {
-  const { target, fired, took, placed } = sim.clickFront();
-  if (took) showInfo(`${took} objet(s) pris`);
-  else if (placed) showInfo('Objet posé dans l’alcôve');
+  const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
+  if (broken) {
+    showInfo('La porte vole en éclats');
+    game?.window.flash();
+  } else if (hits) showInfo(`Coup sur la porte (${hits}/${needed})`);
+  else if (took) showInfo(`Pris : ${itemName(sim.hand)}`);
+  else if (placed) showInfo('Objet posé');
   else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
 // Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
-// ones of the tile in front): the item in hand is dropped there, or the item clicked is picked up.
+// ones of the tile in front): the item in hand is put there, or the item clicked comes in hand.
 function clickFloor({ level, x, y, position, item }) {
   if (sim.hand) {
     if (!sim.drop(level, x, y, position)) showInfo('Hors de portée');
@@ -598,10 +605,12 @@ function contentsAt(level, x, y) {
 }
 
 function showInventory() {
+  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind] };
   game?.window.setInventory(
-    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind], inHand: ref === sim.hand })),
+    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind] })),
+    hand,
   );
-  game?.view.setHandCursor(sim.hand ? CATEGORY_COLORS[sim.hand.kind] : null);
+  game?.view.setHandCursor(hand?.color ?? null);
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
@@ -646,11 +655,7 @@ sim.on('itemsChanged', ({ level, x, y }) => {
   game?.view.updateTile(level);
   renderer?.updateTile?.(level, x, y);
 });
-sim.on('inventoryChanged', () => {
-  showInventory();
-  const hand = sim.hand;
-  if (hand) showInfo(`En main : ${itemName(hand)}`);
-});
+sim.on('inventoryChanged', () => showInventory());
 
 // A rotation changed the ornament shown on a wall face (lever, torch holder, alcove revealed).
 sim.on('ornamentChanged', ({ level }) => game?.view.updateTile(level));
@@ -666,7 +671,7 @@ sim.on('tileChanged', ({ level, x, y, type, detail }) => {
   game?.view.updateTile(level);
   renderer?.updateTile?.(level, x, y);
   const [name, open, closed] = STATE_WORDS[type];
-  showInfo(`${name} (${x}, ${y}) niveau ${level} : ${detail.open ? open : closed}`);
+  showInfo(`${name} (${x}, ${y}) niveau ${level} : ${detail.broken ? 'cassée' : detail.open ? open : closed}`);
 });
 // Messages: a text on a wall appears (or vanishes) on its face; a text on the floor is printed.
 sim.on('textChanged', ({ level, onWall }) => {

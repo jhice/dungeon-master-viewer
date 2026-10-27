@@ -4,13 +4,14 @@
 // - alcoves: a dark niche with a sill;
 // - inscriptions and messages shown: engraved letters;
 // - floor ornaments: a decal on the floor (pressure pads, moss…);
-// - doors: one leaf per door, with the texture of its type, its ornament and its button.
+// - doors: one leaf per door, with the texture of its type, its ornament and its button
+//   (a broken door: the leaf with a jagged hole, in place).
 // Units as in level-meshes.js, in the local coordinates of the level (tile (x, y)
 // spans [x, x+1]). Textures are cached by name for the life of the view.
 
 import * as THREE from 'three';
 import { shownOrnament, shownFloorOrnament, isAlcove, doorLook } from '../../core/ornaments.js';
-import { WALL_ART, FLOOR_ART, DOOR_TYPES, DOOR_ART, doorButton } from './ornament-art.js';
+import { WALL_ART, FLOOR_ART, DOOR_TYPES, DOOR_ART, doorButton, brokenDoor } from './ornament-art.js';
 
 // Plane position and rotation per face (N, E, S, W): offset from the tile centre, rotation around y.
 const FACE_PLANES = [
@@ -119,16 +120,18 @@ export function createDecor(dungeon, state, wallHeight) {
   function door(level, x, y, tile, map) {
     const look = doorLook(dungeon, level, x, y);
     if (!look) return null;
-    const key = `door:${look.type}|${look.ornament}|${look.button}`;
+    const broken = Boolean(tile.detail.broken);
+    const key = `door:${look.type}|${look.ornament}|${look.button}|${broken}`;
     const leaf = texture(key, TEXTURE_SIZE, Math.round(TEXTURE_SIZE * wallHeight), (g, w, h) => {
       (DOOR_TYPES[look.type] ?? DOOR_TYPES.Wooden)(g, w, h);
       DOOR_ART[look.ornament]?.(g, w, h);
       if (look.button) doorButton(g, w, h);
+      if (broken) brokenDoor(g, w, h);
     });
     const material = new THREE.MeshLambertMaterial({ map: leaf, alphaTest: 0.5, side: THREE.DoubleSide });
     const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, wallHeight, DOOR_THICKNESS), material, 1);
     // Raised like a portcullis when open: only its lower edge stays in the doorway.
-    const bottom = tile.detail.open ? wallHeight * (1 - RAISED_DOOR_VISIBLE) : 0;
+    const bottom = tile.detail.open && !broken ? wallHeight * (1 - RAISED_DOOR_VISIBLE) : 0;
     const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), tile.detail.orientation === 'NS' ? 0 : Math.PI / 2);
     mesh.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x + 0.5, bottom + wallHeight / 2, y + 0.5), rotation, new THREE.Vector3(1, 1, 1)));
     mesh.computeBoundingSphere();

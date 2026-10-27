@@ -45,7 +45,8 @@ Analyser le fichier XML en se concentrant d'abord sur
 - les docs à lire en priorité, 009 (logique) et 002 (format JSON).
 - toutes les docs se trouevnt dans le dossier `docs/`
 - la simulation (phases A à E faites, voir docs 013 à 017) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/` ;
-- les décors (murs, sols, portes) de la vue à la première personne, dessinés dans `ornament-art.js` (doc 018)
+- les décors (murs, sols, portes) de la vue à la première personne, dessinés dans `ornament-art.js` (doc 018) ;
+- main et inventaire, coffres, portes cassables (doc 019)
 
 ## Simulation
 

@@ -31,6 +31,10 @@ const WALL_GATE = 5;
 const WALL_COUNTER = 6;
 const WALL_ITEM_HOLDER = 13; // "item storage": torch holder
 const LOCAL_ROTATION = 1;
+// Hits with a weapon in hand to break a breakable door ("force"), by door type. In DM,
+// each hit compares the attack (champion, weapon, chance) to the defence of the door
+// type, without adding up; the party being abstract, a fixed count stands for it.
+const DOOR_HITS = { Wooden: 3, Porticullis: 6 };
 
 // Retry delay (ticks) when a door or a fake wall cannot close on the party.
 const RETRY = 1;
@@ -107,6 +111,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
 
   function setOpen(level, x, y, tile, effect, source) {
     const detail = tile.detail;
+    if (detail.broken) return; // a broken door stays open
     const open = effect === 'toggle' ? !detail.open : effect === 'set';
     if (open === detail.open) return;
     // A door or a wall does not close on the party: try again a bit later.
@@ -210,7 +215,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
           on = items.some((item) => itemIdOf(dungeon, item) === a.data);
           break;
         case FLOOR_POSSESSION:
-          on = Boolean(here) && state.inventory.some((item) => itemIdOf(dungeon, item) === a.data);
+          on = Boolean(here) && [...state.inventory, state.hand].some((item) => item && itemIdOf(dungeon, item) === a.data);
           break;
         default:
           continue; // creatures only, generators: no creatures yet
@@ -232,36 +237,71 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     clock.flush();
   }
 
-  // --- Items: inventory, floor, alcoves ---------------------------------------------------
+  // --- Items: hand, inventory, floor, alcoves ----------------------------------------------
+  // The hand (state.hand) holds one item, apart from the inventory, as the mouse
+  // pointer of DM: items are picked up into the hand, put down from it, and stowed
+  // into the inventory with stow().
   const sameItem = (a, b) => a.kind === b.kind && a.index === b.index;
   const changedItems = (level, x, y) => emit('itemsChanged', { level, x, y });
-  const changedInventory = () => emit('inventoryChanged', { inventory: state.inventory });
+  const changedInventory = () => emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
 
-  /** Picks up an item lying on a floor tile (reach is checked by the simulation). */
+  /** Picks up an item lying on a floor tile into the empty hand (reach is checked by the simulation). */
   function pickUp(p, level, x, y, ref) {
     const lying = state.itemsAt(level, x, y);
     const i = lying.findIndex((item) => sameItem(item, ref));
-    if (i < 0) return false;
+    if (i < 0 || state.hand) return false;
     floorChange(level, x, y, p, p, () => {
       const [item] = lying.splice(i, 1);
-      state.inventory.push({ kind: item.kind, index: item.index });
+      state.hand = { kind: item.kind, index: item.index };
     });
     changedItems(level, x, y);
     changedInventory();
     return true;
   }
 
-  /** Drops a carried item on a sub-tile (0..3 = NW, NE, SE, SW) of a floor tile; it may fall or be carried away. */
-  function drop(p, item, level, x, y, position) {
-    const i = state.inventory.findIndex((carried) => sameItem(carried, item));
-    if (i < 0) return false;
+  /** Puts the item in hand on a sub-tile (0..3 = NW, NE, SE, SW) of a floor tile; it may fall or be carried away. */
+  function drop(p, level, x, y, position) {
+    const item = state.hand;
+    if (!item) return false;
     floorChange(level, x, y, p, p, () => {
-      state.inventory.splice(i, 1);
+      state.hand = null;
       state.itemsAt(level, x, y).push({ kind: item.kind, index: item.index, position });
     });
     changedItems(level, x, y);
     changedInventory();
     settleItems(level, x, y);
+    return true;
+  }
+
+  /**
+   * Stows the item in hand into the inventory. A chest is stowed with its contents,
+   * which become items of the inventory (chests cannot be opened yet).
+   */
+  function stow(p) {
+    const item = state.hand;
+    if (!item) return false;
+    floorChange(p.level, p.x, p.y, p, p, () => {
+      state.hand = null;
+      state.inventory.push(item);
+      if (item.kind === 'container' && !state.emptiedChests.has(item.index)) {
+        state.emptiedChests.add(item.index);
+        for (const content of dungeon.data.containers[item.index].items ?? []) state.inventory.push({ kind: content.kind, index: content.index });
+      }
+    });
+    changedInventory();
+    return true;
+  }
+
+  /** Takes an item of the inventory in hand; the item held before goes back into the inventory. */
+  function takeFromInventory(p, i) {
+    const item = state.inventory[i];
+    if (!item) return false;
+    floorChange(p.level, p.x, p.y, p, p, () => {
+      state.inventory.splice(i, 1);
+      if (state.hand) state.inventory.push(state.hand);
+      state.hand = item;
+    });
+    changedInventory();
     return true;
   }
 
@@ -280,17 +320,17 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     emit('itemsMoved', { from: { level, x, y }, to, items: moving });
   }
 
-  // Moves an item between the inventory and a wall face (alcove, torch holder).
-  function intoWall(level, x, y, face, item) {
-    state.inventory.splice(state.inventory.indexOf(item), 1);
-    state.itemsAt(level, x, y).push({ kind: item.kind, index: item.index, position: face });
+  // Moves the item in hand to a wall face (alcove, torch holder), or an item of a face into the hand.
+  function intoWall(level, x, y, face) {
+    state.itemsAt(level, x, y).push({ kind: state.hand.kind, index: state.hand.index, position: face });
+    state.hand = null;
     changedItems(level, x, y);
     changedInventory();
   }
   function outOfWall(level, x, y, item) {
     const lying = state.itemsAt(level, x, y);
     lying.splice(lying.indexOf(item), 1);
-    state.inventory.push({ kind: item.kind, index: item.index });
+    state.hand = { kind: item.kind, index: item.index };
     changedItems(level, x, y);
     changedInventory();
   }
@@ -298,15 +338,14 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   // --- Wall click: the face in front of the party ---------------------------------------
   /**
    * Actuators of the face first (buttons, levers, locks, item holders); then, if the
-   * face shows an alcove, an item still in hand goes into it, or else its items are taken.
-   * Locks and "specific item" actuators need the item **in hand**; a lock
-   * ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
+   * face shows an alcove, the item in hand goes into it, or else its top item comes
+   * into the empty hand. Locks and "specific item" actuators need the item in hand;
+   * a lock ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
    * takes the item it expects from the hand, or gives it back to an empty hand.
    * @param {object} p party
-   * @param {object|null} hand item in hand ({ kind, index }), null = empty hand
-   * @returns {{ target: string, fired: number, took?: number, placed?: boolean }}
+   * @returns {{ target: string, fired: number, took?: number, placed?: boolean, hits?: number, broken?: boolean }}
    */
-  function clickFront(p, hand = null) {
+  function clickFront(p) {
     const [dx, dy] = SIDE_DELTAS[p.facing];
     const x = p.x + dx;
     const y = p.y + dy;
@@ -318,8 +357,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     // As shown before this click: a button revealing an alcove does not hand over its items at once.
     const alcove = isAlcove(dungeon, p.level, x, y, face, state.actuatorsAt);
     const lying = state.itemsAt(p.level, x, y);
-    const matches = (item, a) => item !== null && itemIdOf(dungeon, item) === a.data;
-    let held = hand && state.inventory.includes(hand) ? hand : null;
+    const matches = (item, a) => Boolean(item) && itemIdOf(dungeon, item) === a.data;
     let placed = false;
     let took = 0;
     firedCount = 0;
@@ -328,26 +366,24 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       const a = actuatorData(index);
       let condition;
       if (a.type === WALL_CLICK) condition = true;
-      else if (a.type === WALL_CLICK_HOLDING) condition = held !== null;
-      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) condition = matches(held, a);
+      else if (a.type === WALL_CLICK_HOLDING) condition = state.hand !== null;
+      else if (a.type === WALL_SPECIFIC_ITEM || a.type === WALL_LOCK) condition = matches(state.hand, a);
       else if (a.type === WALL_ITEM_HOLDER) {
         const stored = lying.find((item) => item.position === face && matches(item, a));
-        condition = stored ? held === null : matches(held, a);
+        condition = stored ? state.hand === null : matches(state.hand, a);
         if (condition && !state.actuator(index).disabled) {
           if (stored) {
             outOfWall(p.level, x, y, stored);
             took++;
           } else {
-            intoWall(p.level, x, y, face, held);
-            held = null;
+            intoWall(p.level, x, y, face);
             placed = true;
           }
         }
       } else continue; // exchanger, portraits, shooters, gates: not clickable here
       const triggered = condition !== a.revert;
-      if (a.type === WALL_LOCK && held && triggered && !state.actuator(index).disabled) {
-        state.inventory.splice(state.inventory.indexOf(held), 1); // the lock keeps the key
-        held = null;
+      if (a.type === WALL_LOCK && state.hand && triggered && !state.actuator(index).disabled) {
+        state.hand = null; // the lock keeps the key
         changedInventory();
       }
       fire(index, triggered);
@@ -357,21 +393,32 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (placed || took) return { target: 'wall', fired, placed, took };
 
     if (!alcove) return { target: 'wall', fired, took: 0 }; // items behind a mirror, a button…: out of reach
-    if (held) {
-      intoWall(p.level, x, y, face, held);
+    if (state.hand) {
+      intoWall(p.level, x, y, face);
       return { target: 'wall', fired, placed: true };
     }
-    for (const item of lying.filter((i) => i.position === face)) {
-      outOfWall(p.level, x, y, item);
-      took++;
-    }
-    return { target: 'wall', fired, took };
+    const top = lying.filter((i) => i.position === face).at(-1);
+    if (top) outOfWall(p.level, x, y, top);
+    return { target: 'wall', fired, took: top ? 1 : 0 };
   }
 
-  // Door with a button: a click toggles it.
+  // Door: a click on its button toggles it; a closed breakable door ("force") is hit
+  // with the weapon in hand, and breaks after DOOR_HITS hits (see the constant).
   function clickDoor(level, x, y, tile) {
     const ref = tile.detail.items?.find((item) => item.kind === 'door');
-    if (!ref || !dungeon.data.doors[ref.index].button) return { target: 'door', fired: 0 };
+    const door = ref && dungeon.data.doors[ref.index];
+    if (!door) return { target: 'door', fired: 0 };
+    if (door.force && !tile.detail.open && state.hand?.kind === 'weapon') {
+      const needed = DOOR_HITS[dungeon.level(level).doorTypes[door.type]] ?? Infinity;
+      tile.detail.hits = (tile.detail.hits ?? 0) + 1;
+      if (tile.detail.hits < needed) return { target: 'door', fired: 0, hits: tile.detail.hits, needed };
+      // Broken: open for good, mechanisms no longer close it.
+      tile.detail.broken = true;
+      tile.detail.open = true;
+      emit('tileChanged', { level, x, y, type: 'door', detail: tile.detail, source: null });
+      return { target: 'door', fired: 0, hits: tile.detail.hits, needed, broken: true };
+    }
+    if (!door.button) return { target: 'door', fired: 0 };
     setOpen(level, x, y, tile, 'toggle', null);
     return { target: 'door', fired: 1 };
   }
@@ -395,5 +442,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     clickFront,
     pickUp,
     drop,
+    stow,
+    takeFromInventory,
   };
 }

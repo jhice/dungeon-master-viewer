@@ -544,3 +544,25 @@ export function doorButton(g, W, H) {
   plate(g, W * 0.86, H * 0.44, W * 0.1, H * 0.1, IRON_DARK);
   disc(g, W * 0.91, H * 0.49, W * 0.03, '#b8392d', '#2a0a08', 2);
 }
+
+// Broken door: a large hole with jagged edges, splinters left on the sides and at the
+// top (the leaf drawn before is cut out; transparent pixels are seen through).
+export function brokenDoor(g, W, H) {
+  const rand = random(13);
+  const left = [];
+  const right = [];
+  for (let i = 0; i <= 10; i++) {
+    const y = H * (0.08 + (0.92 * i) / 10);
+    left.push([W * (0.1 + rand() * 0.14), y]);
+    right.push([W * (0.76 + rand() * 0.14), y]);
+  }
+  const top = [];
+  for (let i = 1; i < 6; i++) top.push([W * (0.2 + i * 0.1), H * (0.02 + rand() * 0.1)]);
+  const hole = [...left, [W * 0.24, H + 2], [W * 0.76, H + 2], ...right.reverse(), ...top.reverse()];
+  g.save();
+  g.globalCompositeOperation = 'destination-out';
+  path(g, hole, null, 0, true, '#000');
+  g.restore();
+  // Dark broken edge along the hole.
+  path(g, hole, 'rgb(20 12 6 / 0.9)', 5, true);
+}

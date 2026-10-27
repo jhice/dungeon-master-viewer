@@ -39,6 +39,7 @@ export function describeState(type, detail) {
     if (state.open) return 'ouvert (disparu, franchissable)';
     return state.imaginary ? 'imaginaire (franchissable)' : 'fermé (bloquant)';
   }
+  if (type === 'door' && detail.broken) return 'cassée (franchissable)';
   const words = [state.open ? 'ouverte' : 'fermée'];
   if (state.invisible) words.push('invisible');
   if (state.imaginary) words.push('imaginaire');

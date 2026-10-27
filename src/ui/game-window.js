@@ -14,10 +14,11 @@ const MESSAGE_MS = 12000; // before a message fades out
  * @param {(layout: object) => void} [options.onLayoutChange] after a drag or a resize
  * @param {() => void} [options.onClose]
  * @param {() => void} [options.onReset] back to the start position
- * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked (take in hand / release)
- * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setInventory(items), flash(), dispose() }}
+ * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked: take it in hand
+ * @param {() => void} [options.onStow] the "Ranger" button: the item in hand goes into the inventory
+ * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setInventory(items, hand), flash(), dispose() }}
  */
-export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem } = {}) {
+export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onStow } = {}) {
   const win = document.createElement('section');
   win.className = 'game-window';
   win.setAttribute('aria-label', 'Simulation');
@@ -36,12 +37,16 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
   const messages = document.createElement('div');
   messages.className = 'game-messages';
   messages.setAttribute('aria-live', 'polite');
-  // Inventory of the party: one chip per item (click = take in hand; then a click in the view drops it).
+  // Hand and inventory of the party: the item in hand and the "Ranger" button, then one
+  // chip per item of the inventory (click = take it in hand).
   const inventory = document.createElement('div');
   inventory.className = 'game-inventory';
+  const handSlot = document.createElement('span');
+  handSlot.className = 'game-hand';
+  const stowButton = button('Ranger', 'Ranger l’objet en main dans l’inventaire', onStow);
   const chips = document.createElement('div');
   chips.className = 'game-items';
-  inventory.append(chips);
+  inventory.append(handSlot, stowButton, chips);
   win.append(bar, viewport, messages, inventory);
   document.body.append(win);
 
@@ -97,17 +102,21 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
       while (messages.children.length > MESSAGE_LINES) messages.firstChild.remove();
       setTimeout(() => line.classList.add('is-old'), MESSAGE_MS);
     },
-    /** Items carried: [{ name, color, inHand }]. */
-    setInventory(items) {
+    /** Items carried: [{ name, color }], and the item in hand ({ name, color } or null). */
+    setInventory(items, hand) {
+      handSlot.textContent = hand ? hand.name : 'Main vide';
+      handSlot.classList.toggle('is-empty', !hand);
+      handSlot.style.setProperty('--c', hand?.color ?? 'transparent');
+      stowButton.disabled = !hand;
       chips.replaceChildren(
         ...items.map((item, i) => {
-          const chip = button(item.name, item.inHand ? 'En main : clic dans la vue pour le poser, ici pour le reprendre' : 'Prendre en main', () => onSelectItem?.(i));
-          chip.className = `game-item${item.inHand ? ' is-in-hand' : ''}`;
+          const chip = button(item.name, 'Prendre en main', () => onSelectItem?.(i));
+          chip.className = 'game-item';
           chip.style.setProperty('--c', item.color);
           return chip;
         }),
       );
-      if (!items.length) chips.textContent = 'Inventaire vide — clic sur un objet à portée pour le ramasser';
+      if (!items.length) chips.textContent = 'Inventaire vide';
     },
     /** Short visual feedback (blocked move). */
     flash() {

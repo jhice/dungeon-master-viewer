@@ -21,13 +21,8 @@ export function createSimulation(dungeon) {
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
-  let hand = null; // item of the inventory in hand ({ kind, index }), or null
   const logic = createLogic(dungeon, state, clock, {
-    emit: (type, payload) => {
-      // An item that left the inventory (lock, alcove, drop) is no longer in hand.
-      if (type === 'inventoryChanged' && hand && !state.inventory.includes(hand)) hand = null;
-      events.emit(type, payload);
-    },
+    emit: events.emit,
     party: () => party,
     onOpenedUnderParty: applyTileUnderParty,
   });
@@ -87,20 +82,20 @@ export function createSimulation(dungeon) {
     },
     command,
     teleport,
-    /** Click on what is in front of the party (wall face, door button, alcove), with the item in hand. */
-    clickFront: () => logic.clickFront(party, hand),
-    /** Items carried: [{ kind, index }]; the one in hand (or null). */
+    /** Click on what is in front of the party (wall face, door, alcove), with the item in hand. */
+    clickFront: () => logic.clickFront(party),
+    /** Items carried: [{ kind, index }]. */
     get inventory() {
       return state.inventory;
     },
+    /** Item held in hand ({ kind, index }), apart from the inventory, or null. */
     get hand() {
-      return hand;
+      return state.hand;
     },
-    /** Takes an item of the inventory in hand, or empties the hand (null). */
-    setHand(item) {
-      hand = item && state.inventory.includes(item) ? item : null;
-      events.emit('inventoryChanged', { inventory: state.inventory });
-    },
+    /** Takes the i-th item of the inventory in hand (the item held goes back into the inventory). */
+    takeFromInventory: (i) => logic.takeFromInventory(party, i),
+    /** Stows the item in hand into the inventory (a chest with its contents). */
+    stow: () => logic.stow(party),
     /**
      * Sub-tiles within reach (DM): the two front ones of the party's tile, and the two
      * near ones of the tile in front, if the party could step there.
@@ -114,15 +109,15 @@ export function createSimulation(dungeon) {
       if (x !== party.x + dx || y !== party.y + dy || blockReason(state, level, x, y)) return false;
       return position === (f + 2) % 4 || position === (f + 3) % 4;
     },
-    /** Picks up an item lying within reach; false if it is out of reach. */
+    /** Picks up an item lying within reach into the empty hand; false if impossible. */
     pickUp(level, x, y, ref) {
       if (!this.reachable(level, x, y, ref.position)) return false;
       return logic.pickUp(party, level, x, y, ref);
     },
-    /** Drops the item in hand on a sub-tile within reach; false if impossible. */
+    /** Puts the item in hand on a sub-tile within reach; false if impossible. */
     drop(level, x, y, position) {
-      if (!hand || !this.reachable(level, x, y, position)) return false;
-      return logic.drop(party, hand, level, x, y, position);
+      if (!state.hand || !this.reachable(level, x, y, position)) return false;
+      return logic.drop(party, level, x, y, position);
     },
     /** Advances the clock: delayed effects due by then are applied. */
     tick(ticks = 1) {
@@ -131,7 +126,6 @@ export function createSimulation(dungeon) {
     reset() {
       clock.clear();
       state.reset();
-      hand = null;
       party = createParty(dungeon.start);
       events.emit('reset', { party });
     },
