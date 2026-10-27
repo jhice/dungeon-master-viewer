@@ -1,29 +1,39 @@
-// The champion's box over the first-person view, top left, as in DM (phase C3a, docs/023):
-// his name, his two hands (the action hand holds the item in hand) and three bars
-// (health, stamina, mana). Below, the action "Frapper"; after a strike, it shows the
-// damage done, as the action area of DM does. A hit taken shows the damage on the box.
-// When the champion dies, a veil covers the view with a "Recommencer" button.
+// The champion's box over the first-person view, top left, as in DM (docs/023, 024): his
+// name, his two hands and three bars (health, stamina, mana). A click on a hand swaps
+// the item held by the cursor with the item of the hand. Below, the action panel of the
+// action hand (right): one button per action ("Frapper", "Lancer"); after an action, it
+// shows the damage done for a moment, as the action area of DM does. A hit taken shows
+// the damage on the box. When the champion dies, a veil covers the view with a
+// "Recommencer" button.
 
-const DAMAGE_MS = 900;
+const RESULT_MS = 900;
+const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
 
 /**
  * @param {HTMLElement} container the game viewport
  * @param {object} options
- * @param {() => void} options.onAction the action button
+ * @param {(id: string) => void} options.onAction an action button ('hit', 'throw')
+ * @param {(hand: number) => void} options.onHand a hand was clicked (0 left, 1 right)
  * @param {() => void} options.onRestart the button of the death veil
  */
-export function createChampionPanel(container, { onAction, onRestart }) {
+export function createChampionPanel(container, { onAction, onHand, onRestart }) {
   const panel = element('div', 'champion-panel');
   const box = element('div', 'champion-box');
   const name = element('div', 'champion-name');
   const hands = element('div', 'champion-hands');
-  const readyHand = element('span', 'champion-hand');
-  const actionHand = element('span', 'champion-hand is-action');
-  hands.append(readyHand, actionHand);
+  const handSlots = HAND_LABELS.map((_, i) => {
+    const slot = element('button', `champion-hand${i === 1 ? ' is-action' : ''}`);
+    slot.type = 'button';
+    slot.addEventListener('click', () => {
+      onHand(i);
+      slot.blur(); // keep the keyboard for the game
+    });
+    hands.append(slot);
+    return slot;
+  });
   const bars = element('div', 'champion-bars');
   const bar = (kind, label) => {
     const outer = element('span', `champion-bar is-${kind}`);
-    outer.title = label;
     const fill = element('i');
     outer.append(fill);
     bars.append(outer);
@@ -38,15 +48,11 @@ export function createChampionPanel(container, { onAction, onRestart }) {
   wound.hidden = true;
   box.append(name, body, wound);
 
-  const action = element('button', 'champion-action');
-  action.type = 'button';
-  action.textContent = 'Frapper';
-  action.title = 'Frapper la créature en face (Espace, ou clic sur la créature)';
-  action.addEventListener('click', () => {
-    onAction();
-    action.blur(); // keep the keyboard for the game
-  });
-  panel.append(box, action);
+  // Action panel: the actions of the action hand, or the result of the last one.
+  const actions = element('div', 'champion-actions');
+  const result = element('div', 'champion-result');
+  result.hidden = true;
+  panel.append(box, actions, result);
 
   const veil = element('div', 'champion-dead');
   veil.hidden = true;
@@ -62,8 +68,9 @@ export function createChampionPanel(container, { onAction, onRestart }) {
   container.append(panel, veil);
 
   let woundTimer = 0;
-  let damageTimer = 0;
+  let resultTimer = 0;
   let ready = true;
+  let shownActions = '';
 
   // `scale`: stored / shown (stamina is stored ×10).
   const setBar = ({ outer, fill, label }, value, max, scale = 1) => {
@@ -72,48 +79,74 @@ export function createChampionPanel(container, { onAction, onRestart }) {
   };
 
   return {
-    /** Shows the champion ({ name, health, stamina (×10), mana… }) and the item in hand ({ name, color } or null). */
-    update(champion, hand) {
+    /**
+     * Shows the champion ({ name, health, stamina (×10), mana… }), his hands
+     * ([{ name, color } or null, …]) and the actions of the action hand ([{ id, name }]).
+     */
+    update(champion, handItems, actionList) {
       name.textContent = champion.name;
       name.title = `${champion.name}, ${champion.title}`;
       setBar(health, champion.health, champion.maxHealth);
       setBar(stamina, champion.stamina, champion.maxStamina, 10);
       setBar(mana, champion.mana, champion.maxMana);
-      actionHand.style.setProperty('--c', hand?.color ?? 'transparent');
-      actionHand.classList.toggle('is-empty', !hand);
-      actionHand.title = `Main d’action : ${hand ? hand.name : 'vide'}`;
-      readyHand.classList.add('is-empty');
-      readyHand.title = 'Main gauche : vide';
+      handSlots.forEach((slot, i) => {
+        const item = handItems[i];
+        slot.style.setProperty('--c', item?.color ?? 'transparent');
+        slot.classList.toggle('is-empty', !item);
+        slot.title = `${HAND_LABELS[i]} : ${item ? item.name : 'vide'} (clic : échanger avec l’objet tenu)`;
+      });
+      const key = actionList.map((a) => a.id).join();
+      if (key !== shownActions) {
+        shownActions = key;
+        actions.replaceChildren(
+          ...actionList.map(({ id, name: label }) => {
+            const button = element('button', 'champion-action');
+            button.type = 'button';
+            button.textContent = label;
+            button.addEventListener('click', () => {
+              onAction(id);
+              button.blur();
+            });
+            return button;
+          }),
+        );
+        if (!actionList.length) {
+          const none = element('span', 'champion-no-action');
+          none.textContent = 'Aucune action';
+          actions.append(none);
+        }
+      }
       box.classList.toggle('is-dead', champion.dead);
       veil.hidden = !champion.dead;
       veilText.textContent = `${champion.name} est mort`;
     },
-    /** The champion can act (no fatigue): the action button is enabled. */
+    /** The champion can act (no fatigue): the action buttons are lit. */
     setReady(value) {
       if (value === ready) return;
       ready = value;
-      action.classList.toggle('is-tired', !ready);
+      actions.classList.toggle('is-tired', !ready);
     },
-    /** Result of a strike, in the action area: the damage done, or a word. */
-    showStrike(text) {
-      clearTimeout(damageTimer);
-      action.textContent = text;
-      action.classList.add('is-result');
-      damageTimer = setTimeout(() => {
-        action.textContent = 'Frapper';
-        action.classList.remove('is-result');
-      }, DAMAGE_MS);
+    /** Result of an action, in the action area: the damage done, or a word. */
+    showResult(text) {
+      clearTimeout(resultTimer);
+      result.textContent = text;
+      result.hidden = false;
+      actions.hidden = true;
+      resultTimer = setTimeout(() => {
+        result.hidden = true;
+        actions.hidden = false;
+      }, RESULT_MS);
     },
     /** Damage taken by the champion: shown on his box. */
     wounded(damage) {
       clearTimeout(woundTimer);
       wound.textContent = String(damage);
       wound.hidden = false;
-      woundTimer = setTimeout(() => (wound.hidden = true), DAMAGE_MS);
+      woundTimer = setTimeout(() => (wound.hidden = true), RESULT_MS);
     },
     dispose() {
       clearTimeout(woundTimer);
-      clearTimeout(damageTimer);
+      clearTimeout(resultTimer);
       panel.remove();
       veil.remove();
     },

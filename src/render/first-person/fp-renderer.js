@@ -9,7 +9,9 @@
 // (wall buttons, levers, locks, alcoves, door buttons), and so is a click on the
 // floor (a sub-tile, maybe with an item): main.js picks up or drops there if it
 // is within reach. The cursor shows what is clickable, and the item in hand.
-// Teleporter fields do not stop the pointer.
+// Teleporter fields do not stop the pointer. A click elsewhere (far floor, far walls)
+// is reported too, with the side of the view (throwing, docs/024); so is a right click.
+// Items in flight (projectiles) are small cubes, set by main.js.
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
@@ -44,8 +46,17 @@ const CEILING_COLOR = '#696660';
  * @param {(target: object|null) => string|null} [options.labelOf] text shown next to the pointer for what it
  *   designates ({ kind: 'front' } or { kind: 'floor', spot }, or null): the item in hand, the item pointed at…
  * @param {(level, x, y) => object|null} [options.contentsAt] contents of a tile (items lying there now)
+ * @param {(side: 'left'|'right') => void} [options.onClickElsewhere] a click on nothing within reach
+ * @param {() => void} [options.onContextMenu] a right click on the view
+ * @param {(item: object) => string} [options.colorOf] colour of an item in flight
+ * Every click handler also receives the side of the view clicked ('left' | 'right').
  */
-export function createFirstPersonRenderer(container, dungeon, state, { onClickFront, onClickFloor, canReach, labelOf, contentsAt } = {}) {
+export function createFirstPersonRenderer(
+  container,
+  dungeon,
+  state,
+  { onClickFront, onClickFloor, onClickElsewhere, onContextMenu, canReach, labelOf, contentsAt, colorOf } = {},
+) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -158,6 +169,27 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     built = null;
   }
 
+  // Items in flight: a small cube each, at the centre of its sub-tile, at hand height.
+  const PROJECTILE_HEIGHT = 0.32;
+  const SUB_TILE = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]; // NW, NE, SE, SW
+  const projectileGeometry = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+  const projectileGroup = new THREE.Group();
+  scene.add(projectileGroup);
+  function setProjectiles(levelIndex, list) {
+    for (const mesh of projectileGroup.children) mesh.material.dispose();
+    projectileGroup.clear();
+    if (levelIndex !== level) return render();
+    for (const p of list) {
+      const material = new THREE.MeshLambertMaterial({ color: colorOf?.(p.item) ?? '#e0e0e0' });
+      const mesh = new THREE.Mesh(projectileGeometry, material);
+      const [u, v] = SUB_TILE[p.position];
+      mesh.position.set(p.x + u, PROJECTILE_HEIGHT, p.y + v);
+      mesh.rotation.set(0.6, 0.8, 0);
+      projectileGroup.add(mesh);
+    }
+    render();
+  }
+
   function placeCamera(party) {
     const yaw = -FACINGS.indexOf(party.facing) * (Math.PI / 2); // N looks towards -z
     const back = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(VIEW.pullBack);
@@ -205,8 +237,15 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   }
   const onClick = (event) => {
     const t = target(event);
-    if (t?.kind === 'floor') onClickFloor?.(t.spot);
-    else if (t?.kind === 'front') onClickFront?.();
+    const rect = renderer.domElement.getBoundingClientRect();
+    const side = event.clientX - rect.left < rect.width / 2 ? 'left' : 'right';
+    if (t?.kind === 'floor') onClickFloor?.(t.spot, side);
+    else if (t?.kind === 'front') onClickFront?.(side);
+    else onClickElsewhere?.(side);
+  };
+  const onRightClick = (event) => {
+    event.preventDefault();
+    onContextMenu?.();
   };
   const tooltip = document.createElement('div');
   tooltip.className = 'fp-tooltip';
@@ -249,6 +288,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     renderer.domElement.style.cursor = handCursor ?? '';
   }
   renderer.domElement.addEventListener('click', onClick);
+  renderer.domElement.addEventListener('contextmenu', onRightClick);
   renderer.domElement.addEventListener('pointermove', onMove);
   renderer.domElement.addEventListener('pointerleave', onLeave);
 
@@ -278,9 +318,14 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       rebuildCreatures();
       render();
     },
+    /** Items in flight on a level: [{ item, x, y, position (sub-tile) }]. */
+    setProjectiles,
     dispose() {
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('click', onClick);
+      renderer.domElement.removeEventListener('contextmenu', onRightClick);
+      setProjectiles(null, []);
+      projectileGeometry.dispose();
       renderer.domElement.removeEventListener('pointermove', onMove);
       renderer.domElement.removeEventListener('pointerleave', onLeave);
       tooltip.remove();

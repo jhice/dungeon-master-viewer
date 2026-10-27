@@ -146,6 +146,7 @@ C1 présence et déplacement ──► C2 perception et poursuite ──► C3 c
 3. **(C1) Mouvement :** pas à pas instantané (comme le groupe aujourd'hui), ou attendre les transitions de la phase F ?
 4. **(C3) Le groupe :** abstrait avec des statistiques, ou de vrais champions choisis au Hall ?
 5. **(C3) Interface de combat :** panneau d'actions par arme, comme dans DM, ou attaque simplifiée au clic ?
+   **Réponse : panneau d'actions par objet**, mains de Zed dans l'inventaire, lancer de tout objet (doc 024).
 
 ## Sources
 

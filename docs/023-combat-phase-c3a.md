@@ -116,6 +116,7 @@ Ordres de grandeur : Zed fait 22 à 38 points de dégâts à un Screamer (défen
 | Sous-phase | Contenu | État |
 |---|---|---|
 | **C3a** | Zed, son cadre, « Frapper », attaques des créatures au contact, mort des deux côtés, possessions qui tombent | **Faite** (ce document) |
+| — | **Mains, panneau d'actions, lancer de tout objet**, moteur de projectiles (doc [024](024-mains-actions-lancer.md)) | **Fait** |
 | C3b | **Projectiles :** lanceurs muraux (17 actuators), sorts des créatures (Vexirk, Wizard Eye…), boules de feu qui cassent les portes `fireball` | À faire |
 | C3c | **Fidélité :** formules de ReDMCSB, actions de chaque objet (combos : Swing, Chop, Thrust…), armes et armures, expérience et niveaux, blessures, nourriture et eau | À faire |
 

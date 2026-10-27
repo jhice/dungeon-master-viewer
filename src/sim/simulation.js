@@ -11,8 +11,10 @@ import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
 import { createChampion, championMirror, regenerate } from './champion.js';
-import { ACTIONS, championStrikes, creatureStrikes } from './combat.js';
+import { ACTIONS, championStrikes, creatureStrikes, projectileStrikes } from './combat.js';
+import { createProjectiles } from './projectiles.js';
 import { creatureInfo } from '../core/creature-info.js';
+import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
@@ -45,6 +47,12 @@ export function createSimulation(dungeon) {
     attack: creatureAttacks,
   });
 
+  const projectiles = createProjectiles(state, {
+    emit: events.emit,
+    hitGroup: projectileHits,
+    drop: (level, x, y, items) => logic.itemsDropped(level, x, y, items),
+  });
+
   // The champion, Zed (docs/023), with the items of his mirror in the inventory.
   function startChampion() {
     champion = createChampion(dungeon);
@@ -68,23 +76,10 @@ export function createSimulation(dungeon) {
     if (champion.dead) events.emit('championDied', { champion, group });
   }
 
-  /**
-   * The champion strikes the group in front of him with the action "Frapper".
-   * @returns {{ result: 'dead'|'nothing'|'busy'|'exhausted'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
-   */
-  function attack() {
-    if (champion.dead) return { result: 'dead' };
-    const [dx, dy] = SIDE_DELTAS[party.facing];
-    const group = state.groupAt(party.level, party.x + dx, party.y + dy);
-    if (!group) return { result: 'nothing' };
-    if (clock.now < champion.readyAt) return { result: 'busy', group };
-    const action = ACTIONS.hit;
-    if (champion.stamina < action.stamina) return { result: 'exhausted', group };
-    champion.stamina -= action.stamina;
-    champion.readyAt = clock.now + action.fatigue;
-    const info = creatureInfo(group.type);
+  // The outcome of a strike or of a thrown item on a group: a member chosen at random
+  // loses health, dies at 0 (the last one: the group is gone); a survivor fights back.
+  function damageGroup(group, outcome, thrown = false) {
     const member = group.members[Math.floor(random() * group.members.length)];
-    const outcome = championStrikes(champion, info, action, random);
     let killed = false;
     let destroyed = false;
     if (outcome.result === 'hit') {
@@ -93,10 +88,84 @@ export function createSimulation(dungeon) {
       if (killed) destroyed = creatures.kill(group, member);
     }
     if (!destroyed) creatures.provoke(group);
-    const result = { ...outcome, group, killed, destroyed };
+    const result = { ...outcome, group, killed, destroyed, thrown };
     events.emit('creatureHit', result);
-    championChanged();
     return result;
+  }
+
+  // An action costs stamina and makes the champion tired for a while; null if he can act.
+  function spend(action) {
+    if (champion.dead) return 'dead';
+    if (clock.now < champion.readyAt) return 'busy';
+    if (champion.stamina < action.stamina) return 'exhausted';
+    champion.stamina -= action.stamina;
+    champion.readyAt = clock.now + action.fatigue;
+    championChanged();
+    return null;
+  }
+
+  // Actions of an item in the action hand (docs/024): a melee weapon or the empty hand
+  // strike ("Frapper"), a throwable weapon is thrown ("Lancer"); other items have none.
+  function actionsOf(item) {
+    if (!item) return ['hit'];
+    const info = itemInfo(dungeon, item);
+    return [...(info.throwable ? ['throw'] : []), ...(info.melee ? ['hit'] : [])];
+  }
+
+  /**
+   * The champion strikes the group in front of him ("Frapper"), with the weapon of his action hand.
+   * @returns {{ result: 'dead'|'nothing'|'busy'|'exhausted'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
+   */
+  function attack() {
+    if (champion.dead) return { result: 'dead' };
+    const [dx, dy] = SIDE_DELTAS[party.facing];
+    const group = state.groupAt(party.level, party.x + dx, party.y + dy);
+    if (!group) return { result: 'nothing' };
+    const action = ACTIONS.hit;
+    const refused = spend(action);
+    if (refused) return { result: refused, group };
+    const weapon = state.hands[1];
+    const bonus = weapon ? itemInfo(dungeon, weapon).strength : 0;
+    return damageGroup(group, championStrikes(champion, creatureInfo(group.type), action, random, bonus));
+  }
+
+  /**
+   * The champion throws an item in front of him ("Lancer"), from the left or right side:
+   * the item of a hand (`from` 0 or 1), or the item held by the cursor (`from` = 'cursor').
+   * Energy: strength + kinetic energy of a weapon; each step costs 4 + half the weight in
+   * 100 g (provisional, docs/024). The projectile also carries what its damage needs.
+   * @returns {{ result: 'dead'|'nothing'|'busy'|'exhausted'|'thrown', item? }}
+   */
+  function throwItem(from, side = from === 0 ? 'left' : 'right') {
+    const item = from === 'cursor' ? state.hand : state.hands[from];
+    if (!item) return { result: 'nothing' };
+    const refused = spend(ACTIONS.throw);
+    if (refused) return { result: refused };
+    if (from === 'cursor') state.hand = null;
+    else state.hands[from] = null;
+    events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
+    const info = itemInfo(dungeon, item);
+    const weight = Math.round(info.weight * 10); // in 100 g
+    projectiles.launch({
+      item,
+      level: party.level,
+      x: party.x,
+      y: party.y,
+      direction: party.facing,
+      side,
+      energy: champion.strength + info.kinetic + Math.floor(random() * 16),
+      stepLoss: 4 + (weight >> 1),
+      kinetic: info.weapon ? info.kinetic : weight >> 1,
+      // Share of the energy left that counts in the damage: whole for weapons, else by weight (2 kg and more: whole).
+      mass: info.weapon ? 1 : Math.min(weight, 20) / 20,
+    });
+    return { result: 'thrown', item };
+  }
+
+  // A thrown item reaches a group: it always stops there (provisional), and may wound it.
+  function projectileHits(projectile, group) {
+    damageGroup(group, projectileStrikes(projectile, creatureInfo(group.type), random), true);
+    return true;
   }
 
   function command(name) {
@@ -160,6 +229,28 @@ export function createSimulation(dungeon) {
       return champion;
     },
     attack,
+    /** Actions of the item in the action hand: ['hit' (Frapper)?, 'throw' (Lancer)?]. */
+    get actions() {
+      return actionsOf(state.hands[1]);
+    },
+    /** Does an action of the action hand: 'hit' or 'throw'. */
+    act(id) {
+      return id === 'throw' ? throwItem(1) : attack();
+    },
+    /** Throws the item held by the cursor, from the left or right side of the view. */
+    throwHeld: (side) => throwItem('cursor', side),
+    /** The champion's hands: [left (ready), right (action)]. */
+    get hands() {
+      return state.hands;
+    },
+    /** Click on a hand: the item held by the cursor and the item of the hand are swapped. */
+    swapHand(i) {
+      if (champion.dead) return;
+      [state.hand, state.hands[i]] = [state.hands[i], state.hand];
+      events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
+    },
+    /** Items in flight on a level (projectiles.js). */
+    projectilesOn: (level) => projectiles.on(level),
     /** Ticks before the champion can act again (fatigue of his last action). */
     get fatigue() {
       return Math.max(0, champion.readyAt - clock.now);
@@ -205,6 +296,7 @@ export function createSimulation(dungeon) {
     tick(ticks = 1) {
       for (let i = 0; i < ticks; i++) {
         clock.advance(1);
+        projectiles.update();
         creatures.update();
         if (regenerate(champion, clock.now)) championChanged();
       }
@@ -213,6 +305,7 @@ export function createSimulation(dungeon) {
       clock.clear();
       state.reset();
       creatures.reset();
+      projectiles.reset();
       startChampion();
       party = createParty(dungeon.start);
       events.emit('reset', { party });

@@ -564,11 +564,13 @@ body {
   gap: 0.8cqw;
 }
 
-/* A hand: a grey square, with the colour of the item it holds. */
+/* A hand: a grey square, with the colour of the item it holds; a click swaps it with the cursor's item. */
 .champion-hand {
   width: 5.2cqw;
   height: 5.2cqw;
+  padding: 0;
   border: 0.3cqw solid #777;
+  cursor: pointer;
   background:
     linear-gradient(var(--c, transparent), var(--c, transparent)) center / 55% 55% no-repeat,
     #3a3a3a;
@@ -580,6 +582,10 @@ body {
 
 .champion-hand.is-empty {
   background: #2a2a2a;
+}
+
+.champion-hand:hover {
+  border-color: #e8c050;
 }
 
 .champion-bars {
@@ -620,26 +626,49 @@ body {
   opacity: 0.5;
 }
 
-/* The action: "Frapper", or the result of the last strike for a moment. */
-.champion-action {
-  padding: 0.8cqw;
+/* Action panel of the action hand: one line per action, or the result of the last one. */
+.champion-actions,
+.champion-result {
+  display: flex;
+  flex-direction: column;
   border: 0.3cqw solid #555;
   background: #000c;
+}
+
+.champion-actions[hidden],
+.champion-result[hidden] {
+  display: none;
+}
+
+.champion-action {
+  padding: 0.8cqw;
+  border: 0;
+  background: none;
   color: #d8d0b8;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.champion-action:hover {
-  border-color: var(--champion);
+.champion-action + .champion-action {
+  border-top: 0.2cqw solid #333;
 }
 
-.champion-action.is-tired {
+.champion-action:hover {
+  background: #2a3a2a;
+}
+
+.champion-actions.is-tired .champion-action {
   color: #777;
 }
 
-.champion-action.is-result {
+.champion-no-action {
+  padding: 0.8cqw;
+  color: #777;
+}
+
+.champion-result {
+  padding: 0.8cqw;
   color: #ffd84a;
   text-align: center;
 }

@@ -246,7 +246,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
           on = items.some((item) => itemIdOf(dungeon, item) === a.data);
           break;
         case FLOOR_POSSESSION:
-          on = Boolean(here) && [...state.inventory, state.hand].some((item) => item && itemIdOf(dungeon, item) === a.data);
+          on = Boolean(here) && [...state.inventory, state.hand, ...state.hands].some((item) => item && itemIdOf(dungeon, item) === a.data);
           break;
         default:
           continue; // creatures only: none in this dungeon

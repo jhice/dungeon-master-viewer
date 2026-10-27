@@ -5,7 +5,8 @@
 //   value, gate bits) and each tile its own order of actuators (rotations);
 // - texts get their current visibility (messages shown by a mechanism);
 // - items lie on tiles (floor: sub-tile position, wall: face), in the party's
-//   inventory, or in its hand (one item, apart from the inventory);
+//   inventory, in its hand (the item held by the mouse cursor, apart from the inventory),
+//   or in the champion's two hands (docs/024);
 // - creature groups have a position, a facing and members (health), one group per tile.
 
 import { ITEM_POOLS } from '../core/contents.js';
@@ -22,7 +23,8 @@ export function createState(dungeon) {
   let textVisibility; // text index -> visible
   let items; // "level:x,y" -> [{ kind, index, position }] items lying on the tile, bottom first
   let inventory; // [{ kind, index }] items carried by the party
-  let hand; // { kind, index } held in hand, or null
+  let hand; // { kind, index } held in hand (mouse cursor), or null
+  let hands; // the champion's hands: [left (ready), right (action)], each { kind, index } or null
   let emptiedChests; // container indexes whose contents went into the inventory
   let groups; // id -> { id, type, level, x, y, facing, members: [{ hp, position }], items, nextMove }
   let groupTiles; // "level:x,y" -> group
@@ -36,6 +38,7 @@ export function createState(dungeon) {
     items = new Map();
     inventory = [];
     hand = null;
+    hands = [null, null];
     emptiedChests = new Set();
     groups = new Map();
     groupTiles = new Map();
@@ -104,6 +107,10 @@ export function createState(dungeon) {
     },
     set hand(item) {
       hand = item;
+    },
+    /** The champion's hands: [left (ready), right (action)] (mutable). */
+    get hands() {
+      return hands;
     },
     /** Chests already stowed with their contents (Set of container indexes, mutable). */
     get emptiedChests() {

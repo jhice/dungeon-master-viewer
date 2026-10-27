@@ -1,5 +1,6 @@
-// Checks of phase C3a (docs/023): the champion Zed, the action "Frapper", the attacks
-// of the creatures, death of a creature (possessions, plate) and of the champion.
+// Checks of phase C3a (docs/023 and 024): the champion Zed, his hands, the actions
+// "Frapper" and "Lancer", the attacks of the creatures, thrown items, death of a creature
+// (possessions, plate) and of the champion.
 // Run: node tools/test-combat.mjs
 
 import { readFileSync } from 'node:fs';
@@ -8,6 +9,7 @@ import { createSimulation } from '../src/sim/simulation.js';
 import { creatureInfo } from '../src/core/creature-info.js';
 import { describeItem } from '../src/core/contents.js';
 import { blockReason } from '../src/sim/rules.js';
+import { itemInfo } from '../src/core/item-info.js';
 
 const dungeon = new Dungeon(JSON.parse(readFileSync(new URL('../data/dungeon.json', import.meta.url))));
 const sim = createSimulation(dungeon);
@@ -17,6 +19,8 @@ const check = (ok, label) => {
   if (!ok) failures++;
 };
 const names = (refs) => refs.map((ref) => describeItem(dungeon, ref).name);
+// The throwing tests must not be cut short by a creature passing by.
+const immortalOnce = () => Object.assign(sim.champion, { health: 1e9, maxHealth: 1e9 });
 
 // Places the party next to a group, on a free side, facing it.
 function faceGroup(group) {
@@ -128,6 +132,95 @@ function strikeUntilGone(group, max = 200) {
   sim.tick(6 * 10);
   sim.reset();
   check(!sim.champion.dead && sim.champion.health === 60, 'recommencer : Zed revient avec 60 PV');
+}
+
+// 7. Hands: an item held by the cursor goes into a hand; the action hand gives the actions.
+const weaponIndex = (name) => dungeon.data.weapons.findIndex((w) => w.name === name);
+{
+  sim.reset();
+  check(sim.actions.join() === 'hit', `main d'action vide : ${sim.actions}`);
+  const torch = sim.inventory.findIndex((ref) => names([ref])[0] === 'Torch');
+  sim.takeFromInventory(torch);
+  sim.swapHand(1);
+  check(!sim.hand && names([sim.hands[1]])[0] === 'Torch', 'la Torch passe du curseur à la main droite');
+  check(sim.actions.join() === 'hit', `Torch : ${sim.actions}`);
+  sim.swapHand(1);
+  check(names([sim.hand])[0] === 'Torch' && !sim.hands[1], 'clic sur la main : elle revient au curseur');
+  sim.state.hands[1] = { kind: 'weapon', index: weaponIndex('Dagger') };
+  check(sim.actions.join() === 'throw,hit', `Dagger : ${sim.actions}`);
+  sim.state.hands[1] = { kind: 'weapon', index: weaponIndex('Throwing Star') };
+  check(sim.actions.join() === 'throw', `Throwing Star : ${sim.actions}`);
+  sim.state.hands[1] = { kind: 'cloth', index: 18 };
+  check(sim.actions.length === 0, 'Mail Aketon : aucune action');
+}
+
+// 8. Throwing: range by weight, against a wall, onto a creature.
+// A straight line of free floor tiles (no creature, no item), at least `n` long, on any level.
+function corridor(n) {
+  for (let level = 1; level < dungeon.levelCount; level++) {
+    const map = dungeon.level(level);
+    for (let y = 0; y < map.height; y++)
+      for (let x = 0; x < map.width; x++)
+        for (const [facing, [dx, dy]] of Object.entries(SIDE_DELTAS)) {
+          const free = (k) => {
+            const [tx, ty] = [x + k * dx, y + k * dy];
+            return sim.state.tileAt(level, tx, ty)?.type === 'floor' && !sim.state.groupAt(level, tx, ty) && !sim.state.itemsAt(level, tx, ty).length;
+          };
+          if (Array.from({ length: n + 1 }, (_, k) => k).every(free)) return { level, x, y, facing };
+        }
+  }
+  return null;
+}
+function throwAndLand(ref) {
+  sim.state.hand = ref;
+  const out = sim.throwHeld('right');
+  let landed = null;
+  const off = sim.on('itemsChanged', (e) => (landed ??= e));
+  for (let t = 0; t < 60 && !landed; t++) sim.tick(1);
+  off();
+  return { out, landed };
+}
+{
+  sim.reset();
+  immortalOnce();
+  const start = corridor(10);
+  check(start, `couloir de 10 cases : niveau ${start?.level} depuis (${start?.x}, ${start?.y}) vers ${start?.facing}`);
+  sim.teleport(start.level, start.x, start.y);
+  while (sim.party.facing !== start.facing) sim.command('turnRight');
+  const distance = ({ x, y }) => Math.abs(x - start.x) + Math.abs(y - start.y);
+  const star = throwAndLand({ kind: 'weapon', index: weaponIndex('Throwing Star') });
+  const mail = throwAndLand({ kind: 'cloth', index: 18 });
+  check(star.out.result === 'thrown' && star.landed, `Throwing Star (0,1 kg) : tombe à ${distance(star.landed)} cases`);
+  const mailKg = itemInfo(dungeon, { kind: 'cloth', index: 18 }).weight;
+  check(mail.landed && distance(mail.landed) < distance(star.landed), `Mail Aketon (${mailKg} kg) : tombe à ${distance(mail.landed)} cases`);
+  check(!sim.hand, 'le curseur est vide après le lancer');
+}
+{
+  // Facing a wall: the item falls on the party's tile, front row.
+  sim.reset();
+  immortalOnce();
+  const front = () => {
+    const [dx, dy] = SIDE_DELTAS[sim.party.facing];
+    return sim.state.tileAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)?.type;
+  };
+  for (let i = 0; i < 4 && front() !== 'wall'; i++) sim.command('turnRight');
+  const { x, y, facing } = sim.party;
+  const { landed } = throwAndLand({ kind: 'weapon', index: weaponIndex('Dagger') });
+  check(front() === 'wall' && landed?.x === x && landed?.y === y, `face à un mur (${facing}) : la Dagger tombe sur la case du groupe (${landed?.x}, ${landed?.y})`);
+}
+{
+  // Onto the Screamers of N1 (8, 24): a thrown Torch hits one, then lies on their tile.
+  sim.reset();
+  immortalOnce();
+  const group = sim.state.groupAt(1, 8, 24);
+  faceGroup(group);
+  const hits = [];
+  const off = sim.on('creatureHit', (e) => e.thrown && hits.push(e));
+  const torch = sim.inventory.find((ref) => names([ref])[0] === 'Torch');
+  const { landed } = throwAndLand(torch);
+  off();
+  check(hits.length === 1, `la Torch touche un Screamer : ${hits[0]?.result}, ${hits[0]?.damage} PV`);
+  check(landed && landed.x === 8 && landed.y === 24, `et tombe sur sa case (${landed?.x}, ${landed?.y})`);
 }
 
 console.log(failures ? `${failures} échec(s)` : 'tout est bon');

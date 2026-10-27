@@ -19,6 +19,7 @@ import { createChampionPanel } from './ui/champion-panel.js';
 import { createSimulation } from './sim/simulation.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
+import { ACTIONS } from './sim/combat.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
 const RENDERERS = {
@@ -531,12 +532,19 @@ async function openGame() {
     const view = createFirstPersonRenderer(win.viewport, dungeon, sim.state, {
       onClickFront: clickFront,
       onClickFloor: clickFloor,
+      onClickElsewhere: throwHeld,
+      onContextMenu: () => sim.hand && sim.stow(), // right click: shortcut of "Ranger"
+      colorOf: (item) => CATEGORY_COLORS[item.kind],
       canReach: ({ level, x, y, position, item }) => sim.reachable(level, x, y, position) && Boolean(item || sim.hand),
       // Next to the pointer: the item in hand, or else the item pointed at.
       labelOf: (t) => (sim.hand ? itemName(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
       contentsAt,
     });
-    const panel = createChampionPanel(win.viewport, { onAction: attackFront, onRestart: () => sim.reset() });
+    const panel = createChampionPanel(win.viewport, {
+      onAction: doAction,
+      onHand: (i) => sim.swapHand(i),
+      onRestart: () => sim.reset(),
+    });
     game = { window: win, view, panel };
     showInventory();
     game.clock = setInterval(() => {
@@ -583,10 +591,14 @@ async function teleportToSelection() {
 }
 
 // Click on the wall or door in front of the party (mouse in the view, or Space); on a
-// creature in front, the champion strikes it.
-function clickFront() {
+// creature in front, the item held by the cursor is thrown at it, or else the champion
+// strikes it ("Frapper" of his action hand).
+function clickFront(side = 'right') {
   const [dx, dy] = SIDE_DELTAS[sim.party.facing];
-  if (sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) return attackFront();
+  if (sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) {
+    if (sim.hand) return throwHeld(side);
+    return sim.actions.includes('hit') ? doAction('hit') : showInfo('Aucune action de frappe avec cet objet');
+  }
   const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
   if (broken) {
     showInfo('La porte vole en éclats');
@@ -597,31 +609,39 @@ function clickFront() {
   else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
-// The champion strikes the creature in front ("Frapper", docs/023): the result shows in
-// the action area (damage done), the status bar says when a creature dies.
-function attackFront() {
-  const { result, damage, group, killed, destroyed } = sim.attack();
-  if (result === 'nothing') return showInfo('Personne à frapper');
+// An action of the action hand (docs/024): "Frapper" the creature in front, "Lancer" the
+// item of the hand. What it does to a creature is shown by the 'creatureHit' handler.
+function doAction(id) {
+  const { result, item } = sim.act(id);
+  if (result === 'nothing') return showInfo(id === 'throw' ? 'Rien à lancer' : 'Personne à frapper');
   if (result === 'exhausted') return showInfo('Trop fatigué');
-  if (result === 'dead' || result === 'busy') return;
-  game?.panel.showStrike(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');
-  const { name } = describeGroup(dungeon, group);
-  if (destroyed) showInfo(`${name} : groupe anéanti`);
-  else if (killed) showInfo(`${name} tué`);
-  else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
+  if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
 }
 
-// The champion's box: bars, hands (the item in hand is in the action hand).
+// A click with an item held by the cursor, out of reach (or on a creature): it is thrown
+// from that side of the view.
+function throwHeld(side) {
+  if (!sim.hand) return;
+  const { result, item } = sim.throwHeld(side);
+  if (result === 'exhausted') showInfo('Trop fatigué');
+  else if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
+}
+
+// The champion's box: bars, hands, actions of the action hand.
 function showChampion() {
-  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind] };
-  game?.panel.update(sim.champion, hand);
+  const describe = (ref) => ref && { name: itemName(ref), color: CATEGORY_COLORS[ref.kind] };
+  game?.panel.update(
+    sim.champion,
+    sim.hands.map(describe),
+    sim.actions.map((id) => ({ id, name: ACTIONS[id].name })),
+  );
 }
 
 // Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
 // ones of the tile in front): the item in hand is put there, or the item clicked comes in hand.
-function clickFloor({ level, x, y, position, item }) {
+function clickFloor({ level, x, y, position, item }, side) {
   if (sim.hand) {
-    if (!sim.drop(level, x, y, position)) showInfo('Hors de portée');
+    if (!sim.drop(level, x, y, position)) throwHeld(side); // out of reach: thrown there
   } else if (item && !sim.pickUp(level, x, y, item)) {
     showInfo('Hors de portée');
   }
@@ -681,6 +701,7 @@ function describeEffect({ type, direction, party, detail }) {
 }
 sim.on('reset', ({ party }) => {
   showParty(party);
+  game?.view.setProjectiles(party.level, []);
   showInventory();
   // Every tile may have changed: redraw the views.
   if (renderer) mountRenderer();
@@ -694,6 +715,23 @@ sim.on('itemsChanged', ({ level, x, y }) => {
 });
 sim.on('inventoryChanged', () => showInventory());
 sim.on('championChanged', showChampion);
+// What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
+sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown }) => {
+  game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');
+  const { name } = describeGroup(dungeon, group);
+  if (destroyed) showInfo(`${name} : groupe anéanti`);
+  else if (killed) showInfo(`${name} tué`);
+  else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
+  else if (thrown) showInfo(result === 'hit' ? `${name} touché : ${damage} PV` : `${name} : sans dégâts`);
+});
+// Items in flight: redrawn in the first-person view once per frame.
+let projectileFrame = 0;
+sim.on('projectilesMoved', () => {
+  projectileFrame ||= requestAnimationFrame(() => {
+    projectileFrame = 0;
+    game?.view.setProjectiles(sim.party.level, sim.projectilesOn(sim.party.level));
+  });
+});
 sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
 sim.on('championDied', ({ champion, group }) => showInfo(`${champion.name} est mort, tué par ${describeGroup(dungeon, group).name}`));
 

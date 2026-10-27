@@ -12,6 +12,7 @@
 //   'creatureHit' { result, damage, group, killed, destroyed } the champion struck a group (combat.js)
 //   'championHit' { group, result: 'hit'|'miss', damage } a group attacked the champion
 //   'championDied' { champion, group }
+//   'projectilesMoved' { level } items in flight moved on a level (projectiles.js)
 //   'reset'      { party }
 
 export function createEmitter() {

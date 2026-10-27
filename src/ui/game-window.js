@@ -43,7 +43,7 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
   inventory.className = 'game-inventory';
   const handSlot = document.createElement('span');
   handSlot.className = 'game-hand';
-  const stowButton = button('Ranger', 'Ranger l’objet en main dans l’inventaire', onStow);
+  const stowButton = button('Ranger', 'Ranger l’objet tenu dans l’inventaire (clic droit dans la vue)', onStow);
   const chips = document.createElement('div');
   chips.className = 'game-items';
   inventory.append(handSlot, stowButton, chips);
@@ -104,13 +104,13 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
     },
     /** Items carried: [{ name, color }], and the item in hand ({ name, color } or null). */
     setInventory(items, hand) {
-      handSlot.textContent = hand ? hand.name : 'Main vide';
+      handSlot.textContent = hand ? `Tenu : ${hand.name}` : 'Rien de tenu';
       handSlot.classList.toggle('is-empty', !hand);
       handSlot.style.setProperty('--c', hand?.color ?? 'transparent');
       stowButton.disabled = !hand;
       chips.replaceChildren(
         ...items.map((item, i) => {
-          const chip = button(item.name, 'Prendre en main', () => onSelectItem?.(i));
+          const chip = button(item.name, 'Prendre avec le curseur', () => onSelectItem?.(i));
           chip.className = 'game-item';
           chip.style.setProperty('--c', item.color);
           return chip;
