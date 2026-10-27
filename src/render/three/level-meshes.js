@@ -65,6 +65,10 @@ function partDefinitions(theme, h) {
       emissive: true,
       opacity: TELEPORTER_GAME_OPACITY,
       doubleSide: true,
+      // Drawn after the other translucent things (inscriptions, ornaments on the walls): the
+      // automatic sorting uses the centre of the whole instanced mesh, which can put the
+      // teleporters first; a wall still hides what is behind it (depth test).
+      renderOrder: 1,
     },
   };
 }
@@ -152,6 +156,7 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     mesh.name = `${group.name}-${part}-${variant}`;
+    if (game && def.renderOrder) mesh.renderOrder = def.renderOrder;
     mesh.userData = { part, variant, tiles: list.map((l) => l.info), baseOpacity: def.opacity ?? 1 };
     group.add(mesh);
     meshes.push(mesh);

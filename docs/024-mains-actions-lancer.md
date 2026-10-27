@@ -217,6 +217,11 @@ Le rendu 3D des niveaux superposés garde son bloc de 70 %. Un téléporteur inv
 - il est **dessiné des deux côtés** (`side: DoubleSide`). Un groupe qui se tient sur un téléporteur qui ne l'emporte pas (portée `items` ou `creatures`) voit donc tout teinté de sa couleur, avec les bords du cube autour de lui.
 - **Exemple :** N1 (13, 16), un téléporteur de portée `items` vers (14, 14). Le groupe y reste, la vue est teintée de cyan, et on voit le couloir à travers.
 
+**Inscription dessinée par-dessus le téléporteur :** « TO CLOSE PIT LEAVE A VALUABLE ON FLOOR », sur la face ouest du mur N1 (14, 16), juste derrière ce téléporteur, apparaissait devant lui.
+- **Cause :** les inscriptions et le téléporteur sont tous deux translucides. Three.js les trie d'après le centre de chaque objet, et celui des téléporteurs, dessinés ensemble (*instanced mesh*), est faussé.
+- **Correction :** les téléporteurs de la vue de jeu sont dessinés **après** les autres objets translucides (`renderOrder: 1`). Ce qui est derrière un mur reste caché par le mur.
+- **Chrome :** le texte apparaît derrière le cube, teinté, aussi bien de l'intérieur (13, 16) que de l'extérieur (12, 16).
+
 ## Sources
 
 - *Dungeon Master Encyclopaedia*, **Dungeon Master Items** : http://dmweb.free.fr/games/dungeon-master/solutions/items/.
