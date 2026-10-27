@@ -223,5 +223,38 @@ function throwAndLand(ref) {
   check(landed && landed.x === 8 && landed.y === 24, `et tombe sur sa case (${landed?.x}, ${landed?.y})`);
 }
 
+// 9. A strike that meets no creature: into the void, a wall, a door; it costs its fatigue all the same.
+{
+  sim.reset();
+  immortalOnce();
+  const front = () => {
+    const [dx, dy] = SIDE_DELTAS[sim.party.facing];
+    return sim.state.tileAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)?.type;
+  };
+  for (let i = 0; i < 4 && front() !== 'floor'; i++) sim.command('turnRight');
+  const air = sim.attack();
+  check(air.result === 'air' && sim.fatigue === 4, `dans le vide : ${air.result}, fatigue ${sim.fatigue} ticks`);
+  check(sim.attack().result === 'busy', 'un second coup tout de suite : fatigue');
+  for (let i = 0; i < 4 && front() !== 'wall'; i++) sim.command('turnRight');
+  sim.tick(sim.fatigue);
+  const wall = sim.attack();
+  check(wall.result === 'wall' && sim.fatigue === 4, `contre le mur : ${wall.result}, fatigue ${sim.fatigue} ticks`);
+  // A closed door of level 0, from the tile north (or west) of it.
+  const map = dungeon.level(0);
+  let door = null;
+  for (let y = 0; y < map.height && !door; y++)
+    for (let x = 0; x < map.width && !door; x++) {
+      const tile = sim.state.tileAt(0, x, y);
+      if (tile?.type !== 'door' || tile.detail.open) continue;
+      const [dx, dy] = tile.detail.orientation === 'NS' ? [0, 1] : [1, 0];
+      if (!blockReason(sim.state, 0, x - dx, y - dy)) door = { x, y, from: [x - dx, y - dy], facing: dx ? 'E' : 'S' };
+    }
+  sim.teleport(0, ...door.from);
+  while (sim.party.facing !== door.facing) sim.command('turnRight');
+  sim.tick(sim.fatigue);
+  const hit = sim.attack();
+  check(hit.result === 'door' && sim.state.tileAt(0, door.x, door.y).detail.open === false, `contre la porte N0 (${door.x}, ${door.y}) : ${hit.result}, elle reste fermée`);
+}
+
 console.log(failures ? `${failures} échec(s)` : 'tout est bon');
 process.exit(failures ? 1 : 0);

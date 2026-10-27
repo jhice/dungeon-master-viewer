@@ -113,17 +113,21 @@ export function createSimulation(dungeon) {
   }
 
   /**
-   * The champion strikes the group in front of him ("Frapper"), with the weapon of his action hand.
-   * @returns {{ result: 'dead'|'nothing'|'busy'|'exhausted'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
+   * The champion strikes in front of him ("Frapper"), with the weapon of his action hand.
+   * The strike always costs its stamina and fatigue, whatever it meets: the group in front
+   * (wounded or missed), a wall ('wall', a closed fake wall too), a closed door ('door':
+   * "Hit" is not one of the actions that break doors, "Actions and Combos" note e), or
+   * nothing ('air': an open door, an imaginary wall, an empty tile).
+   * @returns {{ result: 'dead'|'busy'|'exhausted'|'air'|'wall'|'door'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
    */
   function attack() {
-    if (champion.dead) return { result: 'dead' };
-    const [dx, dy] = SIDE_DELTAS[party.facing];
-    const group = state.groupAt(party.level, party.x + dx, party.y + dy);
-    if (!group) return { result: 'nothing' };
     const action = ACTIONS.hit;
     const refused = spend(action);
-    if (refused) return { result: refused, group };
+    if (refused) return { result: refused };
+    const [dx, dy] = SIDE_DELTAS[party.facing];
+    const [x, y] = [party.x + dx, party.y + dy];
+    const group = state.groupAt(party.level, x, y);
+    if (!group) return { result: blockReason(state, party.level, x, y) === 'door' ? 'door' : blockReason(state, party.level, x, y) ? 'wall' : 'air' };
     const weapon = state.hands[1];
     const bonus = weapon ? itemInfo(dungeon, weapon).strength : 0;
     return damageGroup(group, championStrikes(champion, creatureInfo(group.type), action, random, bonus));

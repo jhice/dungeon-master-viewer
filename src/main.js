@@ -614,10 +614,21 @@ function clickFront(side = 'right') {
 function doAction(id) {
   const { result, item } = sim.act(id);
   game?.panel.setReady(sim.fatigue === 0); // disabled at once, not at the next tick
-  if (result === 'nothing') return showInfo(id === 'throw' ? 'Rien à lancer' : 'Personne à frapper');
+  if (result === 'nothing') return showInfo('Rien à lancer');
   if (result === 'exhausted') return showInfo('Trop fatigué');
-  if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
+  if (result === 'thrown') return showInfo(`Lancé : ${itemName(item)}`);
+  // A strike that meets no creature (the 'creatureHit' handler shows the others).
+  const missed = STRIKE_WORDS[result];
+  if (missed) {
+    game?.panel.showResult(missed[0]);
+    showInfo(missed[1]);
+  }
 }
+const STRIKE_WORDS = {
+  air: ['Dans le vide', 'Le coup frappe dans le vide'],
+  wall: ['Mur', 'Le coup frappe le mur'],
+  door: ['Porte', 'Le coup frappe la porte, sans l’abîmer'],
+};
 
 // A click with an item held by the cursor, out of reach (or on a creature): it is thrown
 // from that side of the view.

@@ -172,6 +172,46 @@ La fatigue existait déjà dans la simulation, mais le bouton restait cliquable 
 | N1 (14, 16), ouest | Inscription visible : la décoration disparaît |
 | N3 (15, 17), ouest | Message caché : la tête de goule reste visible tant que le message n'est pas affiché |
 
+### Frapper dans le vide
+
+**Demande :** on doit pouvoir frapper même sans créature en face. Le coup peut ne rien toucher, toucher un mur, une porte ou une créature, et le délai s'applique dans tous les cas.
+
+**Règle** (`attack()`, `src/sim/simulation.js`) : « Frapper » coûte toujours son endurance et sa fatigue (4 ticks), puis il se résout sur la case en face :
+
+| En face | Résultat | Affichage |
+|---|---|---|
+| Un groupe de créatures | Touché, raté ou sans effet (immatériel), comme avant | Dégâts, « Raté » ou « Sans effet » |
+| Un mur, un faux mur fermé | `wall` | « Mur » ; « Le coup frappe le mur » |
+| Une porte fermée | `door` : la porte n'est pas abîmée | « Porte » ; « Le coup frappe la porte, sans l'abîmer » |
+| Rien : case libre, porte ouverte, mur imaginaire | `air` | « Dans le vide » ; « Le coup frappe dans le vide » |
+
+**Pourquoi la porte n'est pas abîmée :** d'après la note (e) de la table *Actions and Combos*, seules Chop, Kick, Swing, Hack, Berzerk et Bash peuvent détruire une porte. « Frapper » (*Hit*) n'en fait pas partie. Une porte cassable se casse toujours au clic avec une arme tenue par le curseur (doc 019). Les vraies actions de combo arriveront en C3c.
+
+**Espace :** la touche actionne toujours ce qui est en face : un mur, une porte, ou la créature, qui est alors frappée.
+
+**Tests Node :**
+- dans le vide : `air`, fatigue de 4 ticks ;
+- un second coup immédiat est refusé ;
+- contre un mur : `wall` ;
+- contre la porte fermée N0 (5, 9) : `door`, et elle reste fermée.
+
+**Chrome :** au départ, « Frapper » affiche « Dans le vide » et le bouton est grisé pendant la fatigue.
+
+### Téléporteurs dans la vue de jeu
+
+**Demande :** dans la vue à la première personne, les téléporteurs doivent être translucides et occuper toute la case, en largeur et en hauteur.
+
+**Avant :** un bloc de 70 % de la case, à 90 % de la hauteur des murs, opaque (la vue de jeu n'applique pas l'opacité du rendu 3D).
+
+**Maintenant** (`level-meshes.js`, pièce `teleporterGame`, utilisée seulement avec `game: true`) :
+- le volume remplit **toute la case, du sol au plafond**. Il est réduit de 0,2 % pour que ses faces ne se superposent pas à celles des murs voisins ;
+- il est **translucide** : opacité 0,3, il n'écrit pas dans le tampon de profondeur, et on voit le couloir à travers ;
+- il garde sa couleur lumineuse.
+
+Le rendu 3D des niveaux superposés garde son bloc de 70 %. Un téléporteur invisible ou désactivé reste non dessiné dans la vue de jeu.
+
+**Chrome :** en N1, le téléporteur (26, 29) vu depuis (24, 29) remplit sa case, et on voit le fond du couloir à travers lui.
+
 ## Sources
 
 - *Dungeon Master Encyclopaedia*, **Dungeon Master Items** : http://dmweb.free.fr/games/dungeon-master/solutions/items/.

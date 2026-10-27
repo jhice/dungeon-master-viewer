@@ -221,7 +221,7 @@ export function createFirstPersonRenderer(
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
-    const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible && m.userData.part !== 'teleporter');
+    const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible && m.userData.part !== 'teleporterGame');
     const hit = raycaster.intersectObjects(pickable, false)[0];
     const info = hit?.object.userData.tiles?.[hit.instanceId];
     if (!info) return null;

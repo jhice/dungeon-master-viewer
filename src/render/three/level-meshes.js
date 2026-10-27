@@ -12,7 +12,8 @@
 //
 // `game: true` builds what the party sees instead (first-person view): only
 // the with-states look, and hidden things stay hidden (closed or imaginary
-// fake walls look like walls, invisible pits and teleporters are not drawn).
+// fake walls look like walls, invisible pits and teleporters are not drawn; a visible
+// teleporter fills its whole tile, wall high, translucent).
 
 import * as THREE from 'three';
 import { tileState } from '../../core/tile-states.js';
@@ -26,6 +27,7 @@ const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight, telepo
 // Part of the leaf still visible when an open door is raised into the lintel.
 const RAISED_DOOR_VISIBLE = 0.25;
 const HIDDEN_OPACITY = 0.4; // invisible pits, imaginary walls: faded but visible
+const TELEPORTER_GAME_OPACITY = 0.3;
 
 // Rotation (around y) that turns the "+z" stairs model so it rises away from its access side.
 const STAIRS_ROTATION = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 };
@@ -52,6 +54,14 @@ function partDefinitions(theme, h) {
       color: theme.teleporter,
       emissive: true,
       opacity: 0.45,
+    },
+    // First-person view: the whole tile, wall high (a hair smaller, so that its faces do
+    // not fight with the neighbouring walls), translucent.
+    teleporterGame: {
+      geometry: new THREE.BoxGeometry(0.998, h.wall * 0.998, 0.998),
+      color: theme.teleporter,
+      emissive: true,
+      opacity: TELEPORTER_GAME_OPACITY,
     },
   };
 }
@@ -114,7 +124,8 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
       if (tile.type === 'pit' && game) {
         if (!tile.detail.invisible) add(pitPart(tile.detail), info, [px, 0.011, pz]);
       } else if (tile.type === 'pit') addVariants('pit', pitPart(tile.detail), info, [px, 0.011, pz]);
-      if (tile.type === 'teleporter' && (!game || (tile.detail.visible && tile.detail.open))) add('teleporter', info, [px, h.teleporter / 2, pz]);
+      if (tile.type === 'teleporter' && !game) add('teleporter', info, [px, h.teleporter / 2, pz]);
+      if (tile.type === 'teleporter' && game && tile.detail.visible && tile.detail.open) add('teleporterGame', info, [px, h.wall / 2, pz]);
       if (tile.type === 'door') addDoor(add, info, px, pz, h, game);
     }
   }
@@ -128,6 +139,8 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
     const material = new THREE.MeshLambertMaterial({
       color: def.color,
       ...(def.emissive && { emissive: def.color, emissiveIntensity: 0.6 }),
+      // The first-person view does not restyle its meshes: its translucent parts are set here.
+      ...(game && def.opacity !== undefined && { transparent: true, opacity: def.opacity, depthWrite: false }),
     });
     // Each part may appear in several variants: they need their own geometry to be disposed independently.
     const mesh = new THREE.InstancedMesh(def.geometry.clone(), material, list.length);
