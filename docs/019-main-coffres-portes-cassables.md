@@ -38,7 +38,9 @@ Les coffres ne s'ouvrent pas encore. Quand on **range** un coffre :
 
 Exemple : le coffre N1 (2, 31) donne 8 objets (Drumstick, Corn, Cheese, Bread ×2, Magical Box (Blue), Scroll, Empty Flask).
 
-**Limite :** un coffre vidé, reposé au sol, garde l'anneau « contient des objets » en 2D et en 3D. Ces vues lisent le contenu dans `dungeon.json`.
+Un coffre vidé est **montré vide** partout : 2D, 3D et infobulles.
+- `contentsAt()` (`main.js`), qui fournit les contenus à toutes les vues, vide la liste `contents` des coffres présents dans `state.emptiedChests`.
+- `dungeon.json` n'est pas modifié.
 
 ## 3. Portes cassables
 
@@ -78,6 +80,42 @@ Les portes Ra et en fer ne sont jamais cassables.
 - main et « Ranger » dans la barre ;
 - l'arme reprise en main casse la porte N3 (22, 30) au 3e coup, et le trou montre le couloir derrière ;
 - aucune erreur dans la console.
+
+## 5. Retours de test
+
+| Retour | Ajustement |
+|---|---|
+| L'infobulle attend un mouvement de souris | La vue garde la dernière position du pointeur. `refreshPointer()` recalcule le curseur et l'infobulle à chaque changement de la main ou des objets (`showInventory()`) |
+| Coffre vidé et reposé : anneau « contient des objets » en 2D et en 3D | Coffre montré vide à la lecture (§ 2), les données du jeu restent intactes |
+| (constaté en testant) L'anneau « contient des objets » arrêtait le pointeur dans la vue à la première personne, posé sur le coffre | Les anneaux ne sont plus dessinés dans cette vue : comme les autres marqueurs, ce sont des aides de visualisation. Ils restent en 2D et en 3D |
+
+**Vérifié dans Chrome :**
+- un clic sur le coffre N1 (2, 31) l'ôte du sol, et l'infobulle passe à l'objet en main sans bouger la souris ;
+- « Ranger » met 9 objets dans l'inventaire et cache l'infobulle ;
+- le coffre, repris puis reposé, n'a plus l'anneau en 2D ;
+- aucune erreur dans la console.
+
+### Portes cassables : question ouverte
+
+**Constat de l'utilisateur dans le jeu original :** les portes N1 (11, 0) et (6, 1) ne semblent pas cassables.
+
+**Ce que disent les données :** les 12 portes de la liste ont bien `force="1"` et `fireball="1"` dans `Dungeon.xml`, lus tels quels par le convertisseur. Elles n'ont rien de commun par ailleurs :
+
+| Porte | Type | Ouverture prévue |
+|---|---|---|
+| N1 (11, 0) | bois | serrure Iron Lock (#44) |
+| N1 (6, 1) | **herse** | bouton de porte |
+| N1 (29, 27) | bois, ouverte au départ | refermée par une plaque (#9) |
+| N3 (21, 25), N3 (23, 3) | bois / herse | bouton de porte |
+| N10 (8, 12) | bois | bouton de porte, porte logique (#596) |
+| N3 (22, 30), (0, 4), (18, 14), N4 (7, 28), (4, 28), N7 (16, 5) | bois | aucune source |
+
+**Hypothèses, à confronter au jeu :**
+1. **Force contre défense** (DM) : une porte ne cède que si un coup dépasse la défense de son type. Une herse est bien plus résistante que le bois, et des champions de début de partie n'y arrivent peut-être pas. Sur une porte en bois sans mécanisme (par exemple N3 (22, 30)), le même essai dirait si c'est une question de force.
+2. **Action d'attaque :** dans DM, on casse une porte avec une **action d'attaque** de l'arme (Swing, Chop…), dans le panneau d'actions, et non en cliquant dessus.
+3. **Hypothèse de l'utilisateur :** une porte qui a un déclencheur (clé, bouton) ne serait pas cassable. Elle n'explique pas les 6 portes sans source.
+
+En attendant, le comportement de la phase actuelle est conservé : 3 coups pour le bois, 6 pour une herse, sur les 12 portes `force`.
 
 ## Sources
 

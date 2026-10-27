@@ -600,8 +600,14 @@ function clickFloor({ level, x, y, position, item }) {
 
 // Contents of a tile for the views: items lying there now (simulation), creatures of dungeon.json.
 const itemName = (ref) => describeItem(dungeon, ref).name;
+// A chest stowed once has given its contents to the inventory: it is shown empty
+// (dungeon.json keeps its list of contents).
 function contentsAt(level, x, y) {
-  return tileContents(dungeon, level, x, y, sim.state.itemsAt(level, x, y));
+  const contents = tileContents(dungeon, level, x, y, sim.state.itemsAt(level, x, y));
+  for (const item of contents?.items ?? []) {
+    if (item.kind === 'container' && sim.state.emptiedChests.has(item.index)) item.contents = [];
+  }
+  return contents;
 }
 
 function showInventory() {
@@ -611,6 +617,7 @@ function showInventory() {
     hand,
   );
   game?.view.setHandCursor(hand?.color ?? null);
+  game?.view.refreshPointer();
 }
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };

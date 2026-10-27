@@ -93,7 +93,8 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     // are not markers here: the party sees the ornaments, inscriptions and doors drawn
     // by fp-decor.js (a plate or a button without graphic stays invisible, as in DM).
     for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents })) {
-      if (mesh.userData.layer === 'texts' || mesh.userData.layer === 'mechanisms') {
+      // Not seen by the party either: the "has contents" rings of chests and creatures.
+      if (['texts', 'mechanisms', 'contents'].includes(mesh.userData.layer)) {
         mesh.geometry.dispose();
         mesh.material.dispose();
         continue;
@@ -193,12 +194,15 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   tooltip.hidden = true;
   container.append(tooltip);
   let hoverPending = false;
+  let lastPointer = null; // { clientX, clientY } while the pointer is over the view
   const onMove = (event) => {
+    lastPointer = { clientX: event.clientX, clientY: event.clientY };
     if (hoverPending) return;
     hoverPending = true;
     requestAnimationFrame(() => {
       hoverPending = false;
-      const t = target(event);
+      if (!lastPointer) return;
+      const t = target(lastPointer);
       const active = t?.kind === 'front' || (t?.kind === 'floor' && canReach?.(t.spot));
       renderer.domElement.style.cursor = handCursor ?? (active ? 'pointer' : '');
       const label = labelOf?.(t) ?? null;
@@ -206,11 +210,12 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       if (!label) return;
       const rect = container.getBoundingClientRect();
       tooltip.textContent = label;
-      tooltip.style.left = `${event.clientX - rect.left + 16}px`;
-      tooltip.style.top = `${event.clientY - rect.top + 14}px`;
+      tooltip.style.left = `${lastPointer.clientX - rect.left + 16}px`;
+      tooltip.style.top = `${lastPointer.clientY - rect.top + 14}px`;
     });
   };
   const onLeave = () => {
+    lastPointer = null;
     tooltip.hidden = true;
   };
   // Item in hand: a square of its colour replaces the cursor.
@@ -239,6 +244,10 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     },
     /** Colour of the item in hand (cursor), or null for an empty hand. */
     setHandCursor,
+    /** What is under the pointer may have changed (item taken, put, hand changed): update cursor and tooltip. */
+    refreshPointer() {
+      if (lastPointer) onMove(lastPointer);
+    },
     /** The state of a tile of the shown level changed: rebuild it (about 2 ms, see 007). */
     updateTile(levelIndex) {
       if (levelIndex !== level) return;
