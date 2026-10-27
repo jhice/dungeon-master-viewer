@@ -613,6 +613,7 @@ function clickFront(side = 'right') {
 // item of the hand. What it does to a creature is shown by the 'creatureHit' handler.
 function doAction(id) {
   const { result, item } = sim.act(id);
+  game?.panel.setReady(sim.fatigue === 0); // disabled at once, not at the next tick
   if (result === 'nothing') return showInfo(id === 'throw' ? 'Rien à lancer' : 'Personne à frapper');
   if (result === 'exhausted') return showInfo('Trop fatigué');
   if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
@@ -623,6 +624,7 @@ function doAction(id) {
 function throwHeld(side) {
   if (!sim.hand) return;
   const { result, item } = sim.throwHeld(side);
+  game?.panel.setReady(sim.fatigue === 0);
   if (result === 'exhausted') showInfo('Trop fatigué');
   else if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
 }

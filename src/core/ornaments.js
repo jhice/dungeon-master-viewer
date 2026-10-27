@@ -5,7 +5,8 @@
 // Both graphics are 1-based indexes into map.wallDecorations (0 = none, doc 009).
 //
 // A face shows ONE ornament: the one of the LAST actuator of the face that has
-// a graphic, else the tile decoration of that side. Rotations reorder the
+// a graphic, else the tile decoration of that side, unless a visible text is
+// engraved on that face (the inscription replaces the random ornament). Rotations reorder the
 // actuators, which changes the ornament shown (levers, torch holders, a button
 // replaced by the alcove it reveals). The items lying against a face are only
 // seen and reachable when the ornament shown is an alcove.
@@ -16,14 +17,19 @@ const ALCOVES = /Alcove|Vi Altar/; // alcoves hold items: Square / Arched Alcove
  * Name of the ornament shown on a face of a wall tile, or null.
  * @param {(level, x, y) => Array<{ index, position }>} [actuatorsAt] current order of the
  *   actuators (the simulation's state); default: the order of dungeon.json
+ * @param {(index: number) => boolean} [textVisible] current visibility of a text (the
+ *   simulation's state); default: as in dungeon.json
  */
-export function shownOrnament(dungeon, level, x, y, face, actuatorsAt) {
+export function shownOrnament(dungeon, level, x, y, face, actuatorsAt, textVisible) {
   const tile = dungeon.tileAt(level, x, y);
   if (tile?.type !== 'wall' || !tile.detail) return null;
   const names = dungeon.level(level).wallDecorations;
   const refs = actuatorsAt ? actuatorsAt(level, x, y) : (tile.detail.items ?? []).filter((ref) => ref.kind === 'actuator');
   const graphics = refs.filter((ref) => ref.position === face).map((ref) => dungeon.data.actuators[ref.index].graphic).filter((g) => g > 0);
   if (graphics.length) return names[graphics.at(-1) - 1]?.name ?? null;
+  const visible = textVisible ?? ((index) => dungeon.data.texts[index].visible);
+  const engraved = (tile.detail.items ?? []).some((ref) => ref.kind === 'text' && ref.position === face && visible(ref.index));
+  if (engraved) return null;
   const decoration = (tile.detail.decorations ?? []).filter((d) => d.side === 'NESW'[face]).at(-1);
   return decoration ? (names[decoration.graphic - 1]?.name ?? null) : null;
 }

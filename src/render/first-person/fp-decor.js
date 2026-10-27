@@ -66,7 +66,7 @@ export function createDecor(dungeon, state, wallHeight) {
     const meshes = [];
     for (let face = 0; face < 4; face++) {
       if (isAlcove(dungeon, level, x, y, face, state.actuatorsAt)) meshes.push(...niche(x, y, face));
-      const name = shownOrnament(dungeon, level, x, y, face, state.actuatorsAt);
+      const name = shownOrnament(dungeon, level, x, y, face, state.actuatorsAt, state.textVisible);
       const art = name && WALL_ART[name];
       if (!art) continue; // nothing, an alcove (the niche), or an unknown name (none in DM)
       const height = art.h * wallHeight;

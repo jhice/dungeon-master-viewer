@@ -658,8 +658,13 @@ body {
   background: #2a3a2a;
 }
 
-.champion-actions.is-tired .champion-action {
-  color: #777;
+.champion-action:disabled {
+  color: #666;
+  cursor: default;
+}
+
+.champion-action:disabled:hover {
+  background: none;
 }
 
 .champion-no-action {

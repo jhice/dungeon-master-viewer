@@ -1,8 +1,9 @@
 // The champion's box over the first-person view, top left, as in DM (docs/023, 024): his
 // name, his two hands and three bars (health, stamina, mana). A click on a hand swaps
 // the item held by the cursor with the item of the hand. Below, the action panel of the
-// action hand (right): one button per action ("Frapper", "Lancer"); after an action, it
-// shows the damage done for a moment, as the action area of DM does. A hit taken shows
+// action hand (right): one button per action ("Frapper", "Lancer"), disabled while the
+// champion recovers from his last action (its fatigue, as in DM); after an action, the
+// damage done shows for a moment above them, as the action area of DM does. A hit taken shows
 // the damage on the box. When the champion dies, a veil covers the view with a
 // "Recommencer" button.
 
@@ -52,7 +53,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart }) 
   const actions = element('div', 'champion-actions');
   const result = element('div', 'champion-result');
   result.hidden = true;
-  panel.append(box, actions, result);
+  panel.append(box, result, actions);
 
   const veil = element('div', 'champion-dead');
   veil.hidden = true;
@@ -102,6 +103,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart }) 
           ...actionList.map(({ id, name: label }) => {
             const button = element('button', 'champion-action');
             button.type = 'button';
+            button.disabled = !ready;
             button.textContent = label;
             button.addEventListener('click', () => {
               onAction(id);
@@ -120,22 +122,18 @@ export function createChampionPanel(container, { onAction, onHand, onRestart }) 
       veil.hidden = !champion.dead;
       veilText.textContent = `${champion.name} est mort`;
     },
-    /** The champion can act (no fatigue): the action buttons are lit. */
+    /** The champion can act (no fatigue): the action buttons are enabled. */
     setReady(value) {
       if (value === ready) return;
       ready = value;
-      actions.classList.toggle('is-tired', !ready);
+      for (const button of actions.querySelectorAll('button')) button.disabled = !ready;
     },
     /** Result of an action, in the action area: the damage done, or a word. */
     showResult(text) {
       clearTimeout(resultTimer);
       result.textContent = text;
       result.hidden = false;
-      actions.hidden = true;
-      resultTimer = setTimeout(() => {
-        result.hidden = true;
-        actions.hidden = false;
-      }, RESULT_MS);
+      resultTimer = setTimeout(() => (result.hidden = true), RESULT_MS);
     },
     /** Damage taken by the champion: shown on his box. */
     wounded(damage) {

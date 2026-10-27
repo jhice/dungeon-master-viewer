@@ -128,6 +128,50 @@ Un clic droit dans la vue range l'objet tenu dans l'inventaire, comme « Ranger 
 - **Toucher :** un objet lancé touche toujours la créature qu'il atteint. Dans DM, il y a un test, et l'objet peut passer à côté.
 - **C3b** reprendra `createProjectiles()` pour les lanceurs muraux et les sorts : `launch()` accepte une énergie, une perte par pas et des dégâts quelconques.
 
+## 7. Retours après les tests
+
+### Délai entre deux actions
+
+**Demande :** dans DM, chaque action du champion est suivie d'un temps mort, pendant lequel son bouton est désactivé. Cela évite de cliquer sans arrêt.
+
+**Ce que dit la documentation :** la table de l'Encyclopaedia (*Actions and Combos*) donne cette durée pour chaque action, dans la colonne **Fatigue**. Elle est exprimée en 1/6 de seconde : c'est le temps avant de pouvoir agir de nouveau.
+
+| Action | Fatigue | Durée |
+|---|---|---|
+| Punch | 1 | 0,17 s |
+| Hit (Frapper) | 4 | 0,67 s |
+| Kick, Stab | 5 | 0,83 s |
+| Swing, Block | 6 | 1 s |
+| Chop | 8 | 1,33 s |
+| Thrust | 16 | 2,67 s |
+| Berzerk | 30 | 5 s |
+| Throw (Lancer) | 0 dans la table | 4 ticks ici, soit 0,67 s, **provisoire** |
+
+La fatigue existait déjà dans la simulation, mais le bouton restait cliquable : le coup était simplement refusé. Désormais :
+- **pendant la fatigue**, les boutons du panneau d'actions sont **désactivés** et grisés ;
+- ils le sont **dès le clic**, sans attendre le tick suivant ;
+- Espace et le clic sur une créature sont refusés de la même façon ;
+- **le résultat** (dégâts, « Raté ») s'affiche **au-dessus** des boutons au lieu de les remplacer, pour qu'on voie le bouton se griser puis revenir.
+
+**Vérification dans Chrome :** après un « Frapper » sur un Screamer, le bouton est désactivé tout de suite, se réactive au bout de 0,6 s, et le résultat (35) s'affiche au-dessus.
+
+### Inscription sur une décoration
+
+**Constat :** en N0 (5, 17), la face ouest porte une décoration aléatoire du niveau (un crochet, « Hook ») et l'inscription « VI ALTAR OF REBIRTH ». Les deux étaient dessinés l'un sur l'autre.
+
+**Règle :**
+- une face qui porte une **inscription visible** n'affiche plus sa décoration aléatoire (`shownOrnament()`, `src/core/ornaments.js`) ;
+- les ornements des actuators (boutons, serrures…) ne sont pas concernés ;
+- un message encore caché laisse la décoration en place, jusqu'à ce qu'un mécanisme le fasse apparaître. La face est alors redessinée.
+
+**Faces concernées dans le donjon :**
+
+| Face | Situation |
+|---|---|
+| N0 (5, 17), ouest | Inscription visible : la décoration disparaît |
+| N1 (14, 16), ouest | Inscription visible : la décoration disparaît |
+| N3 (15, 17), ouest | Message caché : la tête de goule reste visible tant que le message n'est pas affiché |
+
 ## Sources
 
 - *Dungeon Master Encyclopaedia*, **Dungeon Master Items** : http://dmweb.free.fr/games/dungeon-master/solutions/items/.
