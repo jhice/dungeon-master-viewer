@@ -12,7 +12,8 @@
 // - A member killed (`kill()`) leaves the items of its species (creature-drops.js); the
 //   survivors may flee, by their fear resistance. The last one killed: the group's
 //   possessions fall on its tile too, its plate is released.
-// - A Giggler next to the party steals the item of a hand (hook `steal`), then flees.
+// - A Giggler next to the party steals the item of a hand (hook `steal`), then flees for
+//   as long as it holds stolen items: blocked, it waits; it never comes back to the party.
 // - A fleeing group steps away from the party for a while; cornered, it fights.
 // - One group per tile; a group never enters the party's tile.
 // - Generators, triggered by another actuator (a plate of the party, often a few tiles
@@ -163,9 +164,10 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     if (group.nextMove === null || group.nextMove > clock.now + 1) group.nextMove = clock.now + 1;
   }
 
-  // The group flees for a while (fear after a death, or a Giggler with its loot).
+  // The group flees for a while after a death (fear), for good after a theft (a Giggler
+  // with its loot, until it is killed).
   function scare(group, reason) {
-    group.fleeUntil = clock.now + FLEE_TICKS + randomInt(FLEE_TICKS);
+    group.fleeUntil = reason === 'theft' ? Infinity : clock.now + FLEE_TICKS + randomInt(FLEE_TICKS);
     group.target = null;
     emit('groupFled', { group, reason });
   }

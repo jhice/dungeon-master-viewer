@@ -84,6 +84,10 @@ Une partie de C4 était déjà faite en C3a (doc 023, § 4) :
   - le Giggler **s'enfuit** (même fuite qu'au § 3) ;
   - message : « Giggler vous a volé : Torch ».
 - **Récupérer l'objet :** il faut tuer le Giggler. L'objet tombe alors sur sa case, avec ses autres possessions.
+- **Fuite sans fin :** un Giggler qui garde un objet volé **fuit pour de bon**, jusqu'à sa mort (`fleeUntil = Infinity`).
+  - Bloqué, il attend sur place. Il ne revient jamais vers le groupe.
+  - Si le groupe le rejoint au contact, il peut voler l'autre main.
+  - Avant le retour de l'utilisateur, sa fuite durait 10 à 20 s comme une fuite de peur. Une fois bloqué, il revenait ensuite vers le groupe. Cas signalé : N9 (11, 5), avec le groupe à sa droite.
 - **Mains vides :** il ne prend rien, et ne frappe pas.
 
 ## 5. Vérifications
@@ -99,6 +103,7 @@ Une partie de C4 était déjà faite en C3a (doc 023, § 4) :
 | Screamer | Résistance 15 : jamais effrayé |
 | Giggler de N9 (7, 6), Torch en main droite | Il vole la Torch, la garde et s'enfuit en (4, 4). Rattrapé et tué, la Torch tombe sur sa case |
 | Giggler, mains vides | Rien de volé, aucun coup |
+| N9 (11, 5), groupe à sa droite en (12, 5) | Vol de la Torch, fuite jusqu'en (5, 0), à 12 cases. Deux minutes plus tard, il n'est jamais revenu plus près |
 
 **Chrome :**
 - au niveau 1, les 4 Screamers sont tués à coups de « Frapper » ;

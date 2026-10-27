@@ -117,6 +117,30 @@ function killGroup(group, max = 400) {
   check(names(sim.state.itemsAt(giggler.level, giggler.x, giggler.y)).includes('Torch'), `la Torch tombe sur sa case (${giggler.x}, ${giggler.y})`);
 }
 
+// 3b. N9 (11, 5), the party on its right (feedback on C4): once blocked, the Giggler with
+// its loot stays away, it does not come back to the party.
+{
+  sim.reset();
+  immortal();
+  const giggler = sim.state.groupAt(9, 11, 5);
+  sim.state.hands[1] = sim.inventory.find((ref) => names([ref])[0] === 'Torch');
+  sim.teleport(9, 12, 5);
+  while (sim.party.facing !== 'W') sim.command('turnRight');
+  let stolen = false;
+  const off = sim.on('itemStolen', () => (stolen = true));
+  for (let t = 0; t < 6 * 30 && !stolen; t++) sim.tick(1);
+  off();
+  const distance = () => Math.abs(giggler.x - 12) + Math.abs(giggler.y - 5);
+  sim.tick(6 * 20);
+  const blocked = distance();
+  let closest = blocked;
+  for (let s = 0; s < 120; s++) {
+    sim.tick(6);
+    closest = Math.min(closest, distance());
+  }
+  check(stolen && blocked > 3 && closest === blocked, `N9 : vol, fuite jusqu'en (${giggler.x}, ${giggler.y}), à ${blocked} cases ; 2 min plus tard, jamais plus près (${closest})`);
+}
+
 // 4. A Giggler finds empty hands: nothing stolen.
 {
   sim.reset();
