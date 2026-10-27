@@ -81,6 +81,8 @@ Les **caractéristiques des espèces** font partie du moteur, pas de `Dungeon.xm
 
 ### Phase C2 — Perception et poursuite
 
+> **Faite**, voir [022-creatures-phase-c2.md](022-creatures-phase-c2.md). La fuite et le cri de guerre attendent le combat (C3, C4).
+
 **Objectif :** les créatures réagissent au groupe, sans encore faire de dégâts.
 
 - **Vue :** le groupe est-il visible ? Même niveau, ligne de vue dégagée dans la grille, distance maximale selon l'espèce. La lumière est permanente pour l'instant (Q7).
@@ -90,6 +92,8 @@ Les **caractéristiques des espèces** font partie du moteur, pas de `Dungeon.xm
 - **Fuite** de certaines espèces, si les données reconstituées le prévoient.
 - **Critère de fin :** au niveau 2, s'approcher d'un groupe fait venir les créatures au contact, puis elles restent face au groupe.
 - **Dépendance :** C1.
+
+A noter : les champions peuvent lancer un "cri de guerre" qui fait fuir certaines espèces.
 
 ### Phase C3 — Combat
 

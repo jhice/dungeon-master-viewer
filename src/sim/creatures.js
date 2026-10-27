@@ -1,8 +1,12 @@
-// Creature groups (phase C1, docs/021): presence and movement, no combat yet.
+// Creature groups (phases C1 and C2, docs/021 and 022): presence, movement, perception
+// and pursuit of the party, no combat yet.
 // - Only the groups on the party's level are active, as in DM (the engine keeps
 //   "extended" data for them only); the others wait, frozen, for the party.
 // - An active group wanders: every `moveTicks` (species) and a random extra, one step
 //   to a random neighbouring tile it may enter (rules.js), then falls and teleporters.
+// - When it is due, it first looks for the party (perception.js): seen, it walks towards
+//   it every `moveTicks` and stays next to it, facing it; smelled or heard, it turns to
+//   it; lost from sight, it goes where it saw it last, then wanders again.
 // - One group per tile; a group never enters the party's tile.
 // - Generators, triggered by another actuator (a plate of the party, often a few tiles
 //   away), create their group on their own tile; if it is taken, the group appears as
@@ -12,6 +16,7 @@
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { creaturePassage, resolveCreatureArrival } from './rules.js';
+import { perceiveParty, facingTowards, stepTowards } from './perception.js';
 
 const SEED = 0x0d4e0;
 // Members per tile by size (creature-info.js), and their sub-tiles (0..3 = NW, NE, SE, SW).
@@ -24,7 +29,7 @@ const POSITIONS = [[0, 1, 2, 3], [0, 2], [null]];
  * @param {ReturnType<import('./clock.js').createClock>} clock
  * @param {ReturnType<import('./logic.js').createLogic>} logic
  * @param {object} hooks
- * @param {(type: string, payload: object) => void} hooks.emit 'creaturesMoved'
+ * @param {(type: string, payload: object) => void} hooks.emit 'creaturesMoved', 'groupAlerted'
  * @param {() => object} hooks.party current party
  */
 export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
@@ -56,6 +61,7 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
       if (group.level !== level) continue;
       const info = creatureInfo(group.type);
       group.nextMove = info.immobile ? null : clock.now + 1 + randomInt(info.moveTicks);
+      group.target = null;
     }
   }
 
@@ -67,10 +73,53 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party }) {
     for (const group of [...state.groups]) {
       if (group.level !== activeLevel || group.nextMove === null || group.nextMove > clock.now) continue;
       const info = creatureInfo(group.type);
-      wander(group, info);
-      // Carried to another level: frozen there until the party comes.
-      group.nextMove = group.level === activeLevel ? nextMove(info) : null;
+      const busy = behave(group, info);
+      // Carried to another level: frozen there until the party comes. Busy with the party: no idle time.
+      group.nextMove = group.level !== activeLevel ? null : busy ? clock.now + info.moveTicks : nextMove(info);
     }
+  }
+
+  // What a due group does: deal with the party if it notices it or remembers where it
+  // saw it, else wander. Returns true when busy with the party.
+  function behave(group, info) {
+    const p = party();
+    const sense = perceiveParty(dungeon, state, info, group, p);
+    if (sense) {
+      // Seen, or met (next to it): it remembers where the party stands.
+      if (sense.seen || sense.adjacent) {
+        if (!group.target) emit('groupAlerted', { group, seen: sense.seen });
+        group.target = { x: p.x, y: p.y };
+      }
+      if (sense.seen && !sense.adjacent && approach(group, info, group.target, false)) return true;
+      // Next to it, smelled, heard, or no way to it: it turns to it.
+      turn(group, facingTowards(group.x, group.y, p.x, p.y));
+      return true;
+    }
+    if (group.target) {
+      // Lost from sight: to the place where it saw the party last.
+      if (approach(group, info, group.target, true)) return true;
+      group.target = null;
+    }
+    wander(group, info);
+    return false;
+  }
+
+  // One step on a shortest way towards `goal` (next to it, or onto it); false if none.
+  function approach(group, info, goal, onto) {
+    const side = stepTowards(dungeon, state, info, group, goal, { onto, blocked: (x, y) => !free(group.level, x, y) });
+    if (!side) return false;
+    const [dx, dy] = SIDE_DELTAS[side];
+    const step = { level: group.level, x: group.x + dx, y: group.y + dy, facing: side };
+    move(group, resolveCreatureArrival(dungeon, state, info, step) ?? step, step);
+    return true;
+  }
+
+  // Turns on the spot (no plate notices it).
+  function turn(group, facing) {
+    if (!facing || facing === group.facing) return;
+    const from = { level: group.level, x: group.x, y: group.y, facing: group.facing };
+    state.moveGroup(group, { ...from, facing });
+    emit('creaturesMoved', { group, from, to: { ...from, facing }, turned: true });
   }
 
   // One step to a random side it may take, facing it; falls and teleporters apply.

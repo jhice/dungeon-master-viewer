@@ -4,8 +4,9 @@
 //                effects: [{ type: 'stairs'|'fall'|'teleport', party }…] applied after a step (rules.js)
 //   'blocked'    { party, reason }
 //   'itemsMoved' { from, to, items } items fell through a pit or were carried by a teleporter
-//   'creaturesMoved' { group, from, to, carried?, generated? } a group stepped, fell, was carried,
-//                or appeared (from = null); from / to = { level, x, y, facing } (creatures.js)
+//   'creaturesMoved' { group, from, to, carried?, generated?, turned? } a group stepped, fell, was carried,
+//                appeared (from = null) or turned on the spot; from / to = { level, x, y, facing } (creatures.js)
+//   'groupAlerted' { group, seen } a group noticed the party (seen, or met next to it) and goes after it
 //   'reset'      { party }
 
 export function createEmitter() {

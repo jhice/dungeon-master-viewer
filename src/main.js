@@ -676,6 +676,11 @@ sim.on('creaturesMoved', ({ group, from, to, generated }) => {
   for (const tile of [from, to]) if (tile) movedTiles.set(`${tile.level}:${tile.x},${tile.y}`, tile);
   movedFrame ||= requestAnimationFrame(redrawCreatures);
 });
+// A group noticed the party (C2): it comes after it.
+sim.on('groupAlerted', ({ group, seen }) => {
+  const { count, name } = describeGroup(dungeon, group);
+  showInfo(`${count > 1 ? `${count} × ${name} vous ont` : `${name} vous a`} ${seen ? 'repéré' : 'trouvé'}`);
+});
 function redrawCreatures() {
   movedFrame = 0;
   const levels = new Set();

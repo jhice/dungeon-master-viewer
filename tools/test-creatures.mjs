@@ -1,11 +1,13 @@
-// Checks of phase C1 (docs/021): creatures move without entering walls, one group
-// per tile, the plate N3 (7, 5) and a generator. Run: node tools/test-creatures.mjs
+// Checks of phases C1 and C2 (docs/021, 022): creatures move without entering walls, one
+// group per tile, the plate N3 (7, 5), a generator, perception and pursuit.
+// Run: node tools/test-creatures.mjs
 
 import { readFileSync } from 'node:fs';
 import { Dungeon, SIDE_DELTAS } from '../src/core/dungeon.js';
 import { createSimulation } from '../src/sim/simulation.js';
 import { creatureInfo } from '../src/core/creature-info.js';
 import { creaturePassage, blockReason } from '../src/sim/rules.js';
+import { lineOfSight, perceiveParty } from '../src/sim/perception.js';
 
 const dungeon = new Dungeon(JSON.parse(readFileSync(new URL('../data/dungeon.json', import.meta.url))));
 const sim = createSimulation(dungeon);
@@ -33,8 +35,8 @@ function invariants() {
 check(sim.teleport(1, 1, 4) === null, 'niveau 1 : le groupe arrive en (1, 4)');
 const before = new Map([...sim.state.groups].filter((g) => g.level === 1).map((g) => [g.id, `${g.x},${g.y}`]));
 let moves = 0;
-const off = sim.on('creaturesMoved', ({ group, from }) => {
-  if (from) moves++;
+const off = sim.on('creaturesMoved', ({ group, from, turned }) => {
+  if (from && !turned) moves++;
   const info = creatureInfo(group.type);
   // A voluntary step never enters a closed door (material creatures) nor a wall.
   if (from && !creaturePassage(sim.state, info, group.level, group.x, group.y) && sim.state.tileAt(group.level, group.x, group.y).type !== 'pit') {
@@ -126,7 +128,76 @@ check([...sim.state.groups].filter((g) => g.level === 2).every((g) => g.nextMove
   check(!generated, 'pendant le repos, la plaque ne produit rien');
 }
 
-// 5. Random walk on every level: no exception, invariants kept.
+// 5. Level 2: a group that sees the party comes into contact, then stays facing it.
+{
+  sim.reset();
+  // A mobile group, and a free tile 3 squares in front of it, in sight.
+  let found = null;
+  for (const group of [...sim.state.groups].filter((g) => g.level === 2)) {
+    const info = creatureInfo(group.type);
+    if (info.immobile || info.moveTicks > 30) continue;
+    const [dx, dy] = SIDE_DELTAS[group.facing];
+    for (const d of [3, 2]) {
+      const [x, y] = [group.x + d * dx, group.y + d * dy];
+      if (blockReason(sim.state, 2, x, y) || sim.state.groupAt(2, x, y) || sim.state.tileAt(2, x, y).type !== 'floor') continue;
+      if (!lineOfSight(dungeon, sim.state, 2, group.x, group.y, x, y)) continue;
+      found = { group, x, y };
+      break;
+    }
+    if (found) break;
+  }
+  check(found, `niveau 2 : ${found && `${creatureInfo(found.group.type).name} en (${found.group.x}, ${found.group.y}), groupe en (${found.x}, ${found.y})`}`);
+  const { group, x, y } = found;
+  const alerted = [];
+  const offAlert = sim.on('groupAlerted', (e) => alerted.push(e.group.id));
+  sim.teleport(2, x, y);
+  check(perceiveParty(dungeon, sim.state, creatureInfo(group.type), group, sim.party)?.seen, 'la créature voit le groupe');
+  const touching = () => Math.abs(group.x - x) + Math.abs(group.y - y) === 1;
+  let t = 0;
+  while (!touching() && t < 6 * 30) {
+    sim.tick(1);
+    t++;
+  }
+  offAlert();
+  check(alerted.includes(group.id), 'événement groupAlerted');
+  check(touching(), `au contact après ${t} ticks, en (${group.x}, ${group.y})`);
+  sim.tick(6 * 20);
+  const facesParty = SIDE_DELTAS[group.facing].every((d, i) => d === [x - group.x, y - group.y][i]);
+  check(touching() && facesParty, `20 s plus tard, toujours au contact et face au groupe (${group.facing})`);
+  // The party steps aside: the creature follows and faces it again.
+  const side = Object.entries(SIDE_DELTAS).find(([, [dx, dy]]) => !blockReason(sim.state, 2, x + dx, y + dy) && !sim.state.groupAt(2, x + dx, y + dy) && sim.state.tileAt(2, x + dx, y + dy).type === 'floor');
+  if (side) {
+    const [nx, ny] = [x + side[1][0], y + side[1][1]];
+    sim.teleport(2, nx, ny);
+    sim.tick(6 * 20);
+    const near = Math.abs(group.x - nx) + Math.abs(group.y - ny) === 1;
+    const faces = SIDE_DELTAS[group.facing].every((d, i) => d === [nx - group.x, ny - group.y][i]);
+    check(near && faces, `le groupe se décale en (${nx}, ${ny}) : la créature suit, en (${group.x}, ${group.y}) face ${group.facing}`);
+  }
+}
+
+// 6. Sight through the first two closed doors met: a wooden or iron door hides the party, a grate or a Ra door does not.
+{
+  sim.reset();
+  let checked = 0;
+  for (let level = 0; level < dungeon.levelCount && checked < 2; level++) {
+    const map = dungeon.level(level);
+    for (let y = 0; y < map.height && checked < 2; y++)
+      for (let x = 0; x < map.width && checked < 2; x++) {
+        const tile = sim.state.tileAt(level, x, y);
+        if (tile?.type !== 'door' || tile.detail.open) continue;
+        const [dx, dy] = tile.detail.orientation === 'NS' ? [0, 1] : [1, 0];
+        if (blockReason(sim.state, level, x - dx, y - dy) || blockReason(sim.state, level, x + dx, y + dy)) continue;
+        const look = map.doorTypes[dungeon.data.doors[tile.detail.items.find((i) => i.kind === 'door').index].type];
+        const clear = lineOfSight(dungeon, sim.state, level, x - dx, y - dy, x + dx, y + dy);
+        const expected = look === 'Porticullis' || look === 'Ra';
+        check(clear === expected, `porte fermée ${look} N${level} (${x}, ${y}) : ${clear ? 'on voit à travers' : 'elle cache le groupe'}`);
+        checked++;
+      }
+  }
+}
+
+// 7. Random walk on every level: no exception, invariants kept.
 {
   sim.reset();
   const commands = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
