@@ -39,15 +39,59 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-- le modèle de données, `data/dungeon.json`, généré par `npm run build:data` ;
-- le contrat des renderers, dans `src/render/renderer.js` ;
-- le graphe de la logique, avec `buildLogic()` dans `src/core/logic.js`, point de départ naturel de la simulation ;
-- les docs à lire en priorité, 009 (logique) et 002 (format JSON).
-- toutes les docs se trouevnt dans le dossier `docs/`
-- la simulation (phases A à E faites, voir docs 013 à 017) : `src/sim/` (sans DOM), vue à la première personne dans `src/render/first-person/` ;
-- les décors (murs, sols, portes) de la vue à la première personne, dessinés dans `ornament-art.js` (doc 018) ;
-- main et inventaire, coffres, portes cassables (doc 019) ;
-- plan des créatures en 4 phases (C1 à C4, doc 020) : C1 (déplacement, doc 021), C2 (perception, doc 022), C3a (champion Zed, combat, doc 023) puis mains, actions et lancer (doc 024), C4 (butin, peur, Giggler voleur, doc 025) faites ; C3b (projectiles muraux, sorts) et C3c (fidélité du combat) mises de côté en attendant le système de sorts du groupe ; tests Node : `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`
+> Mis à jour le 2026-10-28, après la doc 025.
+
+### Données et visualiseur
+
+- **Données :** le modèle `data/dungeon.json` est généré par `npm run build:data` (format : doc 002).
+- **Renderers :** leur contrat est dans `src/render/renderer.js`. Il y en a trois : ASCII (outil en ligne de commande), 2D (DOM/CSS), 3D (Three.js).
+- **Logique du donjon :** le graphe des actuators, `buildLogic()` dans `src/core/logic.js`, est décrit dans la doc 009.
+- **Docs :** toutes les docs sont dans `docs/`. À lire en priorité : 009 (logique) et 002 (format JSON) ; les sources sont dans 000.
+
+### Simulation (`src/sim/`, sans DOM, testable dans Node)
+
+- **Mécanique du donjon, phases A à E (docs 013 à 017) :**
+  - déplacement ;
+  - escaliers, trappes, téléporteurs ;
+  - actuators, textes ;
+  - objets.
+- **Vue à la première personne :** `src/render/first-person/`, avec les décors dessinés dans `ornament-art.js` (doc 018).
+  - Les téléporteurs y sont des cubes translucides, visibles de l'intérieur (doc 024).
+- **Main, inventaire, coffres, portes cassables (doc 019).** Le curseur (`state.hand`) tient un objet ; clic droit dans la vue : le ranger.
+- **Créatures (plan : doc 020) :**
+  - C1, déplacement, plaques, générateurs (doc 021) ;
+  - C2, perception et poursuite, `perception.js` (doc 022) ;
+  - C4, butin des espèces, peur et fuite, Giggler voleur (doc 025).
+  - Seules les créatures du niveau du groupe sont actives.
+- **Champion et combat :**
+  - C3a (doc 023) :
+    - un seul champion, **Zed, Duke of Banville**, pris dans sa fiche du Hall (`champion.js`) ;
+    - son cadre en haut à gauche de la vue (`src/ui/champion-panel.js`) ;
+    - « Frapper » ;
+    - attaques des créatures, mort des deux côtés.
+  - Mains, panneau d'actions et lancer (doc 024) :
+    - les deux mains de Zed et un panneau d'actions par objet, avec délai de fatigue ;
+    - lancer de tout objet et moteur de projectiles (`projectiles.js`) ;
+    - caractéristiques des objets dans `src/core/item-info.js`.
+- **Données du moteur reconstituées** depuis la *Dungeon Master Encyclopaedia* :
+  - `creature-info.js` (espèces) ;
+  - `item-info.js` (objets) ;
+  - `creature-drops.js` (butin).
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`.
+
+### En attente
+
+- **C3b** (projectiles muraux, sorts des créatures) et **C3c** (fidélité du combat : vraies formules, actions des combos, expérience, armures, cri de guerre) : mises de côté **en attendant le système de sorts du groupe**.
+- **Valeurs provisoires**, à confirmer dans ReDMCSB :
+  - formules de dégâts et de toucher ;
+  - portée et dégâts des objets lancés ;
+  - peur et durée de fuite ;
+  - régénération ;
+  - délai d'errance.
+  
+  Chaque doc les signale.
+- **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
+- **Lenteur de la marche aléatoire des tests**, due à un oscillateur d'actuators qui s'emballe (doc 021), à examiner.
 
 ## Simulation
 
