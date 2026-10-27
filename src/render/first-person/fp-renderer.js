@@ -14,7 +14,8 @@
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents } from '../three/level-contents.js';
-import { wallOrnaments, isAlcove } from '../../core/ornaments.js';
+import { isAlcove } from '../../core/ornaments.js';
+import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
 import { FACINGS, SIDE_DELTAS } from '../../core/dungeon.js';
 
@@ -25,16 +26,16 @@ export const VIEW = {
   eyeHeight: 0.42,
   pullBack: 0.35, // towards the back of the tile, in tiles (0.5 = back edge)
   fogNear: 2.5,
-  fogFar: 4,
+  fogFar: 3.5,
 };
 const ASPECT = 4 / 3;
 const WALL_HEIGHT = 0.7;
-const CEILING_COLOR = '#1d1b18';
+const CEILING_COLOR = '#696660';
 
 /**
  * @param {HTMLElement} container element sized by the caller (4/3), the canvas fills it
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
- * @param {{ tileAt(level, x, y): object, textVisible(index): boolean }} state simulation state (src/sim/state.js)
+ * @param {{ tileAt(level, x, y): object, textVisible(index): boolean, actuatorsAt(level, x, y): Array }} state simulation state (src/sim/state.js)
  * @param {object} [options]
  * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
  * @param {(spot: object) => void} [options.onClickFloor] a floor sub-tile was clicked: { level, x, y, position, item? }
@@ -65,6 +66,15 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
   let level = null; // level index currently built
   let built = null; // { group, meshes, ceiling }
 
+  // What the party sees of a tile's contents: the items against a wall face only if
+  // that face shows an alcove (not behind a mirror, a button, in a torch holder…).
+  function seenContents(level, x, y) {
+    const contents = contentsAt ? contentsAt(level, x, y) : tileContents(dungeon, level, x, y);
+    if (!contents || dungeon.tileAt(level, x, y).type !== 'wall') return contents;
+    const items = contents.items.filter((item) => isAlcove(dungeon, level, x, y, item.position, state.actuatorsAt));
+    return items.length || contents.creature ? { ...contents, items } : null;
+  }
+
   function build(levelIndex) {
     clear();
     level = levelIndex;
@@ -77,7 +87,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
     });
     // Items, creatures (still) and mechanisms, as markers of the 3D renderer.
     // Texts are drawn for real (inscriptions below), not as markers.
-    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt })) {
+    for (const mesh of buildLevelContents(dungeon, levelIndex, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents })) {
       if (mesh.userData.layer === 'texts') {
         mesh.geometry.dispose();
         mesh.material.dispose();
@@ -87,7 +97,7 @@ export function createFirstPersonRenderer(container, dungeon, state, { onClickFr
       meshes.push(mesh);
     }
     // Wall details drawn for real: inscriptions and alcoves.
-    const inscriptions = [...buildInscriptions(dungeon, state, levelIndex), ...buildAlcoves(dungeon, levelIndex)];
+    const inscriptions = [...buildInscriptions(dungeon, state, levelIndex), ...buildAlcoves(dungeon, state, levelIndex)];
     for (const mesh of inscriptions) group.add(mesh);
     for (const mesh of meshes) {
       // `game` builds no types-only look, but stairs/doors share variants: hide what is not 'states'.
@@ -263,12 +273,12 @@ function buildInscriptions(dungeon, state, levelIndex) {
 // (items on a wall stand at 35 % of its height, see level-contents.js).
 const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 }; // fractions of the wall height for bottom / top
 
-function buildAlcoves(dungeon, levelIndex) {
+function buildAlcoves(dungeon, state, levelIndex) {
   const meshes = [];
   for (const { x, y, detail } of dungeon.detailedTiles(levelIndex)) {
     if (detail.type !== 'wall') continue;
-    const faces = new Set(wallOrnaments(dungeon, levelIndex, x, y).map((o) => o.face).filter((face) => isAlcove(dungeon, levelIndex, x, y, face)));
-    for (const face of faces) {
+    for (let face = 0; face < 4; face++) {
+      if (!isAlcove(dungeon, levelIndex, x, y, face, state.actuatorsAt)) continue;
       const { dx, dz, rotation } = FACE_PLANES[face];
       const out = 1 + INSCRIPTION_GAP / 0.5;
       const height = (NICHE.top - NICHE.bottom) * WALL_HEIGHT;

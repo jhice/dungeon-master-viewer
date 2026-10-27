@@ -1,5 +1,5 @@
 // Minimal event bus: the views subscribe to what the simulation emits.
-// Events (see also logic.js: tileChanged, textChanged, actuatorFired):
+// Events (see also logic.js: tileChanged, textChanged, actuatorFired, ornamentChanged):
 //   'partyMoved' { party, from, kind: 'step'|'turn'|'teleport', effects?, loop? }
 //                effects: [{ type: 'stairs'|'fall'|'teleport', party }…] applied after a step (rules.js)
 //   'blocked'    { party, reason }

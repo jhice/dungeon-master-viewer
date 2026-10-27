@@ -3,28 +3,32 @@
 // - the graphic of the actuators of each face (buttons, locks, torch holders,
 //   the Vi Altar…).
 // Both graphics are 1-based indexes into map.wallDecorations (0 = none, doc 009).
+//
+// A face shows ONE ornament: the one of the LAST actuator of the face that has
+// a graphic, else the tile decoration of that side. Rotations reorder the
+// actuators, which changes the ornament shown (levers, torch holders, a button
+// replaced by the alcove it reveals). The items lying against a face are only
+// seen and reachable when the ornament shown is an alcove.
 
 const ALCOVES = /Alcove|Vi Altar/; // alcoves hold items: Square / Arched Alcove, Vi Altar
 
-/** Ornaments of a wall tile: [{ face: 0..3 (N, E, S, W), name }]. */
-export function wallOrnaments(dungeon, level, x, y) {
+/**
+ * Name of the ornament shown on a face of a wall tile, or null.
+ * @param {(level, x, y) => Array<{ index, position }>} [actuatorsAt] current order of the
+ *   actuators (the simulation's state); default: the order of dungeon.json
+ */
+export function shownOrnament(dungeon, level, x, y, face, actuatorsAt) {
   const tile = dungeon.tileAt(level, x, y);
-  if (tile?.type !== 'wall' || !tile.detail) return [];
+  if (tile?.type !== 'wall' || !tile.detail) return null;
   const names = dungeon.level(level).wallDecorations;
-  const ornaments = [];
-  for (const d of tile.detail.decorations ?? []) {
-    const name = names[d.graphic - 1]?.name;
-    if (name) ornaments.push({ face: 'NESW'.indexOf(d.side), name });
-  }
-  for (const ref of tile.detail.items ?? []) {
-    if (ref.kind !== 'actuator') continue;
-    const name = names[dungeon.data.actuators[ref.index].graphic - 1]?.name;
-    if (name) ornaments.push({ face: ref.position, name });
-  }
-  return ornaments;
+  const refs = actuatorsAt ? actuatorsAt(level, x, y) : (tile.detail.items ?? []).filter((ref) => ref.kind === 'actuator');
+  const graphics = refs.filter((ref) => ref.position === face).map((ref) => dungeon.data.actuators[ref.index].graphic).filter((g) => g > 0);
+  if (graphics.length) return names[graphics.at(-1) - 1]?.name ?? null;
+  const decoration = (tile.detail.decorations ?? []).filter((d) => d.side === 'NESW'[face]).at(-1);
+  return decoration ? (names[decoration.graphic - 1]?.name ?? null) : null;
 }
 
-/** Is there an alcove on this face (items can be put in it)? */
-export function isAlcove(dungeon, level, x, y, face) {
-  return wallOrnaments(dungeon, level, x, y).some((o) => o.face === face && ALCOVES.test(o.name));
+/** Does this face show an alcove (its items can be seen, taken, and items put in it)? */
+export function isAlcove(dungeon, level, x, y, face, actuatorsAt) {
+  return ALCOVES.test(shownOrnament(dungeon, level, x, y, face, actuatorsAt) ?? '');
 }

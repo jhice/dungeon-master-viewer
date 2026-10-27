@@ -75,13 +75,16 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     clock.schedule(a.delay, () => applyEffect(level, x, y, FACINGS.indexOf(direction), effect, index));
   }
 
-  // Rotation: the first actuator of the face goes to the end of the list, so a
-  // lever alternates its two actuators (and the graphic shown, phase F).
+  // Rotation: the first actuator of the face goes to the end of the list. The face
+  // shows the ornament of its last actuator (ornaments.js): a lever alternates, a
+  // button gives way to the alcove it reveals.
   function rotate(level, x, y, index) {
     const list = state.actuatorsAt(level, x, y);
     const face = list.find((ref) => ref.index === index)?.position;
     const i = list.findIndex((ref) => ref.position === face);
-    if (i >= 0) list.push(...list.splice(i, 1));
+    if (i < 0) return;
+    list.push(...list.splice(i, 1));
+    emit('ornamentChanged', { level, x, y, face });
   }
 
   // --- Effects on the target tile ---------------------------------------------------
@@ -294,8 +297,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
 
   // --- Wall click: the face in front of the party ---------------------------------------
   /**
-   * Actuators of the face first (buttons, levers, locks, item holders); then an item
-   * still in hand goes into an alcove, or else the items of the face are taken.
+   * Actuators of the face first (buttons, levers, locks, item holders); then, if the
+   * face shows an alcove, an item still in hand goes into it, or else its items are taken.
    * Locks and "specific item" actuators need the item **in hand**; a lock
    * ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
    * takes the item it expects from the hand, or gives it back to an empty hand.
@@ -312,6 +315,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (tile.type === 'door') return clickDoor(p.level, x, y, tile);
     if (tile.type !== 'wall') return { target: tile.type, fired: 0 };
     const face = (FACINGS.indexOf(p.facing) + 2) % 4; // the face looking at the party
+    // As shown before this click: a button revealing an alcove does not hand over its items at once.
+    const alcove = isAlcove(dungeon, p.level, x, y, face, state.actuatorsAt);
     const lying = state.itemsAt(p.level, x, y);
     const matches = (item, a) => item !== null && itemIdOf(dungeon, item) === a.data;
     let held = hand && state.inventory.includes(hand) ? hand : null;
@@ -351,7 +356,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     const fired = firedCount;
     if (placed || took) return { target: 'wall', fired, placed, took };
 
-    if (held && isAlcove(dungeon, p.level, x, y, face)) {
+    if (!alcove) return { target: 'wall', fired, took: 0 }; // items behind a mirror, a button…: out of reach
+    if (held) {
       intoWall(p.level, x, y, face, held);
       return { target: 'wall', fired, placed: true };
     }

@@ -21,7 +21,7 @@ import { tileState } from '../../core/tile-states.js';
 // teleporters are 90 % of it, stairs span it.
 export const DEFAULT_WALL_HEIGHT = 0.7;
 const FLOOR_THICKNESS = 0.05;
-const STEPS = 3;
+const STEPS = 4;
 const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight, teleporter: wallHeight * 0.9 });
 // Part of the leaf still visible when an open door is raised into the lintel.
 const RAISED_DOOR_VISIBLE = 0.25;
@@ -212,7 +212,7 @@ function buildOutlines(centers, color, h) {
 
 // Stairs model: STEPS boxes along +z, starting at the access side (z = -0.5 before rotation).
 // Up stairs: step tops rise from the floor, boxes stand on the floor (y = 0).
-// Down stairs: step tops sink below the floor, boxes share a base at y = -wall height,
+// Down stairs: step tops at floor level, boxes share a base at y = -wall height,
 // so the walking surface (seen from above) goes down.
 function addStairs(add, info, px, pz, accessSide, h) {
   const goingUp = info.detail.direction === 'up';
@@ -221,7 +221,7 @@ function addStairs(add, info, px, pz, accessSide, h) {
   const cos = Math.cos(rotation);
   const stepHeight = h.wall / (STEPS + 1);
   for (let i = 0; i < STEPS; i++) {
-    const top = goingUp ? (i + 1) * stepHeight : -(i + 1) * stepHeight;
+    const top = goingUp ? (i + 1) * stepHeight : -i * stepHeight; // previously -(i + 1)
     const bottom = goingUp ? 0 : -h.wall;
     const localZ = -0.5 + (i + 0.5) / STEPS;
     // Rotate the step offset (0, localZ) around y.

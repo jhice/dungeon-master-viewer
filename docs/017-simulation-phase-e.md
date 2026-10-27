@@ -156,6 +156,50 @@ Il garde sa sous-case. Les actuators au sol des deux cases réagissent, et la ba
   - `F` efface la sélection ;
   - aucune erreur dans la console.
 
+## 7. Décor affiché d'une face et alcôves cachées
+
+**Retour :** en N1 (6, 4), le Falchion ne doit être visible et accessible qu'une fois l'alcôve ouverte par son bouton.
+
+**Règle du moteur** (`src/core/ornaments.js`) :
+- Une face affiche **un seul** décor : celui du **dernier actuator de la face qui a un graphisme**, sinon la décoration de la tuile de ce côté.
+- Les rotations changent l'ordre des actuators, donc le décor affiché.
+- Les objets posés contre une face ne sont **vus et accessibles que si ce décor est une alcôve** : Square Alcove, Arched Alcove ou Vi Altar.
+
+La règle explique tous les cas observés :
+
+| Cas | Ordre des actuators | Effet |
+|---|---|---|
+| N1 (6, 4), Falchion | #622 inactif « Square Alcove », #621 bouton « Big Switch Out » (rotation, usage unique) | Au départ, on voit le bouton. Le clic le fait passer en tête : l'alcôve s'affiche avec le Falchion |
+| Levier | actuator à rotation (levier haut), actuator d'action (levier bas) | Il alterne à chaque clic (phase C) |
+| Support à torche | « Empty Torch Holder », « Full Torch Holder » (type 13) | « Full » tant que la torche y est, « Empty » une fois prise |
+
+**Toutes les faces dont le décor n'est pas une alcôve** (47) :
+
+| Cas | Faces | Comportement |
+|---|---|---|
+| Bouton qui révèle une alcôve | N1 (6, 4) ; N6 (25, 20) et N10 (15, 25), vides | Le bouton laisse place à l'alcôve |
+| Fentes à pièces du niveau 10 | 7 faces autour de (25–28, 26–29) : bombes, Cross Key, coffre, potion, boîtes magiques, pièces | Une Copper Coin en main dans la fente (serrure à rotation, usage unique) révèle l'alcôve et son objet : c'est le « distributeur » |
+| Miroirs du Hall | 24 faces | L'équipement de chaque champion, caché derrière son miroir |
+| Supports à torche | 12 faces | La torche, représentée par le décor, gérée par le type 13 |
+| N3 (10, 30), « Slime Outlet » | Gold Key | Support de type 13 : un clic main vide la donne |
+| N6 (13, 4) | Un rocher, sans aucun décor | Invisible et inaccessible |
+| N13 (24, 3), l'Amalgame | The Firestaff (Complete) | Échangeur (16, 17), non géré |
+
+**Implémentation :**
+- Le clic sur une face évalue l'alcôve **avant** de traiter les actuators. Le clic sur le bouton révèle l'alcôve, le suivant prend l'objet, comme dans le jeu.
+- Une face sans alcôve ne donne ni ne reçoit d'objet, sauf par son support de type 13.
+- Une rotation émet `ornamentChanged`, et la vue à la première personne reconstruit le niveau.
+- La niche et les objets d'une face y suivent le décor affiché.
+- La 2D et la 3D, outils de visualisation, continuent de montrer tous les objets.
+
+**Vérifications :**
+- **Node :**
+  - Falchion : le 1er clic actionne le bouton (« Square Alcove » s'affiche), le 2e donne le Falchion, le 3e ne donne rien ;
+  - fente N10 (26, 26) : la Copper Coin en main est avalée et l'alcôve s'affiche ; au clic suivant, on récupère 2 Copper Coins ;
+  - miroir N0 (14, 2) : rien n'est accessible ;
+  - support à torche : on passe de « Full » à « Empty » en prenant la torche.
+- **Chrome :** face au mur (6, 4), Espace fait apparaître la niche avec le Falchion sur son rebord.
+
 ## Sources
 
 Aucune nouvelle source. Identifiants : doc 009 ; décors muraux (alcôves) : doc 002.

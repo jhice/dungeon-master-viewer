@@ -645,6 +645,9 @@ sim.on('inventoryChanged', () => {
   if (hand) showInfo(`En main : ${itemName(hand)}`);
 });
 
+// A rotation changed the ornament shown on a wall face (lever, torch holder, alcove revealed).
+sim.on('ornamentChanged', ({ level }) => game?.view.updateTile(level));
+
 // A mechanism changed a tile: redraw it everywhere and say so.
 const STATE_WORDS = {
   door: ['Porte', 'ouverte', 'fermée'],
