@@ -778,8 +778,10 @@ sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   game?.panel.setReady(sim.fatigue === 0);
   const who = championName(champion);
   if (!spell) return showInfo(`${who} a prononcé un sort incompréhensible`);
-  const words = `${spell.name} (${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')})`;
-  if (reason === 'needsFlask') return showInfo(`${who} a besoin d’une flasque vide en main pour ${words}`);
+  // The spell is named only when the grimoire knows it (docs/034); else its symbols alone.
+  const symbols = `${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')}`;
+  const words = sim.knownSpells.includes(spell) ? `${spell.name} (${symbols})` : symbols;
+  if (reason === 'needsFlask') return showInfo(`${who} a besoin d’une flasque vide en main pour cette potion (${symbols})`);
   if (reason === 'potion') return showInfo(`${who} lance ${words} : la flasque devient ${itemName(item)}`);
   showInfo(`${who} lance ${words}${reason === 'unimplemented' ? ' · pas encore implémenté' : ''}`);
 });

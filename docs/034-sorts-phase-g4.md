@@ -9,6 +9,9 @@
 - Le bouton « Grimoire (n) » du panneau de sorts ouvre la liste des sorts connus : leurs symboles (sans la puissance) et leur nom.
 - Un message annonce les sorts appris : « Grimoire : Torch (Ful) ».
 - L'infobulle de la ligne du sort la nomme quand le sort est connu : « Lancer le sort Lo Ful : Torch (6 mana, non décompté) ».
+- **Les messages du lancer** ne nomment aussi le sort que s'il est connu : « Zed lance Torch (Lo Ful) », sinon « Zed lance Lo Ful ».
+  Sans flasque, le message est générique, comme dans DM (« NEEDS AN EMPTY FLASK IN HAND FOR POTION ») : « Zed a besoin d'une flasque vide en main pour cette potion (Lo Vi) ».
+  *(Retour de l'utilisateur : ces messages révélaient le nom des sorts pas encore découverts.)*
 
 **Infobulles des objets tenus** (curseur dans la vue, mains de Zed, objet tenu et objets de l'inventaire) : le nom, puis une ligne par détail.
 
