@@ -20,6 +20,7 @@ import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
 // Seed of the combat random draws (a game replays the same way).
 const COMBAT_SEED = 0xc3a;
+const LORD_CHAOS = 23; // cannot be damaged ("archenemy", ReDMCSB F190)
 
 export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
 
@@ -39,6 +40,7 @@ export function createSimulation(dungeon) {
     onOpenedUnderParty: applyTileUnderParty,
     onOpenedUnderGroup: (level, x, y) => creatures.settle(level, x, y),
     generate: (index) => creatures.generate(index),
+    crush: doorCrushes,
   });
   const creatures = createCreatures(dungeon, state, clock, logic, {
     emit: events.emit,
@@ -75,6 +77,38 @@ export function createSimulation(dungeon) {
     events.emit('championHit', { group, ...outcome });
     championChanged();
     if (champion.dead) events.emit('championDied', { champion, group });
+  }
+
+  /**
+   * A closing door hits the party or a group (docs/028, ReDMCSB F241, F324, F191): an
+   * attack of 5, that is 4 or 5. A champion takes it as a "self" attack, against half
+   * his armour (none yet): × 130 / 64. Each material creature of the group takes it
+   * whole (Lord Chaos none); the survivors want to leave the tile.
+   */
+  function doorCrushes({ level, x, y, group }) {
+    const attack = () => 4 + Math.floor(random() * 2);
+    if (!group) {
+      if (champion.dead) return;
+      const damage = Math.floor((attack() * 130) / 64);
+      champion.health = Math.max(0, champion.health - damage);
+      champion.dead = champion.health === 0;
+      events.emit('championHit', { group: null, door: { level, x, y }, result: 'hit', damage });
+      championChanged();
+      if (champion.dead) events.emit('championDied', { champion, group: null });
+      return;
+    }
+    let killed = 0;
+    let destroyed = false;
+    if (group.type !== LORD_CHAOS) {
+      for (const member of [...group.members]) {
+        member.hp = Math.max(0, member.hp - attack());
+        if (member.hp > 0) continue;
+        killed++;
+        destroyed = creatures.kill(group, member);
+      }
+    }
+    if (!destroyed) creatures.alarm(group);
+    events.emit('doorCrushed', { level, x, y, group, killed, destroyed });
   }
 
   // The outcome of a strike or of a thrown item on a group: a member chosen at random

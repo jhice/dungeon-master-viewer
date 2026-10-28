@@ -4,14 +4,17 @@
 // - alcoves: a dark niche with a sill;
 // - inscriptions and messages shown: engraved letters;
 // - floor ornaments: a decal on the floor (pressure pads, moss…);
-// - doors: one leaf per door, with the texture of its type, its ornament and its button
-//   (a broken door: the leaf with a jagged hole, in place).
+// - doors: one leaf per door, with the texture of its type and its ornament (a broken
+//   door: the leaf with a jagged hole, in place), at its step (docs/028): a vertical door
+//   rises, a horizontal one parts in two halves that slide into the walls; the button of
+//   a door, on a post on the right of the doorway, does not move.
 // Units as in level-meshes.js, in the local coordinates of the level (tile (x, y)
 // spans [x, x+1]). Textures are cached by name for the life of the view.
 
 import * as THREE from 'three';
 import { shownOrnament, shownFloorOrnament, isAlcove, doorLook } from '../../core/ornaments.js';
 import { WALL_ART, FLOOR_ART, DOOR_TYPES, DOOR_ART, doorButton, brokenDoor } from './ornament-art.js';
+import { doorStep, DOOR_CLOSED } from '../../core/tile-states.js';
 
 // Plane position and rotation per face (N, E, S, W): offset from the tile centre, rotation around y.
 const FACE_PLANES = [
@@ -28,6 +31,8 @@ const FLOOR_GAP = 0.003;
 const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 };
 const DOOR_THICKNESS = 0.03;
 const RAISED_DOOR_VISIBLE = 0.15; // part of an open door still in the doorway, as in level-meshes.js
+// Door button: on a post at the right of the doorway (tiles from its middle, width), half-way up.
+const BUTTON_POST = { x: 0.45, width: 0.1 };
 const TEXTURE_SIZE = 256;
 
 /**
@@ -115,29 +120,68 @@ export function createDecor(dungeon, state, wallHeight) {
     return [mesh];
   }
 
-  // A door leaf: one InstancedMesh of 1 instance, so that the pointer can pick it
-  // (fp-renderer.js only picks instanced meshes); userData as level-meshes.js.
+  // Half of a texture (left or right), for the halves of a horizontal door.
+  function halfTexture(key, full, side) {
+    const halfKey = `${key}|${side}`;
+    if (!textures.has(halfKey)) {
+      const t = full.clone();
+      t.repeat.set(0.5, 1);
+      t.offset.set(side === 'left' ? 0 : 0.5, 0);
+      t.needsUpdate = true;
+      textures.set(halfKey, t);
+    }
+    return textures.get(halfKey);
+  }
+
+  // A door: its leaf (or its two halves) and its button. Each part is an InstancedMesh of
+  // 1 instance, so that the pointer can pick it (fp-renderer.js only picks instanced
+  // meshes); userData as level-meshes.js.
   function door(level, x, y, tile, map) {
     const look = doorLook(dungeon, level, x, y);
-    if (!look) return null;
+    if (!look) return [];
     const broken = Boolean(tile.detail.broken);
-    const key = `door:${look.type}|${look.ornament}|${look.button}|${broken}`;
+    const key = `door:${look.type}|${look.ornament}|${broken}`;
     const leaf = texture(key, TEXTURE_SIZE, Math.round(TEXTURE_SIZE * wallHeight), (g, w, h) => {
       (DOOR_TYPES[look.type] ?? DOOR_TYPES.Wooden)(g, w, h);
       DOOR_ART[look.ornament]?.(g, w, h);
-      if (look.button) doorButton(g, w, h);
       if (broken) brokenDoor(g, w, h);
     });
-    const material = new THREE.MeshLambertMaterial({ map: leaf, alphaTest: 0.5, side: THREE.DoubleSide });
-    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, wallHeight, DOOR_THICKNESS), material, 1);
-    // Raised like a portcullis when open: only its lower edge stays in the doorway.
-    const bottom = tile.detail.open && !broken ? wallHeight * (1 - RAISED_DOOR_VISIBLE) : 0;
+    // Share of the way still to go before the door is closed: 0 closed (or broken, in place), 1 open.
+    const open = broken ? 0 : (DOOR_CLOSED - doorStep(tile.detail)) / DOOR_CLOSED;
     const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), tile.detail.orientation === 'NS' ? 0 : Math.PI / 2);
-    mesh.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x + 0.5, bottom + wallHeight / 2, y + 0.5), rotation, new THREE.Vector3(1, 1, 1)));
-    mesh.computeBoundingSphere();
     const info = { level, x, y, gx: x + map.offset.x, gy: y + map.offset.y, type: 'door', detail: tile.detail };
-    mesh.userData = { part: 'doorLeaf', variant: 'all', tiles: [info], baseOpacity: 1 };
-    return mesh;
+    // A part of the door: a box of `width` × `height`, centred at `along` (tiles, across the
+    // passage) and `up` (from the floor), in the plane of the leaf.
+    const part = (map, width, height, depth, along, up, alphaTest = 0.5) => {
+      const material = new THREE.MeshLambertMaterial({ map, alphaTest, side: THREE.DoubleSide });
+      const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(width, height, depth), material, 1);
+      const offset = new THREE.Vector3(along, 0, 0).applyQuaternion(rotation);
+      mesh.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x + 0.5 + offset.x, up, y + 0.5 + offset.z), rotation, new THREE.Vector3(1, 1, 1)));
+      mesh.computeBoundingSphere();
+      mesh.userData = { part: 'doorLeaf', variant: 'all', tiles: [info], baseOpacity: 1 };
+      return mesh;
+    };
+    const parts = [];
+    if (tile.detail.vertical === false && !broken) {
+      // Two halves sliding sideways into the walls.
+      for (const [side, sign] of [['left', -1], ['right', 1]]) {
+        parts.push(part(halfTexture(key, leaf, side), 0.5, wallHeight, DOOR_THICKNESS, sign * (0.25 + 0.5 * open), wallHeight / 2));
+      }
+    } else {
+      // Raised like a portcullis: open, only its lower edge stays in the doorway.
+      parts.push(part(leaf, 1, wallHeight, DOOR_THICKNESS, 0, open * wallHeight * (1 - RAISED_DOOR_VISIBLE) + wallHeight / 2));
+    }
+    if (look.button) {
+      const { x: along, width } = BUTTON_POST;
+      const map = texture('door:buttonPost', 32, Math.round((32 * wallHeight) / width), (g, w, h) => {
+        g.fillStyle = '#5e5a54';
+        g.fillRect(0, 0, w, h);
+        g.translate(0, (h - w) / 2);
+        doorButton(g, w, w);
+      });
+      parts.push(part(map, width, wallHeight, DOOR_THICKNESS + 0.04, along, wallHeight / 2, 0));
+    }
+    return parts;
   }
 
   return {
@@ -157,8 +201,7 @@ export function createDecor(dungeon, state, wallHeight) {
             meshes.push(...wallOrnaments(level, x, y));
             if (tile.detail) meshes.push(...inscriptions(tile.detail, x, y));
           } else if (tile.type === 'door') {
-            const leaf = door(level, x, y, tile, map);
-            if (leaf) doors.push(leaf);
+            doors.push(...door(level, x, y, tile, map));
           } else if (tile.type !== 'pit' && tile.type !== 'stairs') {
             meshes.push(...floorOrnament(level, x, y));
           }

@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 027.
+> Mis à jour le 2026-10-28, après la doc 028.
 
 ### Données et visualiseur
 
@@ -80,7 +80,8 @@ Analyser le fichier XML en se concentrant d'abord sur
   - `item-info.js` (objets) ;
   - `creature-drops.js` (butin).
 - **Timeline fidèle à ReDMCSB (doc 026) :** les événements d'une même case au même tick fusionnent ; compteurs : `set` incrémente, `clear` décrémente.
-- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`.
+- **Portes animées (doc 028) :** crans 0 à 4, un par tick ; le groupe passe jusqu'à 1/4, une créature jusqu'à sa hauteur ; une porte qui se ferme sur quelqu'un remonte et le blesse ; bouton sur un montant fixe.
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`.
 
 ### En attente
 

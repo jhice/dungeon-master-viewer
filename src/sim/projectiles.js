@@ -8,6 +8,7 @@
 // energy, stepLoss, kinetic, mass }. `row` is relative to the direction of flight.
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
+import { doorPassable } from '../core/tile-states.js';
 import { creatureInfo } from '../core/creature-info.js';
 
 /**
@@ -37,7 +38,7 @@ export function createProjectiles(state, { emit, hitGroup, drop }) {
   }
   reset();
 
-  // Whether a projectile may enter a tile: walls, closed doors, closed fake walls (an
+  // Whether a projectile may enter a tile: walls, doors closed by more than 1/4, closed fake walls (an
   // imaginary one lets it through) and stairs stop it.
   function passes(level, x, y) {
     const tile = state.tileAt(level, x, y);
@@ -47,7 +48,7 @@ export function createProjectiles(state, { emit, hitGroup, drop }) {
       case 'stairs':
         return false;
       case 'door':
-        return tile.detail.open;
+        return doorPassable(tile.detail);
       case 'fakewall':
         return tile.detail.open || tile.detail.imaginary;
       default:

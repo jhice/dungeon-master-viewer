@@ -5,6 +5,7 @@
 // Phase C1: the same for creatures (creaturePassage(), resolveCreatureArrival()).
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
+import { doorPassable } from '../core/tile-states.js';
 
 /**
  * Why a tile cannot be entered, or null if it can.
@@ -20,7 +21,8 @@ export function blockReason(state, level, x, y) {
       // Open (vanished) or imaginary (illusion): passable.
       return tile.detail.open || tile.detail.imaginary ? null : 'fakewall';
     case 'door':
-      return tile.detail.open ? null : 'door';
+      // Open, or closed by 1/4 at most (docs/028).
+      return doorPassable(tile.detail) ? null : 'door';
     default:
       // floor, pit, stairs, teleporter: see arrivalEffect().
       return null;
@@ -30,17 +32,25 @@ export function blockReason(state, level, x, y) {
 export const BLOCK_LABELS = { outside: 'bord de la carte', wall: 'mur', fakewall: 'mur', door: 'porte fermée', creature: 'créature' };
 
 /**
+ * How far a door may be closed for a creature of species `info` to walk under it, and
+ * where it stops when it closes on it: its height for a vertical door, 1/4 for a
+ * horizontal one (ReDMCSB, GROUP1.C and TIMELINE.C).
+ */
+export const creatureDoorHeight = (detail, info) => (detail.vertical === false ? 1 : info.height);
+
+/**
  * Whether a creature of species `info` (src/core/creature-info.js) may step onto a tile
  * by itself: as the party, except that non-material creatures pass through doors, that
+ * small ones pass under a door closed no more than their height, that
  * creatures never take stairs, and that only levitating ones go over an open pit
  * (the others fall only when a pit opens under them). Other groups and the party are
  * checked by the caller.
  */
 export function creaturePassage(state, info, level, x, y) {
   const reason = blockReason(state, level, x, y);
-  if (reason === 'door' && info.nonMaterial) return true;
-  if (reason) return false;
   const tile = state.tileAt(level, x, y);
+  if (reason === 'door') return info.nonMaterial || doorPassable(tile.detail, creatureDoorHeight(tile.detail, info));
+  if (reason) return false;
   if (tile.type === 'stairs') return false;
   if (tile.type === 'pit' && tile.detail.open && !tile.detail.imaginary && !info.levitation) return false;
   return true;

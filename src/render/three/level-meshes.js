@@ -17,7 +17,7 @@
 // rock, as in DM: a ring of walls surrounds the level (info `outside: true`).
 
 import * as THREE from 'three';
-import { tileState } from '../../core/tile-states.js';
+import { tileState, doorStep, DOOR_CLOSED } from '../../core/tile-states.js';
 
 // Wall height is a setting (fraction of a tile, 1 = cube); doors span it,
 // teleporters are 90 % of it, stairs span it.
@@ -192,13 +192,15 @@ function pitPart(detail) {
 // Door: the leaf lies across the passage axis (an NS passage gets an east-west leaf).
 // With states, an open door is raised like a portcullis: only its lower edge stays
 // in the doorway, the rest sticks out above the walls (there is no ceiling), so it
-// can be told apart from a closed door at any camera angle but straight down.
+// can be told apart from a closed door at any camera angle but straight down. A door
+// moving (simulation, docs/028) is raised by its step.
 function addDoor(add, info, px, pz, h, game) {
   const rotation = info.detail.orientation === 'NS' ? 0 : Math.PI / 2;
   const closed = [px, h.door / 2, pz];
-  if (!info.detail.open) return add('door', info, closed, [1, 1, 1], rotation, 'all');
+  const step = info.detail.broken ? 0 : doorStep(info.detail);
+  if (step === DOOR_CLOSED) return add('door', info, closed, [1, 1, 1], rotation, 'all');
   if (!game) add('door', info, closed, [1, 1, 1], rotation, 'types');
-  const bottom = h.wall - h.door * RAISED_DOOR_VISIBLE;
+  const bottom = ((h.wall - h.door * RAISED_DOOR_VISIBLE) * (DOOR_CLOSED - step)) / DOOR_CLOSED;
   add('door', info, [px, bottom + h.door / 2, pz], [1, 1, 1], rotation, 'states');
 }
 

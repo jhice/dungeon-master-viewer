@@ -12,6 +12,7 @@
 //   to the item pools of the loaded dungeon (in memory only), and removed on reset.
 
 import { ITEM_POOLS } from '../core/contents.js';
+import { doorStep } from '../core/tile-states.js';
 
 const MUTABLE_TYPES = new Set(['door', 'pit', 'fakewall', 'teleporter']);
 
@@ -54,13 +55,24 @@ export function createState(dungeon) {
     nextGroupId = dungeon.data.creatures.length;
     for (let level = 0; level < dungeon.levelCount; level++) {
       for (const { x, y, detail } of dungeon.detailedTiles(level)) {
-        if (MUTABLE_TYPES.has(detail.type)) details.set(`${level}:${x},${y}`, structuredClone(detail));
+        if (MUTABLE_TYPES.has(detail.type)) details.set(`${level}:${x},${y}`, mutableDetail(detail));
         const refs = (detail.items ?? []).filter((item) => item.kind === 'actuator');
         if (refs.length) orders.set(`${level}:${x},${y}`, refs.map(({ index, position }) => ({ index, position })));
         const lying = (detail.items ?? []).filter((item) => ITEM_POOLS[item.kind]);
         if (lying.length) items.set(`${level}:${x},${y}`, lying.map(({ kind, index, position }) => ({ kind, index, position })));
       }
     }
+  }
+
+  // Doors get their step (tile-states.js) and whether they open upwards (vertical) or
+  // sideways, which decides how they close on a creature (docs/028).
+  function mutableDetail(detail) {
+    const copy = structuredClone(detail);
+    if (detail.type !== 'door') return copy;
+    const ref = detail.items?.find((item) => item.kind === 'door');
+    copy.step = doorStep(detail);
+    copy.vertical = !ref || dungeon.data.doors[ref.index].opening !== 'horizontal';
+    return copy;
   }
 
   function addGroup(group) {

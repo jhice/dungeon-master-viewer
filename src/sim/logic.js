@@ -4,7 +4,8 @@
 // the original game (see docs/015).
 //
 // Effects: 'set' | 'clear' | 'toggle' ('hold' becomes set or clear when fired).
-//   door        set = open, clear = close
+//   door        set = open, clear = close, step by step (one per tick, docs/028); toggle =
+//               close if open, else open; an event turns round a door that is moving
 //   pit         set = open (hole), clear = close; the party on it falls
 //   teleporter  set = active, clear = inactive; the party on it is carried
 //   fakewall    set = vanished (open), clear = back
@@ -16,9 +17,10 @@
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
 import { isAlcove } from '../core/ornaments.js';
-import { resolveItemArrival } from './rules.js';
+import { resolveItemArrival, creatureDoorHeight } from './rules.js';
 import { decodeChampion } from '../core/texts.js';
 import { creatureInfo } from '../core/creature-info.js';
+import { DOOR_CLOSED } from '../core/tile-states.js';
 
 const FLOOR_PARTY = 3; // P: party only, maybe on a condition of facing
 const FLOOR_ANYTHING = 1; // TPCI: party, creatures, items
@@ -43,8 +45,10 @@ const DOOR_HITS = { Wooden: 3, Porticullis: 6 };
 // ((delay - 126) × 64), Encyclopaedia, "Dungeon Files" (docs/021).
 const generatorDelay = (delay) => (delay > 127 ? (delay - 126) * 64 : delay);
 
-// Retry delay (ticks) when a door or a fake wall cannot close on the party.
+// Retry delay (ticks) when a fake wall cannot come back on the party or a creature.
 const RETRY = 1;
+// Delay (ticks) before a door that closed on the party or a creature tries again (ReDMCSB F241).
+const DOOR_RETRY = 2;
 
 /**
  * @param {import('../core/dungeon.js').Dungeon} dungeon
@@ -56,17 +60,14 @@ const RETRY = 1;
  * @param {() => void} hooks.onOpenedUnderParty a pit opened or a teleporter was activated under the party
  * @param {(level, x, y) => void} hooks.onOpenedUnderGroup the same under a creature group
  * @param {(index: number) => void} hooks.generate a creature generator (actuator index) was triggered
+ * @param {(hit: { level, x, y, vertical: boolean, group?: object }) => void} hooks.crush a closing door
+ *   hits the party (no `group`) or a creature group
  */
-export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty, onOpenedUnderGroup, generate }) {
+export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty, onOpenedUnderGroup, generate, crush }) {
   const actuatorData = (index) => dungeon.data.actuators[index];
   const partyOn = (level, x, y) => {
     const p = party();
     return p.level === level && p.x === x && p.y === y;
-  };
-  // A material creature keeps a door open; a fake wall does not come back on any creature.
-  const groupKeepsOpen = (type, level, x, y) => {
-    const group = state.groupAt(level, x, y);
-    return Boolean(group) && (type === 'fakewall' || !creatureInfo(group.type).nonMaterial);
   };
 
   // --- Firing an actuator ---------------------------------------------------------
@@ -136,12 +137,12 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
   }
 
   function setOpen(level, x, y, tile, effect, source) {
+    if (tile.type === 'door') return doorEvent(level, x, y, tile.detail, effect, source);
     const detail = tile.detail;
-    if (detail.broken) return; // a broken door stays open
     const open = effect === 'toggle' ? !detail.open : effect === 'set';
     if (open === detail.open) return;
-    // A door or a wall does not close on the party or a creature: try again a bit later.
-    if (!open && (tile.type === 'door' || tile.type === 'fakewall') && (partyOn(level, x, y) || groupKeepsOpen(tile.type, level, x, y))) {
+    // A fake wall does not come back on the party or a creature: try again a bit later.
+    if (!open && tile.type === 'fakewall' && (partyOn(level, x, y) || state.groupAt(level, x, y))) {
       clock.schedule(RETRY, () => setOpen(level, x, y, state.tileAt(level, x, y), open ? 'set' : 'clear', source));
       return;
     }
@@ -154,6 +155,56 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       if (state.groupAt(level, x, y)) onOpenedUnderGroup?.(level, x, y);
       if (partyOn(level, x, y)) onOpenedUnderParty();
     }
+  }
+
+  // --- Doors: one step per tick (ReDMCSB, TIMELINE.C, F244 and F241) ---------------
+  // An event starts the animation of the door, or turns round the one running
+  // (`detail.moving`, which also tells the views that the door is moving).
+  function doorEvent(level, x, y, detail, effect, source) {
+    if (detail.broken) return; // a broken door stays open
+    if (effect === 'toggle') effect = detail.step === 0 ? 'clear' : 'set';
+    if (detail.moving) {
+      Object.assign(detail.moving, { effect, source });
+      return;
+    }
+    if (detail.step === (effect === 'set' ? 0 : DOOR_CLOSED)) return;
+    detail.moving = { effect, source };
+    animateDoor(level, x, y, detail, detail.moving);
+  }
+
+  // One step of a moving door. Closing on the party, it goes back up at once and wounds
+  // it; on a material creature that it reaches (its height, or 1/4 for a horizontal
+  // door), it goes back up one step and wounds it. Then it tries again 2 ticks later:
+  // it goes up and down as long as someone stands under it.
+  function animateDoor(level, x, y, detail, moving) {
+    if (detail.moving !== moving) return; // reset, or broken
+    const again = (delay) => clock.schedule(delay, () => animateDoor(level, x, y, detail, moving));
+    if (moving.effect === 'clear') {
+      if (partyOn(level, x, y) && detail.step !== 0) {
+        setDoorStep(level, x, y, detail, 0, moving.source);
+        crush?.({ level, x, y, vertical: detail.vertical });
+        return again(DOOR_RETRY);
+      }
+      const group = state.groupAt(level, x, y);
+      const info = group && creatureInfo(group.type);
+      if (info && !info.nonMaterial && detail.step >= creatureDoorHeight(detail, info)) {
+        crush?.({ level, x, y, vertical: detail.vertical, group });
+        setDoorStep(level, x, y, detail, Math.max(0, detail.step - 1), moving.source);
+        return again(DOOR_RETRY);
+      }
+    }
+    const end = moving.effect === 'set' ? 0 : DOOR_CLOSED;
+    const step = detail.step === end ? end : detail.step + (end ? 1 : -1);
+    if (step === end) detail.moving = null; // before the last tileChanged: the door has stopped
+    setDoorStep(level, x, y, detail, step, moving.source);
+    if (detail.moving) again(1);
+  }
+
+  function setDoorStep(level, x, y, detail, step, source) {
+    if (step === detail.step) return;
+    detail.step = step;
+    detail.open = step === 0;
+    emit('tileChanged', { level, x, y, type: 'door', detail, source });
   }
 
   // Event on a wall: gates and counters of the wall (whatever their face: the event's
@@ -452,8 +503,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       tile.detail.hits = (tile.detail.hits ?? 0) + 1;
       if (tile.detail.hits < needed) return { target: 'door', fired: 0, hits: tile.detail.hits, needed };
       // Broken: open for good, mechanisms no longer close it.
-      tile.detail.broken = true;
-      tile.detail.open = true;
+      Object.assign(tile.detail, { broken: true, open: true, step: 0, moving: null });
       emit('tileChanged', { level, x, y, type: 'door', detail: tile.detail, source: null });
       return { target: 'door', fired: 0, hits: tile.detail.hits, needed, broken: true };
     }

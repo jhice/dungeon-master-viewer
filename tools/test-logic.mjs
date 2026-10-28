@@ -67,7 +67,7 @@ const face = (facing) => {
     face(facing);
     sim.state.hand = { kind: 'weapon', index };
     sim.clickFront();
-    sim.tick(3);
+    sim.tick(3 + 4); // the event, then the 4 steps of the door (docs/028)
     open.push(sim.state.tileAt(5, 13, 20).detail.open);
   }
   check(open.join() === 'false,false,true,true', `N5 (13, 20) : la porte s'ouvre au 3e objet posé (${open.join(', ')})`);

@@ -750,7 +750,14 @@ sim.on('projectilesMoved', () => {
   });
 });
 sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
-sim.on('championDied', ({ champion, group }) => showInfo(`${champion.name} est mort, tué par ${describeGroup(dungeon, group).name}`));
+sim.on('championDied', ({ champion, group }) =>
+  showInfo(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : 'écrasé par une porte'}`),
+);
+sim.on('championHit', ({ door, damage }) => door && showInfo(`La porte se referme sur le groupe : ${damage} PV`));
+sim.on('doorCrushed', ({ group, killed, destroyed }) => {
+  const { name } = describeGroup(dungeon, group);
+  showInfo(destroyed ? `${name} : écrasé par la porte, groupe anéanti` : killed ? `${name} : ${killed} écrasé(s) par la porte` : `La porte se referme sur ${name}`);
+});
 
 // Creatures moved: their tiles are redrawn in 2D, only the creature markers of their level
 // in 3D and in the first person view; once per frame, as several move in the same tick.
@@ -796,6 +803,7 @@ const STATE_WORDS = {
 sim.on('tileChanged', ({ level, x, y, type, detail }) => {
   game?.view.updateTile(level);
   renderer?.updateTile?.(level, x, y);
+  if (type === 'door' && detail.moving) return; // said once it has stopped
   const [name, open, closed] = STATE_WORDS[type];
   showInfo(`${name} (${x}, ${y}) niveau ${level} : ${detail.broken ? 'cassée' : detail.open ? open : closed}`);
 });

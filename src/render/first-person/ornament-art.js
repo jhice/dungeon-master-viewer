@@ -485,29 +485,32 @@ export const DOOR_TYPES = {
   },
 };
 
-// The ornaments drawn over a door leaf.
+// The ornaments drawn over a door leaf. The canvas keeps the proportions of the leaf
+// (W × H, H = W × wall height): sizes that must stay round (arches) follow the smaller
+// side, and windows sit a little under the middle, below the eye (docs/028).
 export const DOOR_ART = {
   'Arched Grid'(g, W, H) {
+    const r = Math.min(W * 0.2, H * 0.22);
     g.save();
     g.beginPath();
-    g.moveTo(W * 0.3, H * 0.55);
-    g.lineTo(W * 0.3, H * 0.3);
-    g.arc(W / 2, H * 0.3, W * 0.2, Math.PI, 0);
-    g.lineTo(W * 0.7, H * 0.55);
+    g.moveTo(W / 2 - r, H * 0.72);
+    g.lineTo(W / 2 - r, H * 0.42);
+    g.arc(W / 2, H * 0.42, r, Math.PI, 0);
+    g.lineTo(W / 2 + r, H * 0.72);
     g.closePath();
     g.fillStyle = '#0d0b09';
     g.fill();
     g.clip();
-    for (let i = 0; i < 4; i++) rect(g, W * (0.34 + i * 0.1), 0, 5, H, IRON);
+    for (let i = 0; i < 4; i++) rect(g, W / 2 - r + ((i + 0.6) * 2 * r) / 4.2, 0, 5, H, IRON);
     g.restore();
   },
   'Square Grid'(g, W, H) {
-    rect(g, W * 0.3, H * 0.2, W * 0.4, H * 0.3, '#0d0b09', IRON, 5);
-    for (let i = 1; i < 4; i++) rect(g, W * (0.3 + i * 0.1) - 2, H * 0.2, 5, H * 0.3, IRON);
-    rect(g, W * 0.3, H * 0.35 - 2, W * 0.4, 5, IRON);
+    rect(g, W * 0.3, H * 0.32, W * 0.4, H * 0.3, '#0d0b09', IRON, 5);
+    for (let i = 1; i < 4; i++) rect(g, W * (0.3 + i * 0.1) - 2, H * 0.32, 5, H * 0.3, IRON);
+    rect(g, W * 0.3, H * 0.47 - 2, W * 0.4, 5, IRON);
   },
   'Wooden Bars'(g, W, H) {
-    for (const y of [0.3, 0.45, 0.6]) rect(g, W * 0.05, H * y, W * 0.9, H * 0.06, WOOD_DARK, '#2a1a0a', 2);
+    for (const y of [0.38, 0.53, 0.68]) rect(g, W * 0.05, H * y, W * 0.9, H * 0.06, WOOD_DARK, '#2a1a0a', 2);
   },
   'Iron Bars'(g, W, H) {
     for (let i = 0; i < 5; i++) rect(g, W * (0.2 + i * 0.15), H * 0.08, W * 0.04, H * 0.84, IRON_DARK);
@@ -516,7 +519,7 @@ export const DOOR_ART = {
     path(g, [[W / 2, H * 0.38], [W * 0.62, H * 0.6], [W * 0.38, H * 0.6]], '#2a0a08', 4, true, '#b8392d');
   },
   Jewels(g, W, H) {
-    ['#b0283a', '#2f9a5a', '#3a68b8', '#c9a23e'].forEach((color, i) => disc(g, W * (0.3 + i * 0.13), H * 0.3, W * 0.04, color, '#111', 2));
+    ['#b0283a', '#2f9a5a', '#3a68b8', '#c9a23e'].forEach((color, i) => disc(g, W * (0.3 + i * 0.13), H * 0.42, W * 0.04, color, '#111', 2));
   },
   'Corner Lock'(g, W, H) {
     for (const [x, y] of [[0.08, 0.06], [0.82, 0.06], [0.08, 0.86], [0.82, 0.86]]) plate(g, W * x, H * y, W * 0.1, H * 0.08, BRASS);
@@ -539,10 +542,11 @@ export const DOOR_ART = {
   },
 };
 
-// Button of a door with one: on the right of the leaf, half-way up.
+// Button of a door with one, on its own plate (fixed on the right of the doorway, it does
+// not move with the leaf): the whole canvas.
 export function doorButton(g, W, H) {
-  plate(g, W * 0.86, H * 0.44, W * 0.1, H * 0.1, IRON_DARK);
-  disc(g, W * 0.91, H * 0.49, W * 0.03, '#b8392d', '#2a0a08', 2);
+  plate(g, 0, 0, W, H, IRON_DARK);
+  disc(g, W / 2, H / 2, Math.min(W, H) * 0.3, '#b8392d', '#2a0a08', 2);
 }
 
 // Broken door: a large hole with jagged edges, splinters left on the sides and at the

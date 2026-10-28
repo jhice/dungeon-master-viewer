@@ -7,6 +7,7 @@
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { doorLook } from '../core/ornaments.js';
+import { doorStep } from '../core/tile-states.js';
 import { creaturePassage, resolveCreatureArrival } from './rules.js';
 
 // Door types that creatures see through (Encyclopaedia, "Graphics.dat Item 559", door characteristics).
@@ -34,7 +35,7 @@ export function sidesTowards(x, y, tx, ty) {
 }
 
 // Whether a tile stops the sight: wall, closed fake wall (an imaginary one looks like a
-// wall too), closed door that is not a grate or a Ra door.
+// wall too), door closed by 3/4 or more that is not a grate or a Ra door (ReDMCSB, GROUP1.C).
 function opaque(dungeon, state, level, x, y) {
   const tile = state.tileAt(level, x, y);
   if (!tile) return true;
@@ -44,7 +45,7 @@ function opaque(dungeon, state, level, x, y) {
     case 'fakewall':
       return !tile.detail.open;
     case 'door':
-      return !tile.detail.open && !SEE_THROUGH_DOORS.has(doorLook(dungeon, level, x, y)?.type);
+      return !tile.detail.broken && doorStep(tile.detail) >= 3 && !SEE_THROUGH_DOORS.has(doorLook(dungeon, level, x, y)?.type);
     default:
       return false;
   }

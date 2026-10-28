@@ -164,6 +164,11 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     if (group.nextMove === null || group.nextMove > clock.now + 1) group.nextMove = clock.now + 1;
   }
 
+  /** Danger on the tile of the group (a door closing on it): it acts at the next tick. */
+  function alarm(group) {
+    if (group.nextMove === null || group.nextMove > clock.now + 1) group.nextMove = clock.now + 1;
+  }
+
   // The group flees for a while after a death (fear), for good after a theft (a Giggler
   // with its loot, until it is killed).
   function scare(group, reason) {
@@ -306,5 +311,5 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     return true;
   }
 
-  return { update, settle, generate, provoke, kill, reset };
+  return { update, settle, generate, provoke, alarm, kill, reset };
 }
