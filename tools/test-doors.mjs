@@ -139,5 +139,21 @@ const MUMMY = 10; // height 1
   check(!creaturePassage(sim.state, creatureInfo(MUMMY), door.level, door.x, door.y), 'une momie ne passe pas sous une porte fermée aux 3/4');
 }
 
+// 5. The two near sub-tiles of a doorway are within reach, the door closed or not: an item
+// put there lies in front of the leaf (ReDMCSB F373, F374).
+{
+  sim.reset();
+  sim.teleport(door.level, ...door.from);
+  face(door.facing);
+  const f = FACINGS.indexOf(door.facing);
+  const near = [(f + 2) % 4, (f + 3) % 4];
+  const far = [f, (f + 1) % 4];
+  check(near.every((p) => sim.reachable(door.level, door.x, door.y, p)), `${where} : porte fermée, les sous-cases proches de l'embrasure sont à portée`);
+  check(!far.some((p) => sim.reachable(door.level, door.x, door.y, p)), `${where} : les sous-cases de l'autre côté du vantail ne le sont pas`);
+  sim.state.hand = { kind: 'weapon', index: 0 };
+  check(sim.drop(door.level, door.x, door.y, near[0]) && sim.state.itemsAt(door.level, door.x, door.y).length === 1, `${where} : un objet se pose devant la porte fermée`);
+  check(sim.pickUp(door.level, door.x, door.y, sim.state.itemsAt(door.level, door.x, door.y)[0]) && sim.state.hand?.index === 0, `${where} : et se reprend`);
+}
+
 console.log(failures ? `${failures} échec(s)` : 'tout est bon');
 process.exit(failures ? 1 : 0);

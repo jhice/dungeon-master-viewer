@@ -7,7 +7,7 @@
 // - doors: one leaf per door, with the texture of its type and its ornament (a broken
 //   door: the leaf with a jagged hole, in place), at its step (docs/028): a vertical door
 //   rises, a horizontal one parts in two halves that slide into the walls; the button of
-//   a door, on a post on the right of the doorway, does not move.
+//   a door, on a post on the right of the doorway (seen from either side), does not move.
 // Units as in level-meshes.js, in the local coordinates of the level (tile (x, y)
 // spans [x, x+1]). Textures are cached by name for the life of the view.
 
@@ -31,7 +31,10 @@ const FLOOR_GAP = 0.003;
 const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 };
 const DOOR_THICKNESS = 0.03;
 const RAISED_DOOR_VISIBLE = 0.15; // part of an open door still in the doorway, as in level-meshes.js
-// Door button: on a post at the right of the doorway (tiles from its middle, width), half-way up.
+const PARTED_DOOR_VISIBLE = 0.2; // part of each half of an open horizontal door still in the doorway (tiles; the button posts cover 0.1)
+// Door button: on a post at each side of the doorway (tiles from its middle, width), half-way
+// up, on the face that is on the right as seen from that side: in DM the button is on the
+// right of the door, from either side.
 const BUTTON_POST = { x: 0.45, width: 0.1 };
 const TEXTURE_SIZE = 256;
 
@@ -152,8 +155,11 @@ export function createDecor(dungeon, state, wallHeight) {
     const info = { level, x, y, gx: x + map.offset.x, gy: y + map.offset.y, type: 'door', detail: tile.detail };
     // A part of the door: a box of `width` × `height`, centred at `along` (tiles, across the
     // passage) and `up` (from the floor), in the plane of the leaf.
+    // `map` is a texture, or an array of 6 (one per face: +x, -x, +y, -y, +z, -z).
     const part = (map, width, height, depth, along, up, alphaTest = 0.5) => {
-      const material = new THREE.MeshLambertMaterial({ map, alphaTest, side: THREE.DoubleSide });
+      const material = Array.isArray(map)
+        ? map.map((m) => new THREE.MeshLambertMaterial({ map: m }))
+        : new THREE.MeshLambertMaterial({ map, alphaTest, side: THREE.DoubleSide });
       const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(width, height, depth), material, 1);
       const offset = new THREE.Vector3(along, 0, 0).applyQuaternion(rotation);
       mesh.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x + 0.5 + offset.x, up, y + 0.5 + offset.z), rotation, new THREE.Vector3(1, 1, 1)));
@@ -163,9 +169,10 @@ export function createDecor(dungeon, state, wallHeight) {
     };
     const parts = [];
     if (tile.detail.vertical === false && !broken) {
-      // Two halves sliding sideways into the walls.
+      // Two halves sliding sideways into the walls; open, their edges stay in the doorway.
       for (const [side, sign] of [['left', -1], ['right', 1]]) {
-        parts.push(part(halfTexture(key, leaf, side), 0.5, wallHeight, DOOR_THICKNESS, sign * (0.25 + 0.5 * open), wallHeight / 2));
+        const slide = open * (0.5 - PARTED_DOOR_VISIBLE);
+        parts.push(part(halfTexture(key, leaf, side), 0.5, wallHeight, DOOR_THICKNESS, sign * (0.25 + slide), wallHeight / 2));
       }
     } else {
       // Raised like a portcullis: open, only its lower edge stays in the doorway.
@@ -173,13 +180,18 @@ export function createDecor(dungeon, state, wallHeight) {
     }
     if (look.button) {
       const { x: along, width } = BUTTON_POST;
-      const map = texture('door:buttonPost', 32, Math.round((32 * wallHeight) / width), (g, w, h) => {
-        g.fillStyle = '#5e5a54';
-        g.fillRect(0, 0, w, h);
-        g.translate(0, (h - w) / 2);
-        doorButton(g, w, w);
-      });
-      parts.push(part(map, width, wallHeight, DOOR_THICKNESS + 0.04, along, wallHeight / 2, 0));
+      const post = (withButton) =>
+        texture(`door:post|${withButton}`, 32, Math.round((32 * wallHeight) / width), (g, w, h) => {
+          g.fillStyle = '#5e5a54';
+          g.fillRect(0, 0, w, h);
+          if (!withButton) return;
+          g.translate(0, (h - w) / 2);
+          doorButton(g, w, w);
+        });
+      const [plain, button] = [post(false), post(true)];
+      // Seen from +z (local), the right is +x; from -z, it is -x.
+      parts.push(part([plain, plain, plain, plain, button, plain], width, wallHeight, DOOR_THICKNESS + 0.04, along, wallHeight / 2));
+      parts.push(part([plain, plain, plain, plain, plain, button], width, wallHeight, DOOR_THICKNESS + 0.04, -along, wallHeight / 2));
     }
     return parts;
   }

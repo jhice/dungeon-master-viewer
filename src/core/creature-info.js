@@ -66,6 +66,13 @@ export const CREATURE_INFO = Object.fromEntries(
   ]),
 );
 
+/**
+ * Height of a species as drawn, in fractions of the wall height: just under the step at
+ * which a vertical door stops on it (docs/028), so the leaf meets its top: tall 0.7,
+ * medium 0.45, small 0.2; non-material ones (height 0), 0.95.
+ */
+export const standingHeight = (type) => (4 - creatureInfo(type).height) / 4 - 0.05;
+
 /** Characteristics of a species; unknown types do not move. */
 export const creatureInfo = (type) =>
   CREATURE_INFO[type] ?? { type, name: `Creature ${type}`, moveTicks: IMMOBILE, levitation: false, nonMaterial: false, size: 2, baseHealth: 1, sight: 0, hear: 0, smell: 0, attackTicks: 255, defense: 0, attack: 0, dexterity: 0, attackType: 'none', fear: 15, height: 1, immobile: true };

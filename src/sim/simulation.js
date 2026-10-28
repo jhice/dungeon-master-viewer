@@ -327,7 +327,8 @@ export function createSimulation(dungeon) {
     stow: () => logic.stow(party),
     /**
      * Sub-tiles within reach (DM): the two front ones of the party's tile, and the two
-     * near ones of the tile in front, if the party could step there.
+     * near ones of the tile in front, if it is not a wall: a doorway counts, even with
+     * the door closed (ReDMCSB F373, F374: the items lie in front of the leaf).
      * Sub-tiles 0..3 = NW, NE, SE, SW; the front-left one of a tile has the index of the facing.
      */
     reachable(level, x, y, position) {
@@ -335,7 +336,8 @@ export function createSimulation(dungeon) {
       const f = FACINGS.indexOf(party.facing);
       const [dx, dy] = SIDE_DELTAS[party.facing];
       if (x === party.x && y === party.y) return position === f || position === (f + 1) % 4;
-      if (x !== party.x + dx || y !== party.y + dy || blockReason(state, level, x, y)) return false;
+      const blocked = blockReason(state, level, x, y);
+      if (x !== party.x + dx || y !== party.y + dy || (blocked && blocked !== 'door')) return false;
       return position === (f + 2) % 4 || position === (f + 3) % 4;
     },
     /** Picks up an item lying within reach into the empty hand; false if impossible. */

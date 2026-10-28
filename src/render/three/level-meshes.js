@@ -269,7 +269,7 @@ function addStairs(add, info, px, pz, accessSide, h) {
 export function disposeLevelMeshes(meshes) {
   for (const mesh of meshes) {
     mesh.geometry.dispose();
-    mesh.material.dispose();
+    for (const material of [mesh.material].flat()) material.dispose(); // one, or one per face
     mesh.dispose?.(); // InstancedMesh only
   }
 }

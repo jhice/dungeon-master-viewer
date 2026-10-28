@@ -47,7 +47,8 @@ const MIRRORED_PARTS = ['wall', 'floor'];
  * @param {import('../../core/dungeon.js').Dungeon} dungeon
  * @param {{ tileAt(level, x, y): object, textVisible(index): boolean, actuatorsAt(level, x, y): Array }} state simulation state (src/sim/state.js)
  * @param {object} [options]
- * @param {() => void} [options.onClickFront] the wall or door in front of the party was clicked
+ * @param {(side, kind: 'front'|'creature') => void} [options.onClickFront] the wall or door in front of
+ *   the party was clicked ('front'), or the creature in front ('creature')
  * @param {(spot: object) => void} [options.onClickFloor] a floor sub-tile was clicked: { level, x, y, position, item? }
  * @param {(spot: object) => boolean} [options.canReach] is this floor spot within reach (pointer cursor)?
  * @param {(target: object|null) => string|null} [options.labelOf] text shown next to the pointer for what it
@@ -251,33 +252,46 @@ export function createFirstPersonRenderer(
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   // What the pointer designates: the wall or door in front (an item in the front
-  // alcove counts as the wall: its actuators must act too), a floor spot
-  // { level, x, y, position (sub-tile), item? }, or null.
+  // alcove counts as the wall: its actuators must act too), the creature in front, a
+  // floor spot { level, x, y, position (sub-tile), item? }, or null. The floor of the
+  // doorway in front is a floor spot where an item can be taken or put (docs/028), and
+  // the door elsewhere; a creature under a door is the door where the leaf covers it.
   function target(event) {
     if (!built || !party) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
     const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible && m.userData.part !== 'teleporterGame');
-    const hit = raycaster.intersectObjects(pickable, false)[0];
+    const hits = raycaster.intersectObjects(pickable, false);
+    const hit = hits[0];
     const info = hit?.object.userData.tiles?.[hit.instanceId];
     if (!info || info.outside) return null;
     const [dx, dy] = SIDE_DELTAS[party.facing];
     const front = info.x === party.x + dx && info.y === party.y + dy;
-    // A creature in front: the champion strikes it (main.js).
-    if (info.type === 'wall' || info.type === 'door' || hit.object.userData.creatures) return front ? { kind: 'front' } : null;
+    const isLeaf = (h) => h.object.userData.part === 'doorLeaf';
+    if (hit.object.userData.creatures) {
+      // A creature in front: the champion strikes it (main.js), unless the pointer is on the door leaf too.
+      if (!front) return null;
+      return hits.some((h) => isLeaf(h) && h.object.userData.tiles[h.instanceId].x === info.x && h.object.userData.tiles[h.instanceId].y === info.y)
+        ? { kind: 'front' }
+        : { kind: 'creature' };
+    }
+    if (info.type === 'wall' || isLeaf(hit)) return front ? { kind: 'front' } : null;
     // Sub-tile under the pointer (items: their own), 0..3 = NW, NE, SE, SW.
     const u = hit.point.x - info.x;
     const v = hit.point.z - info.y;
     const position = info.item?.position ?? (v < 0.5 ? (u < 0.5 ? 0 : 1) : u < 0.5 ? 3 : 2);
-    return { kind: 'floor', spot: { level: info.level, x: info.x, y: info.y, position, item: info.item } };
+    const spot = { level: info.level, x: info.x, y: info.y, position, item: info.item };
+    // The doorway in front: a floor spot if there is something to do there, else the door.
+    if (info.type === 'door' && front && !canReach?.(spot)) return { kind: 'front' };
+    return { kind: 'floor', spot };
   }
   const onClick = (event) => {
     const t = target(event);
     const rect = renderer.domElement.getBoundingClientRect();
     const side = event.clientX - rect.left < rect.width / 2 ? 'left' : 'right';
     if (t?.kind === 'floor') onClickFloor?.(t.spot, side);
-    else if (t?.kind === 'front') onClickFront?.(side);
+    else if (t?.kind === 'front' || t?.kind === 'creature') onClickFront?.(side, t.kind);
     else onClickElsewhere?.(side);
   };
   const onRightClick = (event) => {
@@ -298,7 +312,7 @@ export function createFirstPersonRenderer(
       hoverPending = false;
       if (!lastPointer) return;
       const t = target(lastPointer);
-      const active = t?.kind === 'front' || (t?.kind === 'floor' && canReach?.(t.spot));
+      const active = t?.kind === 'front' || t?.kind === 'creature' || (t?.kind === 'floor' && canReach?.(t.spot));
       renderer.domElement.style.cursor = handCursor ?? (active ? 'pointer' : '');
       const label = labelOf?.(t) ?? null;
       tooltip.hidden = !label;

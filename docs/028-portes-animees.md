@@ -111,3 +111,40 @@ Tu avais raison : le groupe passe tant que la porte n'est pas descendue de plus 
 - le passage d'un ver sous une porte aux 3/4, refusé à une momie.
 
 `test-logic.mjs` attend maintenant les 4 crans de la porte N5 (13, 20).
+
+## 5. Retours
+
+**On ne pouvait ni prendre ni poser d'objet dans l'embrasure d'une porte.** C'était une régression ancienne, pas une zone réactive au centre de la vue. Les deux causes :
+- le sol d'une case de porte porte le type `door`. Pour la souris, ses sous-cases étaient donc « la porte », jamais des sous-cases de sol ;
+- `reachable()` refusait la case de devant si le groupe ne pouvait pas y entrer, donc à chaque porte fermée.
+
+Ce que fait DM (`F373`, `F374` dans `COMMAND.C`) : les deux sous-cases proches de la case de devant sont à portée dès que ce n'est pas un mur, **porte fermée comprise**. Les objets sont posés devant le vantail.
+
+Corrections :
+- `reachable()` accepte une case de porte devant le groupe, quel que soit son cran ;
+- `target()` (`fp-renderer.js`) fait du sol de l'embrasure une sous-case quand il y a quelque chose à y faire (objet présent ou objet en main), et la porte sinon.
+
+DM interdit en plus de ramasser dans une sous-case occupée par une créature qui ne lévite pas. Ce n'est pas encore repris.
+
+**On ne pouvait pas actionner une porte quand une créature était dessous.** La créature, un cylindre au centre de la case, dépasse devant le vantail : le rayon la touchait en premier. De plus, `clickFront()` frappait dès qu'un groupe était devant.
+
+Corrections :
+- `target()` distingue maintenant la créature (`creature`) du mur ou de la porte (`front`). Si le rayon traverse aussi le vantail de cette case, c'est la porte ;
+- `clickFront(side, kind)` n'attaque que si la créature est visée. Au clavier (Espace), la créature reste prioritaire.
+
+Vérifié en N1 (6, 0) : avec la momie sous la porte (6, 1), un clic sur le bouton referme la porte sur elle.
+
+**Le bouton ne restait pas à droite.** Le montant n'existait que d'un côté de l'embrasure : vu de l'autre côté, le bouton était à gauche. Il y a maintenant **un montant de chaque côté**, et chacun porte le bouton sur la face qui est à droite pour qui la regarde (dans DM, le bouton est toujours à droite).
+
+**Les portes horizontales ouvertes étaient invisibles.** Elles rentraient entièrement dans les murs. Ouvertes, chaque moitié garde maintenant 0,2 case dans l'embrasure, dont 0,1 visible à côté d'un montant.
+
+**Taille des créatures.** Le cylindre suit maintenant la hauteur de l'espèce : il s'arrête juste sous le cran où une porte verticale s'arrête sur elle (`standingHeight()` dans `creature-info.js`). Cela donne, en fraction de la hauteur des murs :
+
+| Hauteur DM | Exemples | Taille dessinée |
+|---|---|---|
+| 1 (grande) | Mummy, Skeleton… | 0,7 |
+| 2 (moyenne) | Screamer, Giggler… | 0,45 |
+| 3 (petite) | Magenta Worm, Ruster… | 0,2 |
+| 0 (immatérielle) | Ghost, Materializer | 0,95 |
+
+**Tests** : `test-doors.mjs` vérifie aussi qu'un objet se pose et se reprend devant une porte fermée, et que les sous-cases de l'autre côté du vantail restent hors de portée.

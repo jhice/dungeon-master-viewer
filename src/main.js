@@ -595,9 +595,11 @@ async function teleportToSelection() {
 // Click on the wall or door in front of the party (mouse in the view, or Space); on a
 // creature in front, the item held by the cursor is thrown at it, or else the champion
 // strikes it ("Frapper" of his action hand).
-function clickFront(side = 'right') {
+// `kind`: what the pointer designates in the view ('front': the wall or the door, even with a
+// creature under it; 'creature'); from the keyboard (none), a creature in front comes first.
+function clickFront(side = 'right', kind = null) {
   const [dx, dy] = SIDE_DELTAS[sim.party.facing];
-  if (sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) {
+  if (kind !== 'front' && sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) {
     if (sim.hand) return throwHeld(side);
     return sim.actions.includes('hit') ? doAction('hit') : showInfo('Aucune action de frappe avec cet objet');
   }

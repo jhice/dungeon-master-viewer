@@ -8,13 +8,13 @@ import * as THREE from 'three';
 import { tileContents, subcellOffset, FACES } from '../../core/contents.js';
 import { actuatorFamily } from '../../core/logic.js';
 import { CATEGORY_COLORS, FAMILY_COLORS, HAS_CONTENTS_COLOR, TEXT_COLORS, creatureColor } from '../palette.js';
+import { standingHeight } from '../../core/creature-info.js';
 
 const CHAMPION_SHEET = /\n[MF]\n[A-P]{12}\n/;
 
 const ITEM_SIZE = 0.16;
 const ITEM_HEIGHT = 0.1;
 const CREATURE_RADIUS = 0.13;
-const CREATURE_HEIGHT = 0.7;
 const NOSE_SIZE = [0.07, 0.07, 0.1]; // facing marker, in front of the cylinder
 const NOSE_COLOR = '#1a1a1a';
 // Offset of a wall item from the wall centre, towards the face it lies on.
@@ -140,17 +140,17 @@ export function buildLevelCreatures(dungeon, levelIndex, center, { wallHeight, c
   const creatures = []; // { position, color, info }
   const noses = []; // { position, rotation, color, info }
   const rings = []; // { position, info }
-  const height = CREATURE_HEIGHT * wallHeight; // standing on the floor
   for (const { x, y, gx, gy, detail } of allTiles(dungeon, levelIndex)) {
     const creature = contentsAt(levelIndex, x, y)?.creature;
     if (!creature) continue;
     const info = { level: levelIndex, x, y, gx, gy, type: detail.type, detail };
     const [fx, fz] = FACE_DIRECTION[FACES.indexOf(creature.facing)];
+    const height = standingHeight(creature.type) * wallHeight; // standing on the floor
     for (const member of creature.members) {
       // A lone creature stands in the centre, with the same size as a group member.
       const [u, v] = member.position === null ? [0.5, 0.5] : subcellOffset(member.position);
       const position = [gx - center.x + u, height / 2, gy - center.z + v];
-      creatures.push({ position, color: creatureColor(creature.type), info });
+      creatures.push({ position, scale: [1, height, 1], color: creatureColor(creature.type), info });
       noses.push({
         position: [position[0] + fx * CREATURE_RADIUS, height * 0.8, position[2] + fz * CREATURE_RADIUS],
         scale: fx ? [NOSE_SIZE[2], NOSE_SIZE[1], NOSE_SIZE[0]] : NOSE_SIZE,
@@ -162,7 +162,8 @@ export function buildLevelCreatures(dungeon, levelIndex, center, { wallHeight, c
   }
   const meshes = [];
   if (creatures.length) {
-    meshes.push(instanced('creatures', 'creatures', new THREE.CylinderGeometry(CREATURE_RADIUS, CREATURE_RADIUS, height, 12), creatures, levelIndex));
+    // A unit-high cylinder, scaled to the height of each species.
+    meshes.push(instanced('creatures', 'creatures', new THREE.CylinderGeometry(CREATURE_RADIUS, CREATURE_RADIUS, 1, 12), creatures, levelIndex));
     meshes.push(instanced('creatureFacing', 'creatures', new THREE.BoxGeometry(1, 1, 1), noses, levelIndex));
   }
   // Rings follow the items layer (chests) or the creatures layer (possessions): layer 'contents'.
