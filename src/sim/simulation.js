@@ -15,6 +15,7 @@ import { ACTIONS, championStrikes, creatureStrikes, creatureReaches, projectileS
 import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
+import { createLight } from './light.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
@@ -57,6 +58,11 @@ export function createSimulation(dungeon) {
     hitGroup: projectileHits,
     drop: (level, x, y, items) => logic.itemsDropped(level, x, y, items),
   });
+
+  // Light around the party (docs/032): torches in hand, magical light; Hall always lit.
+  const light = createLight(dungeon, state, clock, { emit: events.emit, party: () => party });
+  events.on('inventoryChanged', light.update); // a torch put in or taken from a hand
+  events.on('partyMoved', light.update); // another level
 
   // The champion, Zed (docs/023), with the items of his mirror in the inventory.
   function startChampion() {
@@ -403,6 +409,12 @@ export function createSimulation(dungeon) {
       events.emit('potionDrunk', { champion, ...result });
       return result;
     },
+    /** The light now (light.js): { amount, palette, permanent, torches, magical }. */
+    get light() {
+      return light.current();
+    },
+    /** Magical light of a spell, for `ticks` then fading (light.js); G3 casts Torch with it. */
+    addMagicalLight: (power, ticks) => light.addMagical(power, ticks),
     /** Advances the clock: delayed effects due by then are applied, and the creatures of the party's level act. */
     tick(ticks = 1) {
       for (let i = 0; i < ticks; i++) {
@@ -410,6 +422,7 @@ export function createSimulation(dungeon) {
         projectiles.update();
         creatures.update();
         if (regenerate(champion, clock.now)) championChanged();
+        light.tick();
       }
     },
     reset() {
@@ -417,9 +430,11 @@ export function createSimulation(dungeon) {
       state.reset();
       creatures.reset();
       projectiles.reset();
+      light.reset();
       startChampion();
       party = createParty(dungeon.start);
       events.emit('reset', { party });
+      light.update();
     },
     dispose: events.clear,
   };

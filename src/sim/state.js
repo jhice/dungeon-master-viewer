@@ -10,7 +10,8 @@
 // - creature groups have a position, a facing and members (health), one group per tile;
 // - items created during the game (what a dead creature leaves, docs/025) are appended
 //   to the item pools of the loaded dungeon (in memory only), and removed on reset;
-// - potions filled by a spell or drunk (docs/031) are changed in place, and restored on reset.
+// - potions filled by a spell or drunk (docs/031) and torches burning (docs/032) are changed in
+//   place, and restored on reset.
 
 import { ITEM_POOLS } from '../core/contents.js';
 import { doorStep } from '../core/tile-states.js';
@@ -35,11 +36,15 @@ export function createState(dungeon) {
   let nextGroupId; // ids of generated groups follow those of dungeon.json
   // Sizes of the item pools of dungeon.json: entries past them were created during the game.
   const poolSizes = Object.fromEntries(Object.values(ITEM_POOLS).map((pool) => [pool, dungeon.data[pool].length]));
-  const potions = dungeon.data.potions.map(({ type, power, name }) => ({ type, power, name }));
+  // Fields of the item entries that the game changes in place, with their values in dungeon.json.
+  const originals = Object.entries({ potions: ['type', 'power', 'name'], weapons: ['charges', 'lit'] }).map(([pool, fields]) => [
+    dungeon.data[pool],
+    dungeon.data[pool].map((entry) => Object.fromEntries(fields.map((f) => [f, entry[f]]))),
+  ]);
 
   function reset() {
     for (const [pool, size] of Object.entries(poolSizes)) dungeon.data[pool].length = size;
-    potions.forEach((original, i) => Object.assign(dungeon.data.potions[i], original));
+    for (const [pool, values] of originals) values.forEach((original, i) => Object.assign(pool[i], original));
     details = new Map();
     actuators = new Map();
     orders = new Map();

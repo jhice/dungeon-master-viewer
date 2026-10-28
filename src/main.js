@@ -705,10 +705,19 @@ function showInventory() {
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
 
+// Status line of the game window: where the party is, and the light (docs/032, debug until H2 draws it).
+function showStatus() {
+  const { level, x, y, facing } = sim.party;
+  const { amount, palette, permanent, torches, magical } = sim.light;
+  const sources = [...torches.map((t) => `torche ${t.charges}`), ...(magical ? [`magie ${magical}`] : [])];
+  const light = permanent ? 'permanente' : `${amount} (palette ${palette}${sources.length ? `, ${sources.join(', ')}` : ''})`;
+  game?.window.setStatus(`niveau ${level} · (${x}, ${y}) · face ${FACING_LABELS[facing]} · lumière ${light}`);
+}
+
 function showParty(party) {
   if (!game) return;
   game.view.setParty(party);
-  game.window.setStatus(`niveau ${party.level} · (${party.x}, ${party.y}) · face ${FACING_LABELS[party.facing]}`);
+  showStatus();
   if (!renderer) return; // being mounted: mountRenderer() places the party
   if (renderer.currentLevel !== party.level) showLevel(party.level);
   renderer.setParty?.(party);
@@ -747,6 +756,12 @@ sim.on('itemsChanged', ({ level, x, y }) => {
   renderer?.updateTile?.(level, x, y);
 });
 sim.on('inventoryChanged', () => showInventory());
+sim.on('lightChanged', showStatus);
+// A torch in hand lost a charge: its name in the hands and its note change.
+sim.on('torchesWorn', ({ torches }) => {
+  showInventory();
+  if (torches.some((t) => !t.charges)) showInfo('Une torche s’est consumée');
+});
 sim.on('championChanged', showChampion);
 // Spell area (docs/030): the line of symbols changed; a spell was cast (G1: recognised, no effect yet).
 sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion));

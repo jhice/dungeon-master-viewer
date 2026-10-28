@@ -19,6 +19,8 @@
 //   'spellCast'  { champion, spell, power, item?, reason: 'meaningless'|'needsFlask'|'potion'|'noEffect'|'unimplemented' }
 //                a spell was cast; spell = null if meaningless, power 1..6, item = the flask filled (spells.js)
 //   'potionDrunk' { champion, item, name, effect: 'health'|'stamina'|'mana'|null, gained } (potions.js)
+//   'lightChanged' { amount, palette, permanent, torches: [{ hand, item, charges }], magical } (light.js)
+//   'torchesWorn' { torches: [{ hand, item, charges }] } the torches in hand lost a charge (every 512 ticks)
 //   'reset'      { party }
 
 export function createEmitter() {

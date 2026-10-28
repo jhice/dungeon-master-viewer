@@ -201,6 +201,8 @@ Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (
 
 ### H1 — Modèle de lumière dans la simulation
 
+> **Faite :** voir [032-lumiere-phase-h1.md](032-lumiere-phase-h1.md).
+
 **Objectif :** la simulation sait combien il y a de lumière et quelles torches brûlent. Pas encore de rendu.
 
 - **Nouveau `src/sim/light.js`, sans DOM :**

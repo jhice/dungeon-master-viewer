@@ -50,6 +50,11 @@ export function describeItem(dungeon, { kind, index, position }) {
   }
   if (kind === 'potion' && entry.power) item.note = `puissance ${Math.ceil(entry.power / 40)}`;
   if (kind === 'weapon' && entry.charges) item.note = `${entry.charges} charge${entry.charges > 1 ? 's' : ''}`;
+  // A torch (type 2): lit in a hand, burnt out at 0 charges (docs/032).
+  if (kind === 'weapon' && entry.type === 2) {
+    if (!entry.charges) item.note = 'consumée';
+    else if (entry.lit) item.note += ', allumée';
+  }
   if (entry.items?.length) item.contents = entry.items.map((ref) => describeItem(dungeon, ref));
   return item;
 }
