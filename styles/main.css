@@ -678,6 +678,102 @@ body {
   text-align: center;
 }
 
+/* --- Spell area, right of the champion's box, as in DM (src/ui/spell-panel.js) --- */
+
+.spell-panel {
+  --spell: #00c0c0; /* cyan of DM's spell area */
+  position: absolute;
+  top: 1.5cqw;
+  left: 25cqw;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 25cqw;
+  font: 700 2.4cqw/1 ui-monospace, monospace;
+  user-select: none;
+}
+
+/* The caster's tab: his name, black on cyan. */
+.spell-tab {
+  justify-self: start;
+  padding: 0.5cqw 1cqw 0.3cqw;
+  background: var(--spell);
+  color: #000;
+  letter-spacing: 0.1em;
+}
+
+.spell-row,
+.spell-line {
+  display: flex;
+  gap: 0.4cqw;
+  padding: 0.4cqw;
+  background: var(--spell);
+}
+
+.spell-row {
+  padding-bottom: 0;
+}
+
+.spell-panel button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: var(--spell);
+  cursor: pointer;
+}
+
+.spell-panel button:disabled {
+  cursor: default;
+}
+
+.spell-symbol {
+  flex: 1;
+  height: 3.6cqw;
+}
+
+.spell-symbol:not(:disabled):hover,
+.spell-cast:not(:disabled):hover {
+  background: #003838;
+}
+
+/* The line of the symbols chosen: a click casts the spell. */
+.spell-panel .spell-cast {
+  display: flex;
+  flex: 1;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.8cqw;
+  height: 3.6cqw;
+  padding: 0 1cqw;
+}
+
+.spell-panel .spell-delete {
+  width: 5cqw;
+  height: 3.6cqw;
+  background: var(--spell);
+  color: #000;
+  outline: 0.3cqw solid #000;
+  outline-offset: -0.3cqw;
+}
+
+.spell-delete:disabled {
+  opacity: 0.6;
+}
+
+/* A 7 × 7 glyph of the Atari ST, drawn in square pixels. */
+.spell-glyph {
+  width: 2.4cqw;
+  height: 2.4cqw;
+  fill: currentColor;
+  shape-rendering: crispEdges;
+}
+
+.spell-delete .spell-glyph {
+  width: 2.8cqw;
+}
+
 /* Death of the champion: a dark veil over the view. */
 .champion-dead {
   position: absolute;

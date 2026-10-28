@@ -16,10 +16,12 @@ import { createTextsPanel } from './ui/texts-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 import { createGameWindow } from './ui/game-window.js';
 import { createChampionPanel } from './ui/champion-panel.js';
+import { createSpellPanel } from './ui/spell-panel.js';
 import { createSimulation } from './sim/simulation.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
 import { ACTIONS } from './sim/combat.js';
+import { SYMBOLS } from './core/spell-info.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
 const RENDERERS = {
@@ -547,7 +549,12 @@ async function openGame() {
       onHand: (i) => sim.swapHand(i),
       onRestart: () => sim.reset(),
     });
-    game = { window: win, view, panel };
+    const spells = createSpellPanel(win.viewport, {
+      onSymbol: (i) => sim.addSymbol(i),
+      onDelete: () => sim.deleteSymbol(),
+      onCast: () => sim.castSpell(),
+    });
+    game = { window: win, view, panel, spells };
     showInventory();
     game.clock = setInterval(() => {
       sim.tick();
@@ -571,6 +578,7 @@ function closeGame() {
   if (!game) return;
   clearInterval(game.clock);
   game.panel.dispose();
+  game.spells.dispose();
   game.view.dispose();
   game.window.dispose();
   game = null;
@@ -652,6 +660,7 @@ function showChampion() {
     sim.hands.map(describe),
     sim.actions.map((id) => ({ id, name: ACTIONS[id].name })),
   );
+  game?.spells.update(sim.champion);
 }
 
 // Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
@@ -732,6 +741,15 @@ sim.on('itemsChanged', ({ level, x, y }) => {
 });
 sim.on('inventoryChanged', () => showInventory());
 sim.on('championChanged', showChampion);
+// Spell area (docs/030): the line of symbols changed; a spell was cast (G1: recognised, no effect yet).
+sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion));
+sim.on('spellCast', ({ champion, spell, power, reason }) => {
+  game?.panel.setReady(sim.fatigue === 0);
+  const who = champion.name[0] + champion.name.slice(1).toLowerCase();
+  if (!spell) return showInfo(`${who} a prononcé un sort incompréhensible`);
+  const note = reason === 'unimplemented' ? 'pas encore implémenté' : 'effet à venir';
+  showInfo(`${who} lance ${spell.name} (${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')}) · ${note}`);
+});
 // What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
 sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown }) => {
   game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');

@@ -13,6 +13,7 @@ import { blockReason, resolveArrival } from './rules.js';
 import { createChampion, championMirror, regenerate } from './champion.js';
 import { ACTIONS, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
 import { createProjectiles } from './projectiles.js';
+import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
@@ -349,6 +350,31 @@ export function createSimulation(dungeon) {
     drop(level, x, y, position) {
       if (!state.hand || !this.reachable(level, x, y, position)) return false;
       return logic.drop(party, level, x, y, position);
+    },
+    /** The line of symbols being composed: indices per step, the power first (spells.js). */
+    get symbols() {
+      return champion.symbols;
+    },
+    /** Spell area: adds the symbol `index` (0..5) of the next step; false if refused. */
+    addSymbol(index) {
+      if (champion.dead || !addSymbol(champion, index)) return false;
+      events.emit('symbolsChanged', { champion });
+      return true;
+    },
+    /** Spell area: the arrow deletes the last symbol. */
+    deleteSymbol() {
+      if (champion.dead || !deleteSymbol(champion)) return false;
+      events.emit('symbolsChanged', { champion });
+      return true;
+    },
+    /** Casts the spell composed (G1: recognised, no effect but its fatigue); null if nothing to cast. */
+    castSpell() {
+      if (champion.dead) return null;
+      const result = castSpell(champion, clock.now);
+      if (!result) return null;
+      events.emit('symbolsChanged', { champion });
+      events.emit('spellCast', { champion, ...result });
+      return result;
     },
     /** Advances the clock: delayed effects due by then are applied, and the creatures of the party's level act. */
     tick(ticks = 1) {

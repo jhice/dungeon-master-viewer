@@ -16,7 +16,7 @@ const MANA_EVERY = 60;
 /**
  * Creates the champion from his sheet: { name, title, health, maxHealth, stamina,
  * maxStamina (×10), mana, maxMana, strength, dexterity, wisdom, vitality, antiMagic,
- * antiFire, luck, skills, readyAt, dead }.
+ * antiFire, luck, skills, readyAt, symbols, dead }.
  */
 export function createChampion(dungeon, name = DEFAULT_CHAMPION) {
   const text = dungeon.data.texts.find((t) => t.text.split('\n')[0] === name);
@@ -41,8 +41,21 @@ export function createChampion(dungeon, name = DEFAULT_CHAMPION) {
     antiFire,
     skills: Object.fromEntries(sheet.classes.flatMap((c) => c.skills.map((s) => [s.skill, s.level]))),
     readyAt: 0, // tick from which he can act again (fatigue of the last action)
+    symbols: [], // spell being composed: symbol indices per step, the power first (spells.js)
     dead: false,
   };
+}
+
+/**
+ * Disables the action hand for `ticks` (F330_CHAMPION_DisableAction): if it is already
+ * disabled, the two delays add up partly (half of the shorter one is added to the longer one).
+ */
+export function disableAction(champion, now, ticks) {
+  let until = now + ticks;
+  if (champion.readyAt > now) {
+    until = until >= champion.readyAt ? until + ((champion.readyAt - now) >> 1) : champion.readyAt + (ticks >> 1);
+  }
+  champion.readyAt = until;
 }
 
 /** Tile of the champion's mirror in the Hall (his items lie there), or null. */

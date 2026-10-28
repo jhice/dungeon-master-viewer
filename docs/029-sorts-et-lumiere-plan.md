@@ -121,6 +121,8 @@ Le rendu la traduit en intensités.
 
 ### G1 — Panneau de sorts et reconnaissance
 
+> **Faite :** voir [030-sorts-phase-g1.md](030-sorts-phase-g1.md).
+
 **Objectif :** composer un sort au clic et savoir lequel c'est. Aucun effet.
 
 - **Simulation,** nouveau `src/sim/spells.js`, sans DOM :

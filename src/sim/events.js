@@ -15,6 +15,9 @@
 //   'projectilesMoved' { level } items in flight moved on a level (projectiles.js)
 //   'itemStolen' { group, item, hand } a Giggler took the item of a hand (0 ready, 1 action)
 //   'groupFled' { group, reason: 'fear'|'theft' } a group runs away for a while (creatures.js)
+//   'symbolsChanged' { champion } the line of spell symbols changed (champion.symbols, spells.js)
+//   'spellCast'  { champion, spell, power, reason: 'meaningless'|'noEffect'|'unimplemented' } a spell
+//                was cast; spell = null if meaningless, power 1..6 (spells.js)
 //   'reset'      { party }
 
 export function createEmitter() {
