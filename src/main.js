@@ -772,8 +772,7 @@ sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   const words = `${spell.name} (${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')})`;
   if (reason === 'needsFlask') return showInfo(`${who} a besoin d’une flasque vide en main pour ${words}`);
   if (reason === 'potion') return showInfo(`${who} lance ${words} : la flasque devient ${itemName(item)}`);
-  const note = reason === 'unimplemented' ? 'pas encore implémenté' : 'effet à venir';
-  showInfo(`${who} lance ${words} · ${note}`);
+  showInfo(`${who} lance ${words}${reason === 'unimplemented' ? ' · pas encore implémenté' : ''}`);
 });
 const championName = (champion) => champion.name[0] + champion.name.slice(1).toLowerCase();
 const DRINK_EFFECTS = { health: 'PV', stamina: 'endurance', mana: 'mana' };
@@ -781,13 +780,19 @@ sim.on('potionDrunk', ({ champion, name, effect, gained }) =>
   showInfo(`${championName(champion)} boit ${name} : ${effect ? `+${gained} ${DRINK_EFFECTS[effect]}` : 'effet pas encore implémenté'}`),
 );
 // What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
-sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown }) => {
+sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown, spell }) => {
   game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');
   const { name } = describeGroup(dungeon, group);
   if (destroyed) showInfo(`${name} : groupe anéanti`);
   else if (killed) showInfo(`${name} tué`);
   else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
   else if (thrown) showInfo(result === 'hit' ? `${name} touché : ${damage} PV` : `${name} : sans dégâts`);
+  else if (spell) showInfo(`${name} brûlé : ${damage} PV`);
+});
+// A fireball broke a door (docs/033).
+sim.on('doorBroken', () => {
+  showInfo('La boule de feu fait voler la porte en éclats');
+  game?.window.flash();
 });
 sim.on('itemStolen', ({ group, item }) => showInfo(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));
 sim.on('groupFled', ({ group, reason }) => reason === 'fear' && showInfo(`${describeGroup(dungeon, group).name} : le groupe prend peur et s’enfuit`));
@@ -800,10 +805,16 @@ sim.on('projectilesMoved', () => {
   });
 });
 sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
-sim.on('championDied', ({ champion, group }) =>
-  showInfo(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : 'écrasé par une porte'}`),
+sim.on('championDied', ({ champion, group, spell }) =>
+  showInfo(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : spell ? 'brûlé par sa boule de feu' : 'écrasé par une porte'}`),
 );
-sim.on('championHit', ({ door, damage }) => door && showInfo(`La porte se referme sur le groupe : ${damage} PV`));
+sim.on('championHit', ({ door, spell, damage }) => {
+  if (door) showInfo(`La porte se referme sur le groupe : ${damage} PV`);
+  if (spell) {
+    showInfo(`La boule de feu explose sur le groupe : ${damage} PV`);
+    game?.window.flash();
+  }
+});
 sim.on('doorCrushed', ({ group, killed, destroyed }) => {
   const { name } = describeGroup(dungeon, group);
   showInfo(destroyed ? `${name} : écrasé par la porte, groupe anéanti` : killed ? `${name} : ${killed} écrasé(s) par la porte` : `La porte se referme sur ${name}`);

@@ -211,6 +211,10 @@ export function createFirstPersonRenderer(
   const PROJECTILE_HEIGHT = 0.32;
   const SUB_TILE = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]; // NW, NE, SE, SW
   const projectileGeometry = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+  // A spell in flight (docs/033): a glowing sphere, higher than a thrown item (eye height).
+  const spellGeometry = new THREE.SphereGeometry(0.11, 16, 12);
+  const SPELL_COLORS = { fireball: '#ff7a1a', openDoor: '#4a8cff' };
+  const SPELL_HEIGHT = 0.45;
   const projectileGroup = new THREE.Group();
   scene.add(projectileGroup);
   function setProjectiles(levelIndex, list) {
@@ -218,9 +222,15 @@ export function createFirstPersonRenderer(
     projectileGroup.clear();
     if (levelIndex !== level) return render();
     for (const p of list) {
+      const [u, v] = SUB_TILE[p.position];
+      if (p.spell) {
+        const mesh = new THREE.Mesh(spellGeometry, new THREE.MeshBasicMaterial({ color: SPELL_COLORS[p.spell] ?? '#ffffff' }));
+        mesh.position.set(p.x + u, SPELL_HEIGHT, p.y + v);
+        projectileGroup.add(mesh);
+        continue;
+      }
       const material = new THREE.MeshLambertMaterial({ color: colorOf?.(p.item) ?? '#e0e0e0' });
       const mesh = new THREE.Mesh(projectileGeometry, material);
-      const [u, v] = SUB_TILE[p.position];
       mesh.position.set(p.x + u, PROJECTILE_HEIGHT, p.y + v);
       mesh.rotation.set(0.6, 0.8, 0);
       projectileGroup.add(mesh);
@@ -380,6 +390,7 @@ export function createFirstPersonRenderer(
       renderer.domElement.removeEventListener('contextmenu', onRightClick);
       setProjectiles(null, []);
       projectileGeometry.dispose();
+      spellGeometry.dispose();
       renderer.domElement.removeEventListener('pointermove', onMove);
       renderer.domElement.removeEventListener('pointerleave', onLeave);
       tooltip.remove();

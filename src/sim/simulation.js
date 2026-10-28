@@ -16,6 +16,7 @@ import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
 import { createLight } from './light.js';
+import { createMagic } from './magic.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
@@ -55,14 +56,36 @@ export function createSimulation(dungeon) {
 
   const projectiles = createProjectiles(state, {
     emit: events.emit,
-    hitGroup: projectileHits,
+    hitGroup: (p, group) => (p.spell ? magic.hitGroup(p, group) : projectileHits(p, group)),
     drop: (level, x, y, items) => logic.itemsDropped(level, x, y, items),
+    impact: (p, target) => magic.impact(p, target),
   });
 
   // Light around the party (docs/032): torches in hand, magical light; Hall always lit.
   const light = createLight(dungeon, state, clock, { emit: events.emit, party: () => party });
   events.on('inventoryChanged', light.update); // a torch put in or taken from a hand
   events.on('partyMoved', light.update); // another level
+
+  // Spells acting in the dungeon (docs/033): Open Door, Fireball, Torch.
+  const magic = createMagic(dungeon, state, clock, {
+    emit: events.emit,
+    party: () => party,
+    champion: () => champion,
+    random: () => random,
+    logic,
+    projectiles,
+    light,
+    hurtChampion: (damage) => woundChampion(damage, { spell: 'fireball' }),
+    hurtCreature: (group, member, damage) => {
+      member.hp = Math.max(0, member.hp - damage);
+      const killed = member.hp === 0;
+      const destroyed = killed && creatures.kill(group, member);
+      events.emit('creatureHit', { result: 'hit', damage, group, killed, destroyed, spell: 'fireball' });
+      return destroyed;
+    },
+    provoke: (group) => creatures.provoke(group),
+  });
+  const spellEffects = { potion: fillHandFlask, openDoor: magic.launch, fireball: magic.launch, torch: (spell, power) => magic.torch(power) };
 
   // The champion, Zed (docs/023), with the items of his mirror in the inventory.
   function startChampion() {
@@ -95,16 +118,7 @@ export function createSimulation(dungeon) {
    */
   function doorCrushes({ level, x, y, group }) {
     const attack = () => 4 + Math.floor(random() * 2);
-    if (!group) {
-      if (champion.dead) return;
-      const damage = Math.floor((attack() * 130) / 64);
-      champion.health = Math.max(0, champion.health - damage);
-      champion.dead = champion.health === 0;
-      events.emit('championHit', { group: null, door: { level, x, y }, result: 'hit', damage });
-      championChanged();
-      if (champion.dead) events.emit('championDied', { champion, group: null });
-      return;
-    }
+    if (!group) return woundChampion(Math.floor((attack() * 130) / 64), { door: { level, x, y } });
     let killed = 0;
     let destroyed = false;
     if (group.type !== LORD_CHAOS) {
@@ -117,6 +131,16 @@ export function createSimulation(dungeon) {
     }
     if (!destroyed) creatures.alarm(group);
     events.emit('doorCrushed', { level, x, y, group, killed, destroyed });
+  }
+
+  // The champion loses health from a door or a spell (`cause`: { door } or { spell }); he dies at 0.
+  function woundChampion(damage, cause) {
+    if (champion.dead) return;
+    champion.health = Math.max(0, champion.health - damage);
+    champion.dead = champion.health === 0;
+    events.emit('championHit', { group: null, ...cause, result: 'hit', damage });
+    championChanged();
+    if (champion.dead) events.emit('championDied', { champion, group: null, ...cause });
   }
 
   // The outcome of a strike or of a thrown item on a group: a member chosen at random
@@ -385,7 +409,7 @@ export function createSimulation(dungeon) {
     /** Casts the spell composed (G1: recognised, no effect but its fatigue); null if nothing to cast. */
     castSpell() {
       if (champion.dead) return null;
-      const result = castSpell(champion, clock.now, { potion: fillHandFlask });
+      const result = castSpell(champion, clock.now, spellEffects);
       if (!result) return null;
       events.emit('symbolsChanged', { champion });
       if (result.item) events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });

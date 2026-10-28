@@ -65,7 +65,7 @@ sim.on('spellCast', (e) => events.push(e));
   sim.tick(100);
   compose('Lo Ful');
   const torch = sim.castSpell();
-  check(torch.spell?.name === 'Torch' && torch.reason === 'noEffect', `Lo Ful → ${torch.spell?.name} (${torch.reason})`);
+  check(torch.spell?.name === 'Torch' && torch.reason === 'cast', `Lo Ful → ${torch.spell?.name} (${torch.reason})`);
   check(events.at(-1).spell?.name === 'Torch', 'événement spellCast émis');
   compose('Lo Ya Ven');
   const meaningless = sim.castSpell();

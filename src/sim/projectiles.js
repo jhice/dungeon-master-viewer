@@ -6,6 +6,12 @@
 //
 // A projectile: { id, item, level, x, y, direction, side: 'left'|'right', row: 'back'|'front',
 // energy, stepLoss, kinetic, mass }. `row` is relative to the direction of flight.
+//
+// A projectile may carry a spell instead of an item (phase G3, docs/033): { spell: 'fireball' |
+// 'openDoor', attack }. It moves as the engine moves it (ReDMCSB F219): its first step is free,
+// then before each step it vanishes if its energy is not above the step loss. It enters a
+// closed door's tile and meets the door there; against a wall it meets the wall from its own
+// tile. What happens then (explosion, door toggled) is up to the simulation (hooks.impact).
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { doorPassable } from '../core/tile-states.js';
@@ -26,9 +32,12 @@ export function subTile(direction, side, row) {
  * @param {object} hooks
  * @param {(type: string, payload: object) => void} hooks.emit 'projectilesMoved'
  * @param {(projectile, group) => boolean} hooks.hitGroup the projectile reaches a group: true if it hits it
+ *   (a spell is also offered to non-material creatures)
  * @param {(level, x, y, items) => void} hooks.drop the item falls on a tile (logic.itemsDropped)
+ * @param {(projectile, target: 'door'|'wall') => boolean} hooks.impact a spell meets the door of its
+ *   tile, or the wall in front of its tile: true if it stops there
  */
-export function createProjectiles(state, { emit, hitGroup, drop }) {
+export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
   let flying; // id -> projectile
   let nextId;
 
@@ -56,28 +65,42 @@ export function createProjectiles(state, { emit, hitGroup, drop }) {
     }
   }
 
-  // The projectile falls where it is: its item lies on its sub-tile.
+  // The projectile ends where it is: its item lies on its sub-tile; a spell vanishes.
   function land(p) {
     flying.delete(p.id);
+    if (!p.item) return;
     const position = subTile(p.direction, p.side, p.row);
     drop(p.level, p.x, p.y, [{ kind: p.item.kind, index: p.item.index, position }]);
   }
 
   // One step: to the front row of its tile, or to the back row of the next tile.
   function advance(p) {
-    p.energy -= p.stepLoss;
+    if (p.spell) {
+      if (p.free) p.free = false;
+      else {
+        if (p.energy <= p.stepLoss) return land(p);
+        p.energy -= p.stepLoss;
+        p.attack = Math.max(0, p.attack - p.stepLoss);
+      }
+    } else p.energy -= p.stepLoss;
     if (p.row === 'back') {
       p.row = 'front';
+      // A spell crossing a door's tile meets the door (F219 then F217).
+      if (p.spell && state.tileAt(p.level, p.x, p.y)?.type === 'door' && impact(p, 'door')) return land(p);
     } else {
       const [dx, dy] = SIDE_DELTAS[p.direction];
       const [nx, ny] = [p.x + dx, p.y + dy];
-      if (!passes(p.level, nx, ny)) return land(p); // against the wall: falls before it
+      const door = p.spell && state.tileAt(p.level, nx, ny)?.type === 'door';
+      if (!door && !passes(p.level, nx, ny)) {
+        if (p.spell) impact(p, 'wall'); // meets the wall from its tile
+        return land(p); // against the wall: falls before it
+      }
       Object.assign(p, { x: nx, y: ny, row: 'back' });
-      // A creature: hit (it falls on its tile), unless missed; non-material ones let it through.
+      // A creature: hit (it falls on its tile), unless missed; non-material ones let items through.
       const group = state.groupAt(p.level, nx, ny);
-      if (group && !creatureInfo(group.type).nonMaterial && hitGroup(p, group)) return land(p);
+      if (group && (p.spell || !creatureInfo(group.type).nonMaterial) && hitGroup(p, group)) return land(p);
     }
-    if (p.energy <= 0) land(p);
+    if (!p.spell && p.energy <= 0) land(p);
   }
 
   return {
@@ -86,8 +109,8 @@ export function createProjectiles(state, { emit, hitGroup, drop }) {
      * energy that decreases by `stepLoss` at each step. The item starts in the front row
      * of the tile. Returns the projectile.
      */
-    launch({ item, level, x, y, direction, side, energy, stepLoss, kinetic, mass = 1 }) {
-      const p = { id: nextId++, item, level, x, y, direction, side, row: 'front', energy, stepLoss, kinetic, mass };
+    launch({ item = null, spell = null, attack = 0, level, x, y, direction, side, energy, stepLoss, kinetic = 0, mass = 1 }) {
+      const p = { id: nextId++, item, spell, attack, free: Boolean(spell), level, x, y, direction, side, row: 'front', energy, stepLoss, kinetic, mass };
       flying.set(p.id, p);
       emit('projectilesMoved', { level });
       return p;
@@ -102,11 +125,11 @@ export function createProjectiles(state, { emit, hitGroup, drop }) {
       }
       for (const level of levels) emit('projectilesMoved', { level });
     },
-    /** Projectiles in flight on a level, with their sub-tile: [{ id, item, x, y, position, row }]. */
+    /** Projectiles in flight on a level, with their sub-tile: [{ id, item, spell, x, y, position, direction }]. */
     on(level) {
       return [...flying.values()]
         .filter((p) => p.level === level)
-        .map((p) => ({ id: p.id, item: p.item, x: p.x, y: p.y, position: subTile(p.direction, p.side, p.row), direction: p.direction }));
+        .map((p) => ({ id: p.id, item: p.item, spell: p.spell, x: p.x, y: p.y, position: subTile(p.direction, p.side, p.row), direction: p.direction }));
     },
     reset,
   };

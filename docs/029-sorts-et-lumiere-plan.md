@@ -168,6 +168,8 @@ Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (
 
 ### G3 — Sorts de magicien : Open Door, Fireball, Torch
 
+> **Faite :** voir [033-sorts-phase-g3.md](033-sorts-phase-g3.md).
+
 **Objectif :** les trois sorts retenus agissent dans le donjon.
 
 - **Projectiles magiques** dans `projectiles.js` : un projectile peut porter un **sort** au lieu d'un objet.

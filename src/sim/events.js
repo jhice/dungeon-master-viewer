@@ -21,6 +21,9 @@
 //   'potionDrunk' { champion, item, name, effect: 'health'|'stamina'|'mana'|null, gained } (potions.js)
 //   'lightChanged' { amount, palette, permanent, torches: [{ hand, item, charges }], magical } (light.js)
 //   'torchesWorn' { torches: [{ hand, item, charges }] } the torches in hand lost a charge (every 512 ticks)
+//   'explosion'  { level, x, y, spell: 'fireball' } a fireball exploded on a tile (magic.js)
+//   'doorBroken' { level, x, y, by: 'fireball' } a fireball broke a door (magic.js)
+//                (creatureHit and championHit carry `spell: 'fireball'` when a fireball wounds)
 //   'reset'      { party }
 
 export function createEmitter() {

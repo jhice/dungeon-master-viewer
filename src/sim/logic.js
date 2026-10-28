@@ -502,9 +502,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       const needed = DOOR_HITS[dungeon.level(level).doorTypes[door.type]] ?? Infinity;
       tile.detail.hits = (tile.detail.hits ?? 0) + 1;
       if (tile.detail.hits < needed) return { target: 'door', fired: 0, hits: tile.detail.hits, needed };
-      // Broken: open for good, mechanisms no longer close it.
-      Object.assign(tile.detail, { broken: true, open: true, step: 0, moving: null });
-      emit('tileChanged', { level, x, y, type: 'door', detail: tile.detail, source: null });
+      breakDoor(level, x, y, tile);
       return { target: 'door', fired: 0, hits: tile.detail.hits, needed, broken: true };
     }
     if (!door.button) return { target: 'door', fired: 0 };
@@ -512,7 +510,28 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     return { target: 'door', fired: 1 };
   }
 
+  // A broken door: open for good, mechanisms no longer close it.
+  function breakDoor(level, x, y, tile) {
+    Object.assign(tile.detail, { broken: true, open: true, step: 0, moving: null });
+    emit('tileChanged', { level, x, y, type: 'door', detail: tile.detail, source: null });
+  }
+
   return {
+    /** The door of a tile ({ type, ornate, button, fireball, force… } of dungeon.json), or null. */
+    doorAt(level, x, y) {
+      const ref = state.tileAt(level, x, y)?.detail.items?.find((item) => item.kind === 'door');
+      return ref ? dungeon.data.doors[ref.index] : null;
+    },
+    /** Toggles a door as its button does (spell Open Door, docs/033). */
+    toggleDoor(level, x, y) {
+      const tile = state.tileAt(level, x, y);
+      if (tile?.type === 'door') setOpen(level, x, y, tile, 'toggle', null);
+    },
+    /** Breaks a door (fireball, docs/033). */
+    breakDoor(level, x, y) {
+      const tile = state.tileAt(level, x, y);
+      if (tile?.type === 'door' && !tile.detail.broken) breakDoor(level, x, y, tile);
+    },
     /** The party left a tile (after moving), entered one (after its arrival effects), or turned. */
     partyLeft(p) {
       floorChange(p.level, p.x, p.y, p, null);
