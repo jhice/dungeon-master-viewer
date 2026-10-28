@@ -70,13 +70,14 @@ export function createDecor(dungeon, state, wallHeight) {
     return mesh;
   }
 
-  function wallOrnaments(level, x, y) {
+  function wallOrnaments(level, x, y, holders) {
     const meshes = [];
     for (let face = 0; face < 4; face++) {
       if (isAlcove(dungeon, level, x, y, face, state.actuatorsAt)) meshes.push(...niche(x, y, face));
       const name = shownOrnament(dungeon, level, x, y, face, state.actuatorsAt, state.textVisible);
       const art = name && WALL_ART[name];
       if (!art) continue; // nothing, an alcove (the niche), or an unknown name (none in DM)
+      if (name === 'Full Torch Holder') holders.push({ x, y, face });
       const height = art.h * wallHeight;
       const canvasHeight = Math.round((TEXTURE_SIZE * height) / art.w);
       const map = texture(`wall:${name}`, TEXTURE_SIZE, canvasHeight, art.draw);
@@ -198,19 +199,21 @@ export function createDecor(dungeon, state, wallHeight) {
 
   return {
     /**
-     * Decor of a level: { meshes, doors }. `meshes` are plain meshes (ornaments, niches,
-     * inscriptions, floor decals); `doors` are pickable instanced meshes. Their textures
-     * stay in the cache: dispose geometries and materials only.
+     * Decor of a level: { meshes, doors, torchHolders }. `meshes` are plain meshes (ornaments,
+     * niches, inscriptions, floor decals); `doors` are pickable instanced meshes. Their textures
+     * stay in the cache: dispose geometries and materials only. `torchHolders`: the wall faces
+     * showing a full torch holder, [{ x, y, face }] (lights of the view, docs/035).
      */
     build(level) {
       const map = dungeon.level(level);
       const meshes = [];
       const doors = [];
+      const torchHolders = [];
       for (let y = 0; y < map.height; y++) {
         for (let x = 0; x < map.width; x++) {
           const tile = state.tileAt(level, x, y);
           if (tile.type === 'wall') {
-            meshes.push(...wallOrnaments(level, x, y));
+            meshes.push(...wallOrnaments(level, x, y, torchHolders));
             if (tile.detail) meshes.push(...inscriptions(tile.detail, x, y));
           } else if (tile.type === 'door') {
             doors.push(...door(level, x, y, tile, map));
@@ -219,7 +222,7 @@ export function createDecor(dungeon, state, wallHeight) {
           }
         }
       }
-      return { meshes, doors };
+      return { meshes, doors, torchHolders };
     },
     dispose() {
       for (const t of textures.values()) t.dispose();

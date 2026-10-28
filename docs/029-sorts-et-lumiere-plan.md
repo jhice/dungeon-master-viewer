@@ -222,6 +222,8 @@ Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (
 
 ### H2 — Rendu : torches, ombres, scintillement
 
+> **Faite :** voir [035-lumiere-phase-h2.md](035-lumiere-phase-h2.md).
+
 **Objectif :** la vue à la première personne est éclairée par les torches.
 
 - **Lumière globale :** `HemisphereLight` à `amount × réglage global`. Au niveau 0, elle reste pleine.

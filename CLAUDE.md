@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 034.
+> Mis à jour le 2026-10-28, après la doc 035.
 
 ### Données et visualiseur
 
@@ -88,6 +88,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Lumière, H1 (doc 032) :** modèle sans rendu (`src/sim/light.js`) : niveau 0 toujours éclairé, torches en main pondérées et usées tous les 512 ticks, lumière magique par crans ; affichée dans la ligne d'état du jeu.
 - **Sorts, G3 (doc 033) :** Open Door et Fireball en projectiles magiques (`src/sim/magic.js`, `projectiles.js`) : porte à bouton actionnée, porte cassée, créatures et groupe brûlés ; Torch ajoute de la lumière magique.
 - **Sorts, G4 (doc 034) :** grimoire des parchemins tenus (`src/sim/grimoire.js`, sorts reconnus dans le texte) ; infobulles détaillées des objets tenus (`itemDetails`, `item-info.js`).
+- **Lumière, H2 (doc 035) :** la vue à la première personne est éclairée par le modèle (`src/render/first-person/fp-lights.js`) : noir hors du niveau 0 sans torche, torche du groupe et porte-torches en `PointLight` avec ombres (budget : 3), lumière magique centrée sur le groupe, scintillement ; réglages dans `LIGHTING`.
 - **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`.
 
 ### En attente
@@ -102,7 +103,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2, H3.
+- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3.
 
 ## Simulation
 

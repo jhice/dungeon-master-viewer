@@ -1,10 +1,12 @@
 // First-person view of the simulation (Three.js): the party's level only, with
-// full-height walls, a ceiling and a uniform light (answer Q7: permanent light).
+// full-height walls, a ceiling, lit by the torches and spells of the party, the torch
+// holders of the walls, or fully on a level of difficulty 0 (fp-lights.js, docs/035).
 // Reuses level-meshes.js in its `game` look, fed by the simulation state.
 // Units as in level-meshes.js: 1 tile = 1 unit, x = east, z = south, y = up;
 // here the level is built in local coordinates (tile (x, y) spans [x, x+1]).
 //
-// Rendering is on demand (party moved, state changed, resize): no loop yet.
+// Rendering is on demand (party moved, state changed, resize), and every frame while a
+// flame flickers.
 // Mouse: a click on the wall or door just in front of the party is reported
 // (wall buttons, levers, locks, alcoves, door buttons), and so is a click on the
 // floor (a sub-tile, maybe with an item): main.js picks up or drops there if it
@@ -23,6 +25,7 @@ import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents, buildLevelCreatures } from '../three/level-contents.js';
 import { createDecor } from './fp-decor.js';
+import { createLights } from './fp-lights.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
@@ -68,20 +71,18 @@ export function createFirstPersonRenderer(
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.className = 'fp-canvas';
   container.append(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
   scene.fog = new THREE.Fog(0x000000, VIEW.fogNear, VIEW.fogFar);
-  scene.add(new THREE.HemisphereLight(0xfff4e0, 0x403a30, 1.6));
-  // A light carried by the party: faces close to the eye are brighter, which separates the walls.
-  const torch = new THREE.PointLight(0xffe2b0, 2.2, 0, 1);
-  scene.add(torch);
 
   const camera = new THREE.PerspectiveCamera(VIEW.fov, ASPECT, 0.02, 60);
-  camera.add(torch);
   scene.add(camera);
+  const lights = createLights(scene, camera, WALL_HEIGHT, { near: VIEW.fogNear, far: VIEW.fogFar });
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
   const ceilingTextures = { ceiling: ceilingTexture(false), ceilingPit: ceilingTexture(true) };
@@ -116,8 +117,9 @@ export function createFirstPersonRenderer(
       group.add(mesh);
       meshes.push(mesh);
     }
-    const { meshes: decorMeshes, doors } = decor.build(levelIndex);
+    const { meshes: decorMeshes, doors, torchHolders } = decor.build(levelIndex);
     for (const mesh of [...decorMeshes, ...doors]) group.add(mesh);
+    lights.setHolders(torchHolders);
     meshes.push(...doors); // pickable, disposed with the level meshes
     for (const mesh of meshes) {
       // `game` builds no types-only look, but stairs share variants: hide what is not 'states'.
@@ -132,6 +134,7 @@ export function createFirstPersonRenderer(
     }
     const ceiling = buildCeiling(levelIndex);
     for (const mesh of ceiling) group.add(mesh);
+    castShadows(group);
     scene.add(group);
     built = { group, meshes, ceiling, decorMeshes };
   }
@@ -170,6 +173,18 @@ export function createFirstPersonRenderer(
     return meshes;
   }
 
+  // Shadows (docs/035): everything receives them; walls, doors, items and creatures cast them.
+  // Flat things (floor, ceiling, decals on walls and floors) and translucent ones do not.
+  const FLAT_PARTS = ['floor', 'pit', 'pitHidden', 'pitLid', 'pitLidHidden'];
+  function castShadows(group) {
+    group.traverse((object) => {
+      if (!object.isMesh) return;
+      object.receiveShadow = true;
+      const solid = !object.material.transparent && object.isInstancedMesh;
+      object.castShadow = solid && !FLAT_PARTS.includes(object.userData.part) && !object.userData.part?.startsWith('ceiling');
+    });
+  }
+
   // Not seen by the party either: the "has contents" rings of chests and creatures (disposed).
   function seenMeshes(meshes) {
     return meshes.filter((mesh) => {
@@ -189,6 +204,7 @@ export function createFirstPersonRenderer(
     const map = dungeon.level(level);
     const center = { x: map.offset.x, z: map.offset.y };
     for (const mesh of seenMeshes(buildLevelCreatures(dungeon, level, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents }))) {
+      mesh.castShadow = mesh.receiveShadow = true;
       built.group.add(mesh);
       built.meshes.push(mesh);
     }
@@ -249,7 +265,22 @@ export function createFirstPersonRenderer(
     camera.rotation.set(0, yaw, 0);
   }
 
-  const render = () => renderer.render(scene, camera);
+  // On demand, unless a flame flickers: then every frame (animate) until none does.
+  let frame = 0;
+  const render = () => {
+    if (lights.animated) {
+      frame ||= requestAnimationFrame(animate);
+      return;
+    }
+    renderer.render(scene, camera);
+  };
+  function animate(time) {
+    frame = 0;
+    if (!lights.animated) return render();
+    lights.flicker(time / 1000);
+    renderer.render(scene, camera);
+    frame = requestAnimationFrame(animate);
+  }
 
   function resize() {
     const { clientWidth: w, clientHeight: h } = container;
@@ -364,6 +395,12 @@ export function createFirstPersonRenderer(
       party = next;
       if (party.level !== level) build(party.level);
       placeCamera(party);
+      lights.setParty(party);
+      render();
+    },
+    /** The light of the simulation changed (sim.light, docs/032): torches, magical light. */
+    setLight(light) {
+      lights.setLight(light);
       render();
     },
     /** Colour of the item in hand (cursor), or null for an empty hand. */
@@ -389,6 +426,7 @@ export function createFirstPersonRenderer(
     /** Items in flight on a level: [{ item, x, y, position (sub-tile) }]. */
     setProjectiles,
     dispose() {
+      cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('click', onClick);
       renderer.domElement.removeEventListener('contextmenu', onRightClick);

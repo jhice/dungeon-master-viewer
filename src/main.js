@@ -558,6 +558,7 @@ async function openGame() {
       onCast: () => sim.castSpell(),
     });
     game = { window: win, view, panel, spells };
+    view.setLight(sim.light);
     showInventory();
     game.clock = setInterval(() => {
       sim.tick();
@@ -709,7 +710,7 @@ function showInventory() {
 
 const FACING_LABELS = { N: 'nord', E: 'est', S: 'sud', W: 'ouest' };
 
-// Status line of the game window: where the party is, and the light (docs/032, debug until H2 draws it).
+// Status line of the game window: where the party is, and the light (docs/032; drawn by the view since docs/035).
 function showStatus() {
   const { level, x, y, facing } = sim.party;
   const { amount, palette, permanent, torches, magical } = sim.light;
@@ -760,7 +761,10 @@ sim.on('itemsChanged', ({ level, x, y }) => {
   renderer?.updateTile?.(level, x, y);
 });
 sim.on('inventoryChanged', () => showInventory());
-sim.on('lightChanged', showStatus);
+sim.on('lightChanged', (light) => {
+  game?.view.setLight(light);
+  showStatus();
+});
 // A torch in hand lost a charge: its name in the hands and its note change.
 sim.on('torchesWorn', ({ torches }) => {
   showInventory();
