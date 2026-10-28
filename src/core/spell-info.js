@@ -13,7 +13,6 @@
 // potion      name and type (engine potion type, DEFS.H) of the potion a potion spell fills a flask with
 // effect      what the spell does, for the phases that code it (G2 potions, G3 torch, openDoor, fireball)
 // retained    part of what phases G2 and G3 implement (docs/029 § 1)
-// scroll      [level, x, y] of a scroll revealing it in DM (Poison Potion: none)
 
 /** The 4 rows of 6 symbols, chosen in this order: power, element, form, class / alignment. */
 export const SYMBOLS = [
@@ -46,31 +45,31 @@ const s = (symbols) => symbols.split(' ');
 
 // prettier-ignore
 export const SPELLS = [
-  { symbols: s('Vi'),          name: 'Health Potion',      potion: 'Vi Potion',   type: 14, school: PRIEST, kind: 'potion',     difficulty: 1, fatigue: 32, skill: 13, effect: 'potion',   retained: true,  scroll: [1, 19, 25] },
-  { symbols: s('Ya'),          name: 'Stamina Potion',     potion: 'Ma Potion',   type: 11, school: PRIEST, kind: 'potion',     difficulty: 2, fatigue: 15, skill: 13, effect: 'potion',   retained: true,  scroll: [2, 21, 23] },
-  { symbols: s('Zo Bro Ra'),   name: 'Mana Potion',        potion: 'Ee Potion',   type: 13, school: PRIEST, kind: 'potion',     difficulty: 3, fatigue: 63, skill: 2,  effect: 'potion',   retained: true,  scroll: [9, 33, 16] },
-  { symbols: s('Ful Bro Ku'),  name: 'Strength Potion',    potion: 'Ku Potion',   type:  7, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true,  scroll: [7, 35, 39] },
-  { symbols: s('Oh Bro Ros'),  name: 'Dexterity Potion',   potion: 'Ros Potion',  type:  6, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true,  scroll: [7, 35, 39] },
-  { symbols: s('Ya Bro Dain'), name: 'Wisdom Potion',      potion: 'Dane Potion', type:  8, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true,  scroll: [7, 35, 39] },
-  { symbols: s('Ya Bro Neta'), name: 'Vitality Potion',    potion: 'Neta Potion', type:  9, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true,  scroll: [7, 35, 39] },
-  { symbols: s('Vi Bro'),      name: 'Cure Poison Potion', potion: 'Bro Potion',  type: 10, school: PRIEST, kind: 'potion',     difficulty: 1, fatigue: 26, skill: 13, effect: 'potion',   retained: true,  scroll: [1, 19, 25] },
-  { symbols: s('Ya Bro'),      name: 'Shield Potion',      potion: 'Ya Potion',   type: 12, school: PRIEST, kind: 'potion',     difficulty: 2, fatigue: 25, skill: 15, effect: 'potion',   retained: true,  scroll: [3, 26, 20] },
-  { symbols: s('Ful Bro Neta'),name: 'Fire Shield',                                         school: PRIEST, kind: 'other',      difficulty: 4, fatigue: 28, skill: 15, effect: 'fireShield',               scroll: [6, 33, 28] },
-  { symbols: s('Ya Ir'),       name: 'Party Shield',                                        school: PRIEST, kind: 'other',      difficulty: 2, fatigue: 30, skill: 15, effect: 'partyShield',              scroll: [9, 32, 40] },
-  { symbols: s('Des Ir Sar'),  name: 'Darkness',                                            school: PRIEST, kind: 'other',      difficulty: 1, fatigue: 12, skill: 15, effect: 'darkness',                 scroll: [6, 33, 29] },
-  { symbols: s('Ful'),         name: 'Torch',                                               school: WIZARD, kind: 'other',      difficulty: 1, fatigue: 15, skill: 16, effect: 'torch',    retained: true,  scroll: [0, 4, 15] },
-  { symbols: s('Oh Ir Ra'),    name: 'Light',                                               school: WIZARD, kind: 'other',      difficulty: 4, fatigue: 22, skill: 17, effect: 'light',                    scroll: [6, 33, 29] },
-  { symbols: s('Zo'),          name: 'Open Door',                                           school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 15, skill: 17, effect: 'openDoor', retained: true,  scroll: [2, 21, 23] },
-  { symbols: s('Ya Bro Ros'),  name: 'Magic Footprints',                                    school: WIZARD, kind: 'other',      difficulty: 1, fatigue: 18, skill: 18, effect: 'footprints',               scroll: [7, 25, 32] },
-  { symbols: s('Oh Ew Ra'),    name: 'See Through Walls',                                   school: WIZARD, kind: 'other',      difficulty: 3, fatigue: 33, skill: 15, effect: 'thievesEye',               scroll: [8, 30, 19] },
-  { symbols: s('Oh Ew Sar'),   name: 'Invisibility',                                        school: WIZARD, kind: 'other',      difficulty: 3, fatigue: 45, skill: 17, effect: 'invisibility',             scroll: [11, 48, 27] },
-  { symbols: s('Zo Ven'),      name: 'Poison Potion',      potion: 'Ven Potion',  type:  3, school: WIZARD, kind: 'potion',     difficulty: 2, fatigue: 30, skill: 19, effect: 'potion',   retained: true,  scroll: null },
-  { symbols: s('Des Ven'),     name: 'Poison Bolt',                                         school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 16, skill: 19, effect: 'poisonBolt',               scroll: [1, 2, 45] },
-  { symbols: s('Oh Ven'),      name: 'Poison Cloud',                                        school: WIZARD, kind: 'projectile', difficulty: 3, fatigue: 27, skill: 19, effect: 'poisonCloud',              scroll: [3, 26, 20] },
-  { symbols: s('Des Ew'),      name: 'Weaken Nonmaterial Beings',                           school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 20, skill: 18, effect: 'harmNonMaterial',          scroll: [2, 32, 38] },
-  { symbols: s('Ful Ir'),      name: 'Fireball',                                            school: WIZARD, kind: 'projectile', difficulty: 3, fatigue: 42, skill: 16, effect: 'fireball', retained: true,  scroll: [6, 33, 28] },
-  { symbols: s('Oh Kath Ra'),  name: 'Lightning Bolt',                                      school: WIZARD, kind: 'projectile', difficulty: 4, fatigue: 30, skill: 17, effect: 'lightningBolt',            scroll: [8, 22, 28] },
-  { symbols: s('Zo Kath Ra'),  name: 'Zokathra',                                            school: WIZARD, kind: 'other',      difficulty: 0, fatigue: 15, skill: 3,  effect: 'zokathra',                 scroll: [6, 33, 12] },
+  { symbols: s('Vi'),          name: 'Health Potion',      potion: 'Vi Potion',   type: 14, school: PRIEST, kind: 'potion',     difficulty: 1, fatigue: 32, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Ya'),          name: 'Stamina Potion',     potion: 'Ma Potion',   type: 11, school: PRIEST, kind: 'potion',     difficulty: 2, fatigue: 15, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Zo Bro Ra'),   name: 'Mana Potion',        potion: 'Ee Potion',   type: 13, school: PRIEST, kind: 'potion',     difficulty: 3, fatigue: 63, skill: 2,  effect: 'potion',   retained: true },
+  { symbols: s('Ful Bro Ku'),  name: 'Strength Potion',    potion: 'Ku Potion',   type:  7, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Oh Bro Ros'),  name: 'Dexterity Potion',   potion: 'Ros Potion',  type:  6, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Ya Bro Dain'), name: 'Wisdom Potion',      potion: 'Dane Potion', type:  8, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Ya Bro Neta'), name: 'Vitality Potion',    potion: 'Neta Potion', type:  9, school: PRIEST, kind: 'potion',     difficulty: 4, fatigue: 15, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Vi Bro'),      name: 'Cure Poison Potion', potion: 'Bro Potion',  type: 10, school: PRIEST, kind: 'potion',     difficulty: 1, fatigue: 26, skill: 13, effect: 'potion',   retained: true },
+  { symbols: s('Ya Bro'),      name: 'Shield Potion',      potion: 'Ya Potion',   type: 12, school: PRIEST, kind: 'potion',     difficulty: 2, fatigue: 25, skill: 15, effect: 'potion',   retained: true },
+  { symbols: s('Ful Bro Neta'),name: 'Fire Shield',                                         school: PRIEST, kind: 'other',      difficulty: 4, fatigue: 28, skill: 15, effect: 'fireShield' },
+  { symbols: s('Ya Ir'),       name: 'Party Shield',                                        school: PRIEST, kind: 'other',      difficulty: 2, fatigue: 30, skill: 15, effect: 'partyShield' },
+  { symbols: s('Des Ir Sar'),  name: 'Darkness',                                            school: PRIEST, kind: 'other',      difficulty: 1, fatigue: 12, skill: 15, effect: 'darkness' },
+  { symbols: s('Ful'),         name: 'Torch',                                               school: WIZARD, kind: 'other',      difficulty: 1, fatigue: 15, skill: 16, effect: 'torch',    retained: true },
+  { symbols: s('Oh Ir Ra'),    name: 'Light',                                               school: WIZARD, kind: 'other',      difficulty: 4, fatigue: 22, skill: 17, effect: 'light' },
+  { symbols: s('Zo'),          name: 'Open Door',                                           school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 15, skill: 17, effect: 'openDoor', retained: true },
+  { symbols: s('Ya Bro Ros'),  name: 'Magic Footprints',                                    school: WIZARD, kind: 'other',      difficulty: 1, fatigue: 18, skill: 18, effect: 'footprints' },
+  { symbols: s('Oh Ew Ra'),    name: 'See Through Walls',                                   school: WIZARD, kind: 'other',      difficulty: 3, fatigue: 33, skill: 15, effect: 'thievesEye' },
+  { symbols: s('Oh Ew Sar'),   name: 'Invisibility',                                        school: WIZARD, kind: 'other',      difficulty: 3, fatigue: 45, skill: 17, effect: 'invisibility' },
+  { symbols: s('Zo Ven'),      name: 'Poison Potion',      potion: 'Ven Potion',  type:  3, school: WIZARD, kind: 'potion',     difficulty: 2, fatigue: 30, skill: 19, effect: 'potion',   retained: true },
+  { symbols: s('Des Ven'),     name: 'Poison Bolt',                                         school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 16, skill: 19, effect: 'poisonBolt' },
+  { symbols: s('Oh Ven'),      name: 'Poison Cloud',                                        school: WIZARD, kind: 'projectile', difficulty: 3, fatigue: 27, skill: 19, effect: 'poisonCloud' },
+  { symbols: s('Des Ew'),      name: 'Weaken Nonmaterial Beings',                           school: WIZARD, kind: 'projectile', difficulty: 1, fatigue: 20, skill: 18, effect: 'harmNonMaterial' },
+  { symbols: s('Ful Ir'),      name: 'Fireball',                                            school: WIZARD, kind: 'projectile', difficulty: 3, fatigue: 42, skill: 16, effect: 'fireball', retained: true },
+  { symbols: s('Oh Kath Ra'),  name: 'Lightning Bolt',                                      school: WIZARD, kind: 'projectile', difficulty: 4, fatigue: 30, skill: 17, effect: 'lightningBolt' },
+  { symbols: s('Zo Kath Ra'),  name: 'Zokathra',                                            school: WIZARD, kind: 'other',      difficulty: 0, fatigue: 15, skill: 3,  effect: 'zokathra' },
 ];
 
 /** Name of the symbol `index` (0..5) of the step `step` (0..3). */
@@ -96,4 +95,37 @@ export function findSpell(symbols) {
   if (symbols.length < 2) return null;
   const names = symbols.slice(1).map((index, i) => symbolName(i + 1, index));
   return SPELLS.find((spell) => spell.symbols.length === names.length && spell.symbols.every((n, i) => n === names[i])) ?? null;
+}
+
+// Symbol names of the steps after the power one, upper case, by step.
+const SPELL_WORDS = SYMBOLS.slice(1).map((row) => row.map((name) => name.toUpperCase()));
+
+/**
+ * Spells a text names (a scroll, docs/034): each run of symbol words in step order (element,
+ * form, class: "FUL IR", "YA BRO DAIN") that is a whole spell; a word of another kind or a
+ * punctuation mark ends a run. "ZOKATHRA" names the spell Zo Kath Ra in one word.
+ */
+export function spellsInText(text) {
+  const found = new Set();
+  let run = [];
+  const close = () => {
+    const spell = run.length && SPELLS.find((s) => s.symbols.length === run.length && s.symbols.every((n, i) => n.toUpperCase() === run[i]));
+    if (spell) found.add(spell);
+    run = [];
+  };
+  for (const token of text.toUpperCase().match(/[A-Z]+|[^A-Z\s]+/g) ?? []) {
+    if (token === 'ZOKATHRA') {
+      close();
+      found.add(SPELLS.find((s) => s.effect === 'zokathra'));
+      continue;
+    }
+    const step = run.length;
+    if (step < 3 && SPELL_WORDS[step].includes(token)) run.push(token);
+    else {
+      close();
+      if (SPELL_WORDS[0].includes(token)) run.push(token); // a new run starts with an element
+    }
+  }
+  close();
+  return [...found];
 }

@@ -102,15 +102,16 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
       while (messages.children.length > MESSAGE_LINES) messages.firstChild.remove();
       setTimeout(() => line.classList.add('is-old'), MESSAGE_MS);
     },
-    /** Items carried: [{ name, color }], and the item in hand ({ name, color } or null). */
+    /** Items carried: [{ name, color, details? }], and the item in hand ({ name, color, details? } or null). */
     setInventory(items, hand) {
       handSlot.textContent = hand ? `Tenu : ${hand.name}` : 'Rien de tenu';
+      handSlot.title = hand?.details ?? '';
       handSlot.classList.toggle('is-empty', !hand);
       handSlot.style.setProperty('--c', hand?.color ?? 'transparent');
       stowButton.disabled = !hand;
       chips.replaceChildren(
         ...items.map((item, i) => {
-          const chip = button(item.name, 'Prendre avec le curseur', () => onSelectItem?.(i));
+          const chip = button(item.name, `${item.details ?? item.name}\n(clic : prendre avec le curseur)`, () => onSelectItem?.(i));
           chip.className = 'game-item';
           chip.style.setProperty('--c', item.color);
           return chip;

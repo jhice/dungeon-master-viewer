@@ -188,6 +188,8 @@ Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (
 
 ### G4 — Parchemins et infobulles
 
+> **Faite :** voir [034-sorts-phase-g4.md](034-sorts-phase-g4.md).
+
 **Objectif :** les parchemins font connaître les sorts, et les objets en main se décrivent.
 
 - **Grimoire :** quand le groupe ramasse un parchemin, on garde son texte dans `state.knownScrolls`.

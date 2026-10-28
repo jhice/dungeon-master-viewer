@@ -17,6 +17,7 @@ import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
 import { createLight } from './light.js';
 import { createMagic } from './magic.js';
+import { createGrimoire } from './grimoire.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
@@ -65,6 +66,10 @@ export function createSimulation(dungeon) {
   const light = createLight(dungeon, state, clock, { emit: events.emit, party: () => party });
   events.on('inventoryChanged', light.update); // a torch put in or taken from a hand
   events.on('partyMoved', light.update); // another level
+
+  // The grimoire (docs/034): scrolls held by the party, and the spells they name.
+  const grimoire = createGrimoire(dungeon, state, events.emit);
+  events.on('inventoryChanged', grimoire.update);
 
   // Spells acting in the dungeon (docs/033): Open Door, Fireball, Torch.
   const magic = createMagic(dungeon, state, clock, {
@@ -432,6 +437,14 @@ export function createSimulation(dungeon) {
       championChanged();
       events.emit('potionDrunk', { champion, ...result });
       return result;
+    },
+    /** Scrolls read (grimoire.js): [{ index, text, spells }], in the order found. */
+    get knownScrolls() {
+      return grimoire.scrolls();
+    },
+    /** Spells known from the scrolls read, in the order of the spell table. */
+    get knownSpells() {
+      return grimoire.spells();
     },
     /** The light now (light.js): { amount, palette, permanent, torches, magical }. */
     get light() {

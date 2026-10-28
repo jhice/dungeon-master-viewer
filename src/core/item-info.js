@@ -225,3 +225,39 @@ export function itemInfo(dungeon, { kind, index }) {
   const weight = WEIGHT[kind]?.get(type) ?? 1;
   return { weight, strength: 0, kinetic: 0, actions: [], weapon: false, throwable: false, melee: false };
 }
+
+const POWER_SYMBOLS = ['Lo', 'Um', 'On', 'Ee', 'Pal', 'Mon'];
+const TORCH = 2;
+const EMPTY_FLASK = 20;
+const kg = (weight) => `${weight.toFixed(1).replace('.', ',')} kg`;
+
+/**
+ * Lines describing an item held in hand (docs/034), for its tooltip: a scroll's whole text;
+ * a potion's power (and its power symbol, as DM shows it); a torch's charges and flame; a
+ * weapon's weight, bonuses and actions; for every item, what its entry says (charges,
+ * poisoned, cursed, broken) and its weight.
+ */
+export function itemDetails(dungeon, ref) {
+  const entry = dungeon.data[ITEM_POOLS[ref.kind]][ref.index] ?? {};
+  const info = itemInfo(dungeon, ref);
+  const lines = [];
+  if (ref.kind === 'scroll') lines.push(...(dungeon.data.texts[entry.text]?.text ?? '(illisible)').split('\n'));
+  if (ref.kind === 'potion') {
+    if (entry.type === EMPTY_FLASK) lines.push('Flasque vide : un sort de potion la remplit');
+    else if (entry.power) lines.push(`Puissance ${entry.power} (${POWER_SYMBOLS[Math.min(5, Math.max(1, Math.floor(entry.power / 40)) - 1)]})`);
+  }
+  if (ref.kind === 'weapon' && entry.type === TORCH) {
+    lines.push(entry.charges ? `${entry.charges} charge${entry.charges > 1 ? 's' : ''} sur 15, ${entry.lit ? 'allumée' : 'éteinte'}` : 'Consumée');
+  } else if (entry.charges) lines.push(`${entry.charges} charge${entry.charges > 1 ? 's' : ''}`);
+  if (info.weapon) {
+    if (info.strength) lines.push(`Bonus de force : ${info.strength}`);
+    if (info.kinetic) lines.push(`Énergie cinétique (lancer) : ${info.kinetic}`);
+    const actions = info.actions.filter((a) => a.name !== 'N');
+    if (actions.length) lines.push(`Actions : ${actions.map((a) => (a.damage ? `${a.name} (${a.damage})` : a.name)).join(', ')}`);
+  }
+  const states = [entry.poisoned && 'empoisonné', entry.cursed && 'maudit', entry.broken && 'cassé'].filter(Boolean);
+  if (states.length) lines.push(states.join(', '));
+  if (ref.kind === 'container' && entry.items) lines.push(`${entry.items.length} objet${entry.items.length > 1 ? 's' : ''} dedans`);
+  lines.push(`Poids : ${kg(info.weight)}`);
+  return lines;
+}

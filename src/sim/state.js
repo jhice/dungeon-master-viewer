@@ -31,6 +31,7 @@ export function createState(dungeon) {
   let hand; // { kind, index } held in hand (mouse cursor), or null
   let hands; // the champion's hands: [left (ready), right (action)], each { kind, index } or null
   let emptiedChests; // container indexes whose contents went into the inventory
+  let knownScrolls; // scroll indexes the party has held: their texts make the grimoire (docs/034)
   let groups; // id -> { id, type, level, x, y, facing, members: [{ hp, position }], items, nextMove }
   let groupTiles; // "level:x,y" -> group
   let nextGroupId; // ids of generated groups follow those of dungeon.json
@@ -54,6 +55,7 @@ export function createState(dungeon) {
     hand = null;
     hands = [null, null];
     emptiedChests = new Set();
+    knownScrolls = new Set();
     groups = new Map();
     groupTiles = new Map();
     dungeon.data.creatures.forEach((group, id) => {
@@ -137,6 +139,10 @@ export function createState(dungeon) {
     /** The champion's hands: [left (ready), right (action)] (mutable). */
     get hands() {
       return hands;
+    },
+    /** Scroll indexes the party has held (mutable Set): the grimoire (grimoire.js). */
+    get knownScrolls() {
+      return knownScrolls;
     },
     /** Chests already stowed with their contents (Set of container indexes, mutable). */
     get emptiedChests() {

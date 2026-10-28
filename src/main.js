@@ -22,6 +22,7 @@ import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
 import { ACTIONS } from './sim/combat.js';
 import { SYMBOLS } from './core/spell-info.js';
+import { itemDetails } from './core/item-info.js';
 
 // `create` may be async: the 3D renderer is loaded on demand (Three.js comes from a CDN).
 const RENDERERS = {
@@ -541,7 +542,8 @@ async function openGame() {
       colorOf: (item) => CATEGORY_COLORS[item.kind],
       canReach: ({ level, x, y, position, item }) => sim.reachable(level, x, y, position) && Boolean(item || sim.hand),
       // Next to the pointer: the item in hand, or else the item pointed at.
-      labelOf: (t) => (sim.hand ? itemName(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
+      // The item in hand comes with its details (docs/034): a scroll's text, a potion's power…
+      labelOf: (t) => (sim.hand ? itemTooltip(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
       contentsAt,
     });
     const panel = createChampionPanel(win.viewport, {
@@ -661,13 +663,13 @@ function drink() {
 
 // The champion's box: bars, hands, actions of the action hand.
 function showChampion() {
-  const describe = (ref) => ref && { name: itemName(ref), color: CATEGORY_COLORS[ref.kind] };
+  const describe = (ref) => ref && { name: itemName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) };
   game?.panel.update(
     sim.champion,
     sim.hands.map(describe),
     sim.actions.map((id) => ({ id, name: ACTIONS[id].name })),
   );
-  game?.spells.update(sim.champion);
+  game?.spells.update(sim.champion, sim.knownSpells);
 }
 
 // Click on the floor, within reach (the 2 front sub-tiles of the party's tile and the 2 near
@@ -682,6 +684,8 @@ function clickFloor({ level, x, y, position, item }, side) {
 
 // Contents of a tile for the views: items lying there now and creature group standing there (simulation).
 const itemName = (ref) => describeItem(dungeon, ref).name;
+// Name and details of an item, one per line (docs/034).
+const itemTooltip = (ref) => [itemName(ref), ...itemDetails(dungeon, ref)].join('\n');
 // A chest stowed once has given its contents to the inventory: it is shown empty
 // (dungeon.json keeps its list of contents).
 function contentsAt(level, x, y) {
@@ -693,9 +697,9 @@ function contentsAt(level, x, y) {
 }
 
 function showInventory() {
-  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind] };
+  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind], details: itemTooltip(sim.hand) };
   game?.window.setInventory(
-    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind] })),
+    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) })),
     hand,
   );
   game?.view.setHandCursor(hand?.color ?? null);
@@ -764,7 +768,12 @@ sim.on('torchesWorn', ({ torches }) => {
 });
 sim.on('championChanged', showChampion);
 // Spell area (docs/030): the line of symbols changed; a spell was cast (G1: recognised, no effect yet).
-sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion));
+sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion, sim.knownSpells));
+// A scroll held for the first time: its spells go into the grimoire (docs/034).
+sim.on('grimoireChanged', ({ learned }) => {
+  if (learned.length) showInfo(`Grimoire : ${learned.map((s) => `${s.name} (${s.symbols.join(' ')})`).join(', ')}`);
+  game?.spells.update(sim.champion, sim.knownSpells);
+});
 sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   game?.panel.setReady(sim.fatigue === 0);
   const who = championName(champion);

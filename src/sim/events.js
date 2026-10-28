@@ -24,6 +24,7 @@
 //   'explosion'  { level, x, y, spell: 'fireball' } a fireball exploded on a tile (magic.js)
 //   'doorBroken' { level, x, y, by: 'fireball' } a fireball broke a door (magic.js)
 //                (creatureHit and championHit carry `spell: 'fireball'` when a fireball wounds)
+//   'grimoireChanged' { scrolls: [index], learned: [spell] } the party held new scrolls (grimoire.js)
 //   'reset'      { party }
 
 export function createEmitter() {

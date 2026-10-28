@@ -1,13 +1,14 @@
 // Checks of phases G1 and G2 (docs/030, 031): composing a line of spell symbols, deleting,
 // recognising the 25 spells of DM whatever the power, meaningless spells, the line emptied
 // after a cast, the fatigue of a spell, the mana costs of the Encyclopaedia, the 24 glyphs;
-// potion spells and empty flasks, drinking potions.
+// potion spells and empty flasks, drinking potions; G4 (docs/034): the grimoire, item details.
 // Run: node tools/test-spells.mjs
 
 import { readFileSync } from 'node:fs';
 import { Dungeon } from '../src/core/dungeon.js';
 import { createSimulation } from '../src/sim/simulation.js';
-import { SYMBOLS, SPELLS, findSpell, spellManaCost } from '../src/core/spell-info.js';
+import { SYMBOLS, SPELLS, findSpell, spellManaCost, spellsInText } from '../src/core/spell-info.js';
+import { itemDetails } from '../src/core/item-info.js';
 import { GLYPHS } from '../src/core/spell-glyphs.js';
 
 const dungeon = new Dungeon(JSON.parse(readFileSync(new URL('../data/dungeon.json', import.meta.url))));
@@ -181,6 +182,33 @@ sim.on('spellCast', (e) => events.push(e));
   const ku = sim.drink();
   check(ku.effect === null && ku.name === 'Ku Potion' && potions[flasks[0].index].type === 20, 'Ku Potion : bue sans effet (pas encore implémentée)');
   sim.reset();
+}
+
+// 9. G4: the scrolls name 24 spells (all but Poison Potion); picking up the scroll of (4, 15)
+// on level 0 teaches Torch; its details are its text.
+{
+  const named = new Set(dungeon.data.scrolls.flatMap((s) => spellsInText(dungeon.data.texts[s.text]?.text ?? '')));
+  const missing = SPELLS.filter((s) => !named.has(s)).map((s) => s.name);
+  check(named.size === 24 && missing.join() === 'Poison Potion', `les parchemins nomment ${named.size} sorts, il manque : ${missing.join(', ')}`);
+  check(spellsInText('FIREBALL\n\nFUL IR.\n\nFIRE SHIELD\n\nFUL BRO NETA.').map((s) => s.name).join() === 'Fireball,Fire Shield', 'deux sorts dans un parchemin, séparés par la ponctuation');
+  sim.reset();
+  const learnt = [];
+  sim.on('grimoireChanged', (e) => learnt.push(...e.learned));
+  check(sim.knownSpells.length === 0, 'grimoire vide au départ');
+  sim.teleport(0, 4, 15);
+  const scroll = sim.state.itemsAt(0, 4, 15).find((i) => i.kind === 'scroll');
+  for (let turn = 0; turn < 4 && !sim.hand; turn++) {
+    sim.pickUp(0, 4, 15, scroll);
+    if (!sim.hand) sim.command('turnRight');
+  }
+  check(sim.hand?.kind === 'scroll' && sim.hand.index === scroll.index, 'parchemin de (4, 15) ramassé au curseur');
+  check(sim.knownSpells.map((s) => s.name).join() === 'Torch' && learnt.map((s) => s.name).join() === 'Torch', 'Torch entre dans le grimoire');
+  check(sim.knownScrolls.length === 1 && sim.knownScrolls[0].text.startsWith('INVOKE FUL'), 'le texte du parchemin est gardé');
+  check(itemDetails(dungeon, sim.hand).slice(0, 3).join(' / ') === 'INVOKE FUL / FOR A MAGIC / TORCH', `infobulle : ${itemDetails(dungeon, sim.hand).join(' / ')}`);
+  sim.stow();
+  check(sim.knownSpells.length === 1 && learnt.length === 1, 'ranger le parchemin ne le relit pas');
+  sim.reset();
+  check(sim.knownSpells.length === 0, 'reset : grimoire vide');
 }
 
 console.log(failures ? `\n${failures} échec(s)` : '\nTout est bon');

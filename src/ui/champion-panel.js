@@ -88,7 +88,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart, on
   return {
     /**
      * Shows the champion ({ name, health, stamina (×10), mana… }), his hands
-     * ([{ name, color } or null, …]) and the actions of the action hand ([{ id, name }]).
+     * ([{ name, color, details? } or null, …]) and the actions of the action hand ([{ id, name }]).
      */
     update(champion, handItems, actionList) {
       name.textContent = champion.name;
@@ -100,7 +100,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart, on
         const item = handItems[i];
         slot.style.setProperty('--c', item?.color ?? 'transparent');
         slot.classList.toggle('is-empty', !item);
-        slot.title = `${HAND_LABELS[i]} : ${item ? item.name : 'vide'} (clic : échanger avec l’objet tenu)`;
+        slot.title = `${HAND_LABELS[i]} : ${item ? item.details ?? item.name : 'vide'}\n(clic : échanger avec l’objet tenu)`;
       });
       const key = actionList.map((a) => a.id).join();
       if (key !== shownActions) {

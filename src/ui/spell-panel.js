@@ -2,8 +2,9 @@
 // name, the row of the 6 symbols of the current step (power, element, form, class), and the
 // line of the symbols chosen, which casts the spell when clicked; the arrow deletes the last
 // symbol. Symbols are drawn from the Atari ST glyphs (7 × 7 pixels, spell-glyphs.js).
+// The book button opens the grimoire: the spells known from the scrolls read (docs/034).
 
-import { SYMBOLS, spellManaCost } from '../core/spell-info.js';
+import { SYMBOLS, spellManaCost, findSpell } from '../core/spell-info.js';
 import { GLYPHS } from '../core/spell-glyphs.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -17,7 +18,18 @@ const SVG = 'http://www.w3.org/2000/svg';
  */
 export function createSpellPanel(container, { onSymbol, onDelete, onCast }) {
   const panel = element('div', 'spell-panel');
+  const header = element('div', 'spell-header');
   const tab = element('div', 'spell-tab');
+  const book = element('button', 'spell-book');
+  book.type = 'button';
+  const grimoire = element('div', 'spell-grimoire');
+  grimoire.hidden = true;
+  book.addEventListener('click', () => {
+    grimoire.hidden = !grimoire.hidden;
+    book.classList.toggle('is-open', !grimoire.hidden);
+    book.blur();
+  });
+  header.append(tab, book);
   const row = element('div', 'spell-row');
   const choices = Array.from({ length: 6 }, (_, i) => {
     const button = element('button', 'spell-symbol');
@@ -46,12 +58,38 @@ export function createSpellPanel(container, { onSymbol, onDelete, onCast }) {
     del.blur();
   });
   line.append(cast, del);
-  panel.append(tab, row, line);
+  panel.append(header, row, line, grimoire);
   container.append(panel);
 
+  let shownKnown = null; // names of the spells listed, to rebuild the list only when they change
+  // The grimoire: one line per spell known, its symbols (without the power) and its name.
+  function showGrimoire(known) {
+    book.textContent = `Grimoire (${known.length})`;
+    book.title = known.length ? 'Sorts appris dans les parchemins' : 'Aucun sort connu : ramassez des parchemins';
+    const key = known.map((s) => s.name).join();
+    if (key === shownKnown) return;
+    shownKnown = key;
+    grimoire.replaceChildren(
+      ...known.map((spell) => {
+        const entry = element('div', 'spell-known');
+        const symbols = element('span', 'spell-known-symbols');
+        symbols.append(...spell.symbols.map(glyph));
+        symbols.title = spell.symbols.join(' ');
+        const label = element('span');
+        label.textContent = spell.name;
+        entry.append(symbols, label);
+        return entry;
+      }),
+    );
+    if (!known.length) grimoire.textContent = 'Aucun sort connu';
+  }
+
   return {
-    /** Shows the caster ({ name, symbols: indices per step, dead }). */
-    update(champion) {
+    /**
+     * Shows the caster ({ name, symbols: indices per step, dead }) and the grimoire: the spells
+     * known ([spell of spell-info.js]); the line names its spell when it is a known one.
+     */
+    update(champion, known = []) {
       const step = champion.symbols.length;
       tab.textContent = champion.name;
       choices.forEach((button, i) => {
@@ -64,8 +102,11 @@ export function createSpellPanel(container, { onSymbol, onDelete, onCast }) {
       cast.replaceChildren(...names.map(glyph));
       cast.disabled = !names.length || champion.dead;
       // The mana cost is shown, not spent yet (docs/029 Q2).
-      cast.title = names.length ? `Lancer le sort : ${names.join(' ')} (${spellManaCost(champion.symbols)} mana, non décompté)` : 'Choisissez des symboles';
+      const spell = findSpell(champion.symbols);
+      const name = spell && known.includes(spell) ? ` : ${spell.name}` : '';
+      cast.title = names.length ? `Lancer le sort ${names.join(' ')}${name} (${spellManaCost(champion.symbols)} mana, non décompté)` : 'Choisissez des symboles';
       del.disabled = !names.length || champion.dead;
+      showGrimoire(known);
     },
     dispose() {
       panel.remove();

@@ -693,9 +693,15 @@ body {
   user-select: none;
 }
 
+/* Header: the caster's tab and the grimoire button. */
+.spell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+}
+
 /* The caster's tab: his name, black on cyan. */
 .spell-tab {
-  justify-self: start;
   padding: 0.5cqw 1cqw 0.3cqw;
   background: var(--spell);
   color: #000;
@@ -760,6 +766,47 @@ body {
 
 .spell-delete:disabled {
   opacity: 0.6;
+}
+
+/* Grimoire (docs/034): its button, and the list of the spells known. */
+.spell-panel .spell-book {
+  display: block;
+  padding: 0.3cqw 0.8cqw;
+  border: 0.2cqw solid var(--spell);
+  font: 600 1.8cqw/1 ui-monospace, monospace;
+}
+
+.spell-panel .spell-book.is-open {
+  background: var(--spell);
+  color: #000;
+}
+
+.spell-grimoire {
+  max-height: 30cqw;
+  overflow-y: auto;
+  padding: 0.6cqw 0.8cqw;
+  border: 0.3cqw solid var(--spell);
+  border-top: 0;
+  background: #000d;
+  color: var(--spell);
+  font-size: 1.8cqw;
+}
+
+.spell-grimoire[hidden] {
+  display: none;
+}
+
+.spell-known {
+  display: flex;
+  align-items: center;
+  gap: 1cqw;
+  padding: 0.3cqw 0;
+}
+
+.spell-known-symbols {
+  display: flex;
+  gap: 0.4cqw;
+  min-width: 9cqw;
 }
 
 /* A 7 × 7 glyph of the Atari ST, drawn in square pixels. */
@@ -907,6 +954,6 @@ body {
   background: rgb(0 0 0 / 0.75);
   color: #e8e0c8;
   font: 600 0.75rem/1.3 system-ui, sans-serif;
-  white-space: nowrap;
+  white-space: pre; /* one line per detail of the item in hand (docs/034) */
   pointer-events: none;
 }
