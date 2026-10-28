@@ -45,6 +45,53 @@ On doit pouvoir interagir à la souris dans le viewport : actuators, items, tout
 
 Ce qui est prioritaire : rendu, déplacement, activation des actuators, escaliers, téléporteurs, trappes, faux murs, lire les textes (j'en oublie peut-être)
 
+### Système de sorts (phase G)
+
+> Plan détaillé : [029-sorts-et-lumiere-plan.md](029-sorts-et-lumiere-plan.md).
+
+tu trouveras les infos de base pour le système de sort ici (ne pas tout intégrer, je t'explique ci-dessous) :
+http://dmweb.free.fr/games/dungeon-master/solutions/spells/
+
+1. types de sorts : prêtre et magicien
+
+2. pour ne pas partir trop loin, dans un premier temps, sans implémenter la résolution des sorts :
+
+- pour info, l'interface des sorts, que tu peux reproduire et mettre à droite de l'UI de Zed pour le moment : ![spells UI](./assets/spells-ui.png)
+- créer le système de création et de lecture des sorts
+  - on crée le sort en cliquant sur les symboles
+   - la ligne du haut correspond aux symboles du sort et change une fois qu'on a choisit un symbole, pour afficher la liste des symboles suivant
+   - on exécute le sort en cliquant sur le sort complet
+   - la flèche à droite permet de supprimer le dernier symbole ajouté
+  - afficher en debug le nom du sort ou "Zed a prononcé un sort incompréhensible" si sort inconnu
+
+3. dans un second ensuite les conditions :
+
+  - une potion nécessite une flasque vide dans la main d'action
+  - on oublie le cout en mana pour le moment
+
+4. on va limiter l'implémentation de la résolution des sorts à :
+
+- prêtre : les potions uniquement
+- magicien : torch, open door, fireball
+
+5. annexe : les scrolls ramassés permettent aux joueurs de connaitre les sorts. aussi, on pourrait afficher dans le tooltip d'un obet tenu en main, les infos de cet objet : pour un scroll, sont texte complet, pour un autre objet, toute infos utile accessible depuis ses données directes.
+
+### Gestion de la lumière (phase H)
+
+> Plan détaillé : [029-sorts-et-lumiere-plan.md](029-sorts-et-lumiere-plan.md).
+
+- lumière dans la simulation : n'est plus permanente, sauf niveau 0
+  - la lumière globale viendra des sorts de lumière (plus tard)
+  - les torches en main (gauche ou droite) et murales deviennent des sources de lumière three.js
+    - les murs projettent des ombres, les objets aussi
+    - si le groupe tient une torche (dans une main ou tenu à la souris), la lumière se déplace avec le groupe
+    - la portée d'une torche doit correspondre au fogFar de fp-renderer.js
+    - les torches scintillent légèrement
+    - les torches ont une durée de vie (charges, qui jouent sur sa puissance)
+  - tester avec une lumière globale éteinte
+  - panneau de configuration : ajouter 1 slider pour la lumière globale (0 - 100%) et 1 slider pour la portée des torches (jouer autour de l'équivalent actuel de fogFar) - le fog devient une option - le scintillement des torches aussi
+- léger bump sur les textures avec une normal map calculée depuis les textures ?
+
 ## Brouillon
 
 > Rédigé par Claude Code à partir des sections ci-dessus et des docs 001 à 011. Point de départ pour la session
@@ -173,6 +220,8 @@ Conséquences pour les raccourcis existants :
 | D | Textes : inscription affichée face à sa face de mur, messages déclenchés | « WELCOME BACK » apparaît au bon moment |
 | E | Objets : ramasser, poser, main active → serrures à clé, alcôves, détecteurs | La serrure Gold Key (5, 4) du niveau 1 s'ouvre avec la Gold Key |
 | F | Transitions animées et option instantané / transition, 16/9, sauvegarde de partie | — |
+| G | Système de sorts : panneau de symboles, reconnaissance, potions du prêtre, Torch, Open Door, Fireball, parchemins (plan : doc 029) | « Lo Zo » ouvre une porte à bouton ; « On Vi » remplit une flasque vide |
+| H | Lumière : torches en main et murales (sources Three.js, ombres, scintillement, usure), réglages lumière globale et portée (plan : doc 029) | Niveau 1 noir sans torche, éclairé autour du groupe avec une torche en main |
 
 ### 7. Questions ouvertes
 
