@@ -125,11 +125,11 @@ export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
       }
       for (const level of levels) emit('projectilesMoved', { level });
     },
-    /** Projectiles in flight on a level, with their sub-tile: [{ id, item, spell, x, y, position, direction }]. */
+    /** Projectiles in flight on a level, with their sub-tile: [{ id, item, spell, energy, x, y, position, direction }]. */
     on(level) {
       return [...flying.values()]
         .filter((p) => p.level === level)
-        .map((p) => ({ id: p.id, item: p.item, spell: p.spell, x: p.x, y: p.y, position: subTile(p.direction, p.side, p.row), direction: p.direction }));
+        .map((p) => ({ id: p.id, item: p.item, spell: p.spell, energy: p.energy, x: p.x, y: p.y, position: subTile(p.direction, p.side, p.row), direction: p.direction }));
     },
     reset,
   };

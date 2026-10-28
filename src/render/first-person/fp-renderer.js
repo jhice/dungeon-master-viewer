@@ -211,8 +211,11 @@ export function createFirstPersonRenderer(
   const PROJECTILE_HEIGHT = 0.32;
   const SUB_TILE = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]; // NW, NE, SE, SW
   const projectileGeometry = new THREE.BoxGeometry(0.09, 0.09, 0.09);
-  // A spell in flight (docs/033): a glowing sphere, higher than a thrown item (eye height).
-  const spellGeometry = new THREE.SphereGeometry(0.11, 16, 12);
+  // A spell in flight (docs/033): a glowing sphere, higher than a thrown item (eye height). Its size
+  // follows its energy as DM draws it (ReDMCSB DUNVIEW.C, F115): × max(96, energy + 1) / 256, so it
+  // shrinks as it flies; SPELL_RADIUS at energy 255.
+  const SPELL_RADIUS = 0.12;
+  const spellGeometry = new THREE.SphereGeometry(1, 16, 12);
   const SPELL_COLORS = { fireball: '#ff7a1a', openDoor: '#4a8cff' };
   const SPELL_HEIGHT = 0.45;
   const projectileGroup = new THREE.Group();
@@ -226,6 +229,7 @@ export function createFirstPersonRenderer(
       if (p.spell) {
         const mesh = new THREE.Mesh(spellGeometry, new THREE.MeshBasicMaterial({ color: SPELL_COLORS[p.spell] ?? '#ffffff' }));
         mesh.position.set(p.x + u, SPELL_HEIGHT, p.y + v);
+        mesh.scale.setScalar((SPELL_RADIUS * Math.max(96, p.energy + 1)) / 256);
         projectileGroup.add(mesh);
         continue;
       }

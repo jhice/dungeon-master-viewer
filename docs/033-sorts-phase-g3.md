@@ -23,7 +23,7 @@ Les trois sorts de magicien retenus agissent dans le donjon :
 | `src/sim/spells.js` | Les effets sont donnés par sort (`effects[spell.effect]`). Raison `cast` pour un sort qui agit |
 | `src/sim/simulation.js` | `createMagic()`, `woundChampion()` (portes et boule de feu), blessures des créatures par le feu |
 | `src/core/creature-info.js` | Colonne `fireResistance` (0 à 15, 15 = insensible) |
-| `src/render/first-person/fp-renderer.js` | Sphères des sorts en vol, à hauteur d'œil |
+| `src/render/first-person/fp-renderer.js` | Sphères des sorts en vol, à hauteur d'œil, de taille proportionnelle à l'énergie (§ 3) |
 | `src/main.js` | Messages : sort lancé, créature brûlée, groupe brûlé, porte en éclats (avec un flash) |
 | `tools/test-magic.mjs` | 17 vérifications |
 
@@ -58,6 +58,28 @@ Les trois sorts de magicien retenus agissent dans le donjon :
 - **Pas suivants :** si l'énergie n'est plus au-dessus de la perte, le sort **s'éteint** sans effet. Sinon, l'énergie et l'attaque baissent de la perte.
 - **Porte :** un sort **entre** dans la case d'une porte, même fermée, et rencontre la porte en la traversant.
 - **Mur, faux mur fermé, escalier :** le sort les rencontre **depuis sa propre case**.
+
+### Taille du sort en vol
+
+Dans DM, un sort en vol est dessiné à une échelle qui suit son énergie **courante** (ReDMCSB `DUNVIEW.C`, `F115`) : `× max(96, énergie + 1) / 256`.
+Il est donc :
+- plus gros quand il est puissant ;
+- de plus en plus petit à mesure qu'il avance ;
+- jamais sous 37,5 % de sa taille maximale.
+
+Ici, la sphère a un rayon de `0,12 × max(96, énergie + 1) / 256` case : 0,12 à l'énergie 255, 0,045 au minimum.
+Les sorts de Zed (énergie 48 au plus) sont donc dessinés à la taille minimale.
+
+### Fin de course : obstacle ou énergie ?
+
+Un sort s'arrête aussi quand son énergie est épuisée, sans exploser. C'est dans `F219` :
+- avant chaque pas, si l'énergie n'est pas au-dessus de la perte par pas, le projectile est supprimé (`F215`) ;
+- `F215` ne crée pas d'explosion pour un sort.
+
+Mais la perte par pas dépend du **mana maximum** du lanceur. Avec 64 de mana ou plus, elle tombe à 2 :
+une boule de feu Mon d'énergie 255 fait alors environ 127 pas, soit une soixantaine de cases.
+Pour un magicien confirmé, le sort ne s'arrête donc en pratique que sur un obstacle.
+Zed, avec 10 de mana, perd 9 par pas, d'où ses sorts très courts.
 
 ## 4. Impacts (`F217`, `F213`, `F220`)
 
@@ -131,5 +153,6 @@ Lumière magique de puissance `p + 2` pendant `2000 + ((4(p + 1) − 3) << 7)` t
   - durée et décroissance de Torch.
 - **Les 7 autres tests** passent toujours (dans `test-spells.mjs`, Torch rend maintenant la raison `cast`).
 - **Navigateur** (serveur `127.0.0.1:5500`) : « Mon Ful Ir » au départ fait partir une sphère orange dans le couloir. Aucune erreur dans la console.
+  La taille selon l'énergie n'a pas pu être vue : le vol dure environ 1 s, moins que le délai d'une capture.
 
 **Critère de fin :** au niveau 1, « Lo Zo » face à la porte (1, 0) l'ouvre. Vérifié par le test.
