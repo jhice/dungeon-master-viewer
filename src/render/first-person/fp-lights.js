@@ -2,6 +2,7 @@
 // (src/sim/light.js, docs/032):
 // - global light: a HemisphereLight, full on a level of difficulty 0 (the Hall), else the
 //   setting `globalLight` (0 = faithful to DM: no light but the torches and the spells);
+//   the glow of the teleporter fields follows it (dark level: seen in the light of a torch only);
 // - the party's torch: a PointLight carried at hand height, on the side of the hand of the
 //   strongest torch, its intensity from the light amount of the torches in hand;
 // - magical light (Torch, Light spells): a wider PointLight centred on the party, steady (doc 029, Q7);
@@ -11,17 +12,15 @@
 //   that the shadows stay valid: they are drawn again only when the view changes (fp-renderer.js).
 // Light counts and shadow casters are fixed (a pool), so that changing the light never
 // recompiles the shaders: an unused light has intensity 0 and does not update its shadow.
+// The settings (control panel, phase H3, docs/036) change at once: `configure()`.
 
 import * as THREE from 'three';
 import { torchesLightAmount } from '../../sim/light.js';
+import { DEFAULT_LIGHTING } from './lighting-settings.js';
 
-export const LIGHTING = {
-  globalLight: 0, // 0..1, added to the model (H3: slider); a permanent level is always full
-  torchRange: 3.5, // tiles (the fogFar of the view, doc 029); H3: slider
-  flicker: true,
-  shadows: true,
-  holderShadows: 2, // torch holders casting shadows, the nearest ones
-};
+const HOLDER_SHADOWS = 2; // torch holders casting shadows, the nearest ones (doc 029, Q6)
+const FOG_DEPTH = 1; // tiles from the start of the fog to its end (torchRange)
+const TELEPORTER_GLOW = 0.6; // emissive intensity of the teleporter fields in full light (level-meshes.js)
 const HOLDER_LIGHTS = 4; // at most 4 full torch holders on a level of DM (level 1)
 const HEMISPHERE = 1.6;
 const FILL = 2.2; // light carried by the party on a lit level: faces close to the eye are brighter
@@ -39,23 +38,28 @@ const FACE_OUT = [[0, -1], [1, 0], [0, 1], [-1, 0]];
  * @param {THREE.Scene} scene
  * @param {THREE.Camera} camera the party's eye (the party's lights are its children)
  * @param {number} wallHeight
- * @param {{ near: number, far: number }} fog fog of a lit level (scene.fog is set to it, or pushed away)
+ * @param {object} [settings] DEFAULT_LIGHTING (lighting-settings.js), or some of it
  */
-export function createLights(scene, camera, wallHeight, fog) {
+export function createLights(scene, camera, wallHeight, settings = {}) {
+  const lighting = { ...DEFAULT_LIGHTING, ...settings };
+  scene.fog = new THREE.Fog(0x000000);
   const hemisphere = new THREE.HemisphereLight(0xfff4e0, 0x403a30, HEMISPHERE);
   scene.add(hemisphere);
   const fill = new THREE.PointLight(0xffe2b0, FILL, 0, 1);
   camera.add(fill);
 
-  const torch = pointLight(TORCH, LIGHTING.shadows);
+  const torch = pointLight(TORCH);
   camera.add(torch);
-  const magic = pointLight(MAGIC, false);
+  const magic = pointLight(MAGIC);
   camera.add(magic);
-  const holders = Array.from({ length: HOLDER_LIGHTS }, (_, i) => {
-    const light = pointLight(HOLDER, LIGHTING.shadows && i < LIGHTING.holderShadows);
+  const holders = Array.from({ length: HOLDER_LIGHTS }, () => {
+    const light = pointLight(HOLDER);
     scene.add(light);
     return light;
   });
+  // Lights that may cast shadows (setting `shadows`): the party's torch and the nearest holders.
+  const shadowCasters = [torch, ...holders.slice(0, HOLDER_SHADOWS)];
+  let glowing = []; // materials of the teleporter fields of the level (emissive)
 
   let light = null; // last light of the simulation
   let permanent = true;
@@ -65,16 +69,12 @@ export function createLights(scene, camera, wallHeight, fog) {
   let shown = []; // spots lit now, by holder light: spot or null
   let party = null;
 
-  function pointLight({ color, decay }, shadow) {
-    const l = new THREE.PointLight(color, 0, LIGHTING.torchRange, decay);
-    l.castShadow = shadow;
-    if (shadow) {
-      l.shadow.mapSize.set(SHADOW.mapSize, SHADOW.mapSize);
-      l.shadow.bias = SHADOW.bias;
-      l.shadow.normalBias = SHADOW.normalBias;
-      l.shadow.camera.near = SHADOW.near;
-      l.shadow.camera.far = LIGHTING.torchRange;
-    }
+  function pointLight({ color, decay }) {
+    const l = new THREE.PointLight(color, 0, lighting.torchRange, decay);
+    l.shadow.mapSize.set(SHADOW.mapSize, SHADOW.mapSize);
+    l.shadow.bias = SHADOW.bias;
+    l.shadow.normalBias = SHADOW.normalBias;
+    l.shadow.camera.near = SHADOW.near;
     return l;
   }
 
@@ -83,12 +83,16 @@ export function createLights(scene, camera, wallHeight, fog) {
   const strength = (amount) => Math.sqrt(Math.max(0, amount) / 100);
 
   function apply() {
-    const global = permanent ? 1 : LIGHTING.globalLight;
+    const global = permanent ? 1 : lighting.globalLight / 100;
     hemisphere.intensity = HEMISPHERE * global;
     fill.intensity = FILL * global;
+    for (const material of glowing) material.emissiveIntensity = TELEPORTER_GLOW * global;
     // Lit level: the far view fades into the fog; dark level: the dark beyond the lights replaces it.
-    scene.fog.near = global > 0 ? fog.near : 1e6;
-    scene.fog.far = global > 0 ? fog.far : 1e6;
+    const fogged = lighting.fog && global > 0;
+    scene.fog.near = fogged ? Math.max(0.5, lighting.torchRange - FOG_DEPTH) : 1e6;
+    scene.fog.far = fogged ? lighting.torchRange : 1e6;
+    // Changing a castShadow makes Three.js recompile the materials (lights state): only on a change of setting.
+    for (const l of shadowCasters) l.castShadow = lighting.shadows;
 
     const torches = light?.torches.filter((t) => t.charges > 0) ?? [];
     const magical = light?.magical ?? 0;
@@ -102,27 +106,27 @@ export function createLights(scene, camera, wallHeight, fog) {
     torch.position.set(both ? 0 : HAND_OFFSETS[torchHand], TORCH_OFFSET.y, TORCH_OFFSET.z);
     torch.shadow.autoUpdate = torchPower > 0;
     torch.intensity = TORCH.intensity * torchPower;
-    torch.distance = LIGHTING.torchRange;
+    torch.distance = lighting.torchRange;
 
     magic.intensity = MAGIC.intensity * strength(magical);
-    magic.distance = LIGHTING.torchRange * MAGIC.rangeFactor;
+    magic.distance = lighting.torchRange * MAGIC.rangeFactor;
     placeHolders();
   }
 
   // The nearest full torch holders within reach of their light get the holder lights.
   function placeHolders() {
-    const reach = LIGHTING.torchRange + 1;
+    const reach = lighting.torchRange + 1;
     const near = party
       ? spots
           .map((spot) => ({ spot, d: Math.hypot(spot.x - (party.x + 0.5), spot.z - (party.y + 0.5)) }))
-          .filter(({ d }) => d <= reach + LIGHTING.torchRange)
+          .filter(({ d }) => d <= reach + lighting.torchRange)
           .sort((a, b) => a.d - b.d)
           .map(({ spot }) => spot)
       : [];
     shown = holders.map((l, i) => {
       const spot = near[i] ?? null;
       l.intensity = spot ? HOLDER.intensity : 0;
-      l.distance = LIGHTING.torchRange;
+      l.distance = lighting.torchRange;
       l.shadow.autoUpdate = Boolean(spot);
       if (spot) l.position.set(spot.x, spot.y, spot.z);
       return spot;
@@ -143,6 +147,16 @@ export function createLights(scene, camera, wallHeight, fog) {
       permanent = next.permanent;
       apply();
     },
+    /** Settings changed (some of DEFAULT_LIGHTING): applied at once. */
+    configure(changes) {
+      Object.assign(lighting, changes);
+      apply();
+    },
+    /** The level built: its teleporter fields' materials glow with the global light. */
+    setGlowing(materials) {
+      glowing = materials;
+      apply();
+    },
     /** Full torch holders of the level built: [{ x, y, face }] (local coordinates of the wall tile). */
     setHolders(list) {
       spots = list.map(({ x, y, face }) => {
@@ -158,7 +172,7 @@ export function createLights(scene, camera, wallHeight, fog) {
     },
     /** Does the view need a frame every frame (a flame flickers)? */
     get animated() {
-      return LIGHTING.flicker && (torchPower > 0 || shown.some(Boolean));
+      return lighting.flicker && (torchPower > 0 || shown.some(Boolean));
     },
     /** One frame of the flames, at `seconds` (intensities only: the shadows stay valid). */
     flicker,

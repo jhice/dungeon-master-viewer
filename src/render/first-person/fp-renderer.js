@@ -26,6 +26,7 @@ import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents, buildLevelCreatures } from '../three/level-contents.js';
 import { createDecor } from './fp-decor.js';
 import { createLights } from './fp-lights.js';
+import { normalMapOf } from './normal-map.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
@@ -37,9 +38,10 @@ export const VIEW = {
   fov: 62, // vertical, degrees (4/3 viewport)
   eyeHeight: 0.42,
   pullBack: 0.35, // towards the back of the tile, in tiles (0.5 = back edge)
-  fogNear: 2.5,
-  fogFar: 3.5,
 };
+// Relief of the walls, floor and ceiling (setting `relief`, docs/036): normal maps computed from
+// their textures, kept faint.
+const RELIEF = { strength: 2, normalScale: 0.7 };
 const ASPECT = 4 / 3;
 const WALL_HEIGHT = 0.7;
 const CEILING_COLOR = '#696660';
@@ -60,13 +62,14 @@ const MIRRORED_PARTS = ['wall', 'floor'];
  * @param {(side: 'left'|'right') => void} [options.onClickElsewhere] a click on nothing within reach
  * @param {() => void} [options.onContextMenu] a right click on the view
  * @param {(item: object) => string} [options.colorOf] colour of an item in flight
+ * @param {object} [options.lighting] settings of the light (DEFAULT_LIGHTING, lighting-settings.js) and `relief`
  * Every click handler also receives the side of the view clicked ('left' | 'right').
  */
 export function createFirstPersonRenderer(
   container,
   dungeon,
   state,
-  { onClickFront, onClickFloor, onClickElsewhere, onContextMenu, canReach, labelOf, contentsAt, colorOf } = {},
+  { onClickFront, onClickFloor, onClickElsewhere, onContextMenu, canReach, labelOf, contentsAt, colorOf, lighting = {} } = {},
 ) {
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -79,14 +82,27 @@ export function createFirstPersonRenderer(
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.Fog(0x000000, VIEW.fogNear, VIEW.fogFar);
 
   const camera = new THREE.PerspectiveCamera(VIEW.fov, ASPECT, 0.02, 60);
   scene.add(camera);
-  const lights = createLights(scene, camera, WALL_HEIGHT, { near: VIEW.fogNear, far: VIEW.fogFar });
+  const { relief: reliefSetting = false, ...lightSettings } = lighting;
+  const lights = createLights(scene, camera, WALL_HEIGHT, lightSettings);
+  let relief = reliefSetting;
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
   const ceilingTextures = { ceiling: ceilingTexture(false), ceilingPit: ceilingTexture(true) };
+  // Their normal maps, computed once, on first use (relief on).
+  const normalMaps = new Map(); // texture -> normal map
+  const normalMap = (texture) => {
+    if (!normalMaps.has(texture)) normalMaps.set(texture, normalMapOf(texture, RELIEF.strength));
+    return normalMaps.get(texture);
+  };
+  // Gives (or takes away) its relief to a mesh of a textured part.
+  function setRelief(mesh, texture) {
+    mesh.material.normalMap = relief ? normalMap(texture) : null;
+    mesh.material.normalScale.setScalar(RELIEF.normalScale);
+    mesh.material.needsUpdate = true;
+  }
   const decor = createDecor(dungeon, state, WALL_HEIGHT);
 
   let level = null; // level index currently built
@@ -129,7 +145,7 @@ export function createFirstPersonRenderer(
       const texture = textures[mesh.userData.part];
       if (texture) {
         mesh.material.map = texture;
-        mesh.material.needsUpdate = true;
+        setRelief(mesh, texture);
       }
       if (MIRRORED_PARTS.includes(mesh.userData.part)) mirrorOddTiles(mesh, mesh.userData.tiles);
     }
@@ -138,6 +154,7 @@ export function createFirstPersonRenderer(
     castShadows(group);
     scene.add(group);
     built = { group, meshes, ceiling, decorMeshes };
+    lights.setGlowing(meshes.filter((m) => m.userData.part === 'teleporterGame').map((m) => m.material));
   }
 
   // Ceiling: one tile-sized panel over every tile but walls, with a hole under the open
@@ -164,6 +181,7 @@ export function createFirstPersonRenderer(
       .map(([part, tiles]) => {
         const material = new THREE.MeshLambertMaterial({ color: CEILING_COLOR, map: ceilingTextures[part] });
         const mesh = new THREE.InstancedMesh(geometry.clone(), material, tiles.length);
+        setRelief(mesh, ceilingTextures[part]);
         tiles.forEach(({ x, y }, i) => mesh.setMatrixAt(i, m4.makeTranslation(x + 0.5, WALL_HEIGHT, y + 0.5)));
         mesh.computeBoundingSphere();
         mesh.userData = { part };
@@ -404,6 +422,21 @@ export function createFirstPersonRenderer(
       lights.setParty(party);
       render();
     },
+    /**
+     * Settings of the light changed (control panel, docs/036): some of DEFAULT_LIGHTING (lighting-settings.js),
+     * and `relief` (normal maps of the walls, floor and ceiling).
+     */
+    setLighting({ relief: nextRelief, ...changes }) {
+      lights.configure(changes);
+      if (nextRelief !== undefined && nextRelief !== relief) {
+        relief = nextRelief;
+        for (const mesh of [...(built?.meshes ?? []), ...(built?.ceiling ?? [])]) {
+          const texture = textures[mesh.userData.part] ?? ceilingTextures[mesh.userData.part];
+          if (texture) setRelief(mesh, texture);
+        }
+      }
+      render();
+    },
     /** The light of the simulation changed (sim.light, docs/032): torches, magical light. */
     setLight(light) {
       lights.setLight(light);
@@ -444,7 +477,7 @@ export function createFirstPersonRenderer(
       tooltip.remove();
       clear();
       decor.dispose();
-      for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures)]) texture.dispose();
+      for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures), ...normalMaps.values()]) texture.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
@@ -459,7 +492,10 @@ function mirrorOddTiles(mesh, tiles) {
   mesh.material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float mirror;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  if (mirror > 0.5) vMapUv.x = 1.0 - vMapUv.x;\n#endif');
+      .replace(
+        '#include <uv_vertex>',
+        '#include <uv_vertex>\n#ifdef USE_MAP\n  if (mirror > 0.5) vMapUv.x = 1.0 - vMapUv.x;\n#endif\n#ifdef USE_NORMALMAP\n  if (mirror > 0.5) vNormalMapUv.x = 1.0 - vNormalMapUv.x;\n#endif',
+      );
   };
   mesh.material.customProgramCacheKey = () => 'mirror-odd-tiles';
   mesh.material.needsUpdate = true;

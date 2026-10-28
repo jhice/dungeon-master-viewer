@@ -147,6 +147,16 @@ body {
   font-weight: 600;
 }
 
+.control-heading {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .control-row {
   display: grid;
   grid-template-columns: 1fr auto;

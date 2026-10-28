@@ -7,6 +7,7 @@
 //                              | { type: 'select', title?, options: [{ value, label }], value(), onChange(value) }] }
 //   { type: 'checkbox', key, label, shortcut? }
 //   { type: 'range', key, label, min, max, step, format?(v) }
+//   { type: 'heading', label } a title over the next controls
 
 /**
  * @param {HTMLElement} container
@@ -32,6 +33,13 @@ export function createControlPanel(container, schema, values, onChange, { open =
   const selects = []; // [{ element, value }] re-synchronised by refresh()
 
   for (const field of schema) {
+    if (field.type === 'heading') {
+      const heading = document.createElement('div');
+      heading.className = 'control-heading';
+      heading.textContent = field.label;
+      panel.append(heading);
+      continue;
+    }
     if (field.type === 'buttons') {
       const row = document.createElement('div');
       row.className = 'control-row control-buttons';

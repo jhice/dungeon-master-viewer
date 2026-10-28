@@ -18,6 +18,7 @@ import { createGameWindow } from './ui/game-window.js';
 import { createChampionPanel } from './ui/champion-panel.js';
 import { createSpellPanel } from './ui/spell-panel.js';
 import { createSimulation } from './sim/simulation.js';
+import { DEFAULT_LIGHTING } from './render/first-person/lighting-settings.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
 import { ACTIONS } from './sim/combat.js';
@@ -67,6 +68,7 @@ const prefs = loadPreferences({
   inventoryOpen: false,
   playing: false, // the game window is open
   gameLayout: null, // its position and width
+  lighting: {}, // light of the first-person view (docs/036), over LIGHTING_DEFAULTS
 });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
@@ -392,6 +394,24 @@ function setFrame(global) {
 }
 
 // --- Control panel -------------------------------------------------------------
+// Light of the first-person view (phase H3, docs/036): kept in the preferences, applied at once.
+const LIGHTING_DEFAULTS = { ...DEFAULT_LIGHTING, relief: false };
+const lighting = () => ({ ...LIGHTING_DEFAULTS, ...prefs.lighting });
+const LIGHTING_SCHEMA = [
+  { type: 'heading', label: 'Lumière (vue du jeu)' },
+  { type: 'range', key: 'globalLight', label: 'Lumière globale', min: 0, max: 100, step: 5, format: (v) => `${v} %` },
+  { type: 'range', key: 'torchRange', label: 'Portée des torches', min: 1.5, max: 8, step: 0.5, format: (v) => `${v.toFixed(1)} cases` },
+  { type: 'checkbox', key: 'fog', label: 'Brouillard (niveau éclairé)' },
+  { type: 'checkbox', key: 'flicker', label: 'Scintillement des flammes' },
+  { type: 'checkbox', key: 'shadows', label: 'Ombres' },
+  { type: 'checkbox', key: 'relief', label: 'Relief des textures' },
+];
+function changeLighting(changes) {
+  prefs.lighting = { ...prefs.lighting, ...changes };
+  savePreferences(prefs);
+  game?.view.setLighting(changes);
+}
+
 // Common controls first, then the renderer's own settings.
 function panelSchema() {
   const schema = [
@@ -424,7 +444,7 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
     schema.push({ type: 'checkbox', key: 'autoFit', label: 'Auto-ajustement (repère local)' });
   }
-  return [...schema, ...(renderer.settingsSchema ?? [])];
+  return [...schema, ...(renderer.settingsSchema ?? []), ...LIGHTING_SCHEMA];
 }
 
 const panelValues = () => ({
@@ -438,9 +458,13 @@ const panelValues = () => ({
   alwaysTooltip: prefs.alwaysTooltip,
   autoFit: prefs.autoFit,
   ...renderer.settings,
+  ...lighting(),
 });
 
-function onPanelChange(changes) {
+function onPanelChange(allChanges) {
+  const lightingChanges = Object.fromEntries(Object.entries(allChanges).filter(([key]) => key in LIGHTING_DEFAULTS));
+  if (Object.keys(lightingChanges).length) changeLighting(lightingChanges);
+  const changes = Object.fromEntries(Object.entries(allChanges).filter(([key]) => !(key in LIGHTING_DEFAULTS)));
   const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, ...settings } = changes;
   // Simple viewer preferences (no immediate effect beyond the next hover / level change).
   for (const [key, value] of Object.entries({ alwaysTooltip, autoFit })) {
@@ -545,6 +569,7 @@ async function openGame() {
       // The item in hand comes with its details (docs/034): a scroll's text, a potion's power…
       labelOf: (t) => (sim.hand ? itemTooltip(sim.hand) : t?.spot?.item ? itemName(t.spot.item) : null),
       contentsAt,
+      lighting: lighting(),
     });
     const panel = createChampionPanel(win.viewport, {
       onAction: doAction,

@@ -246,6 +246,8 @@ Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (
 
 ### H3 — Réglages et finitions
 
+> **Faite :** voir [036-lumiere-phase-h3.md](036-lumiere-phase-h3.md).
+
 - **Panneau de configuration** (`control-panel.js`, valeurs gardées par `preferences.js`) :
   - slider **lumière globale**, de 0 à 100 % : elle s'ajoute au modèle, 0 = fidèle à DM ;
   - slider **portée des torches**, autour de `fogFar`, par exemple de 1,5 à 8 cases ;
