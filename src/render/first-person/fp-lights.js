@@ -7,7 +7,8 @@
 // - magical light (Torch, Light spells): a wider PointLight centred on the party, steady (doc 029, Q7);
 // - torch holders: a PointLight in front of each "Full Torch Holder" of the level, the nearest
 //   ones casting shadows (budget, doc 029 Q6);
-// - flicker: a slow noise on the intensity of the flames (±10 %) and a slight move of the source.
+// - flicker: a slow noise on the intensity of the flames (±10 %). The sources do not move, so
+//   that the shadows stay valid: they are drawn again only when the view changes (fp-renderer.js).
 // Light counts and shadow casters are fixed (a pool), so that changing the light never
 // recompiles the shaders: an unused light has intensity 0 and does not update its shadow.
 
@@ -99,7 +100,7 @@ export function createLights(scene, camera, wallHeight, fog) {
     // Two torches of the same power: the light is between the hands.
     const both = torches.length > 1 && torches.every((t) => t.charges === strongest.charges);
     torch.position.set(both ? 0 : HAND_OFFSETS[torchHand], TORCH_OFFSET.y, TORCH_OFFSET.z);
-    torch.userData.home = torch.position.clone();
+    torch.shadow.autoUpdate = torchPower > 0;
     torch.intensity = TORCH.intensity * torchPower;
     torch.distance = LIGHTING.torchRange;
 
@@ -123,11 +124,7 @@ export function createLights(scene, camera, wallHeight, fog) {
       l.intensity = spot ? HOLDER.intensity : 0;
       l.distance = LIGHTING.torchRange;
       l.shadow.autoUpdate = Boolean(spot);
-      if (spot) {
-        l.position.set(spot.x, spot.y, spot.z);
-        l.userData.home = l.position.clone();
-        l.shadow.needsUpdate = true;
-      }
+      if (spot) l.position.set(spot.x, spot.y, spot.z);
       return spot;
     });
   }
@@ -136,12 +133,7 @@ export function createLights(scene, camera, wallHeight, fog) {
   const noise = (t, seed) => (Math.sin(t * 7.3 + seed) + Math.sin(t * 11.9 + seed * 2.1) * 0.6 + Math.sin(t * 3.1 + seed * 3.7) * 0.4) / 2;
   function flicker(seconds) {
     const flames = [[torch, TORCH.intensity * torchPower, 0], ...holders.map((l, i) => [l, shown[i] ? HOLDER.intensity : 0, i + 1])];
-    for (const [l, base, seed] of flames) {
-      if (!base) continue;
-      l.intensity = base * (1 + 0.1 * noise(seconds, seed * 10));
-      const home = l.userData.home;
-      l.position.set(home.x + 0.008 * noise(seconds * 1.3, seed + 5), home.y + 0.01 * noise(seconds * 1.7, seed + 9), home.z);
-    }
+    for (const [l, base, seed] of flames) if (base) l.intensity = base * (1 + 0.1 * noise(seconds, seed * 10));
   }
 
   return {
@@ -168,7 +160,7 @@ export function createLights(scene, camera, wallHeight, fog) {
     get animated() {
       return LIGHTING.flicker && (torchPower > 0 || shown.some(Boolean));
     },
-    /** One frame of the flames, at `seconds`. */
+    /** One frame of the flames, at `seconds` (intensities only: the shadows stay valid). */
     flicker,
   };
 }

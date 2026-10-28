@@ -55,11 +55,11 @@ La vue à la première personne est éclairée par la lumière de la simulation 
 ## 4. Scintillement et boucle de rendu
 
 - **Bruit lent** : une somme de trois sinus de périodes sans rapport, avec une phase par flamme.
-- **Effet** : l'intensité varie de ±10 %, et la source bouge d'environ 1 cm (0,008 case de côté, 0,01 en hauteur).
+- **Effet** : l'intensité varie de ±10 %. Les sources **ne bougent pas**, pour que les ombres restent valables (voir § 7).
 - **Rendu :**
-  - avant H2, la vue n'était redessinée que sur demande ;
-  - désormais, elle est redessinée **à chaque image tant qu'une flamme brûle** (torche du groupe ou porte-torche allumé à portée), puis la boucle s'arrête d'elle-même ;
-  - la lumière magique, qui ne scintille pas, ne la déclenche pas.
+  - **Sur demande, tout de suite :** déplacement, changement d'état, lumière, redimensionnement. Ce rendu redessine aussi les ombres (`shadowMap.autoUpdate = false`, `needsUpdate` à chaque rendu sur demande).
+  - **Scintillement :** tant qu'une flamme brûle (torche du groupe, ou porte-torche allumé à portée), une boucle change son intensité environ **30 fois par seconde** (`FLICKER_MS` = 33). Elle redessine sans recalculer les ombres, puis s'arrête d'elle-même.
+  - La lumière magique, qui ne scintille pas, ne déclenche pas la boucle.
 - **Option :** `LIGHTING.flicker`. Le panneau de configuration l'exposera en H3.
 
 ## 5. Écarts et limites
@@ -80,6 +80,27 @@ La vue à la première personne est éclairée par la lumière de la simulation 
   - niveau 1, case (17, 13), face à l'ouest : le porte-torche (15, 13) éclaire le couloir, et un objet au sol projette son ombre. Avec la torche en main en plus (3 lumières à ombre), le navigateur tient environ 240 images par seconde, la fréquence de l'écran ;
   - sort Torch simulé (`addMagicalLight(5, 200)`, quantité 40) : lumière froide autour du groupe ;
   - aucune erreur dans la console.
+
+## 7. Retour : sensation de lag
+
+**Version initiale :** le scintillement déplaçait aussi les sources, de 1 cm environ. Une source qui bouge oblige à recalculer sa carte d'ombre. Chaque image de la boucle refaisait donc les 3 cartes cubiques, soit 19 rendus de la scène, à la fréquence de l'écran. De plus, pendant le scintillement, un déplacement attendait l'image suivante pour s'afficher.
+
+**Mesures**, dans Chrome, vue de 630 × 473 et écran à 240 Hz, au niveau 1 en (17, 13), avec la torche en main et le porte-torche (3 lumières à ombre) :
+
+| | Avant la correction | Après |
+|---|---|---|
+| Coût d'une image avec ombres (rendu synchrone, `readPixels`) | 1,26 ms (1,59 ms en 1600 × 1200) | 0,94 ms, seulement quand la vue change |
+| Coût d'une image de scintillement | 1,26 ms (avec ombres) | 0,42 ms (sans ombres) |
+| Images de scintillement par seconde | ≈ 240 (fréquence de l'écran) | ≈ 30 |
+| Délai entre la commande et le rendu | ≈ 4 ms (image suivante) | rendu dans la commande, sans attendre l'image suivante |
+
+**Ce que montrent les mesures :**
+- Sur cette machine, il n'y avait ni image perdue ni tâche longue. La surcharge du GPU n'est donc **pas confirmée** ici.
+- La seule différence mesurée est le délai d'une image, environ 4 ms à 240 Hz. Il atteindrait environ 16 ms à 60 Hz.
+
+La correction réduit quand même le coût du scintillement d'un facteur 3 environ, et son nombre d'images d'un facteur 8.
+
+**À revoir** avec les déplacements fluides (phase F) : la caméra bougera à chaque image, et les ombres de la torche du groupe devront suivre.
 
 **Critère de fin (doc 029) :**
 - niveau 1 noir sans torche ;

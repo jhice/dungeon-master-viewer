@@ -5,8 +5,8 @@
 // Units as in level-meshes.js: 1 tile = 1 unit, x = east, z = south, y = up;
 // here the level is built in local coordinates (tile (x, y) spans [x, x+1]).
 //
-// Rendering is on demand (party moved, state changed, resize), and every frame while a
-// flame flickers.
+// Rendering is on demand (party moved, state changed, resize), and the shadows are drawn
+// again only then; while a flame flickers, its intensity changes about 30 times a second.
 // Mouse: a click on the wall or door just in front of the party is reported
 // (wall buttons, levers, locks, alcoves, door buttons), and so is a click on the
 // floor (a sub-tile, maybe with an item): main.js picks up or drops there if it
@@ -73,6 +73,7 @@ export function createFirstPersonRenderer(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false; // drawn again by render() only, see below
   renderer.domElement.className = 'fp-canvas';
   container.append(renderer.domElement);
 
@@ -265,20 +266,25 @@ export function createFirstPersonRenderer(
     camera.rotation.set(0, yaw, 0);
   }
 
-  // On demand, unless a flame flickers: then every frame (animate) until none does.
+  // On demand, at once, with the shadows drawn again (something changed). While a flame
+  // flickers, `animate` changes its intensity every FLICKER_MS and renders without the shadows,
+  // which a mere change of intensity leaves valid.
+  const FLICKER_MS = 33;
   let frame = 0;
-  const render = () => {
-    if (lights.animated) {
-      frame ||= requestAnimationFrame(animate);
-      return;
-    }
+  let flickered = 0; // time of the last flicker frame
+  function render() {
+    renderer.shadowMap.needsUpdate = true;
     renderer.render(scene, camera);
-  };
+    if (lights.animated) frame ||= requestAnimationFrame(animate);
+  }
   function animate(time) {
     frame = 0;
-    if (!lights.animated) return render();
-    lights.flicker(time / 1000);
-    renderer.render(scene, camera);
+    if (!lights.animated) return;
+    if (time - flickered >= FLICKER_MS) {
+      flickered = time;
+      lights.flicker(time / 1000);
+      renderer.render(scene, camera);
+    }
     frame = requestAnimationFrame(animate);
   }
 
