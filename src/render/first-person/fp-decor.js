@@ -31,7 +31,7 @@ const FLOOR_GAP = 0.003;
 const NICHE = { width: 0.5, bottom: 0.33, top: 0.75 };
 const DOOR_THICKNESS = 0.03;
 const RAISED_DOOR_VISIBLE = 0.15; // part of an open door still in the doorway, as in level-meshes.js
-const PARTED_DOOR_VISIBLE = 0.2; // part of each half of an open horizontal door still in the doorway (tiles; the button posts cover 0.1)
+const PARTED_DOOR_VISIBLE = 0.1; // part of each half of an open horizontal door still in the doorway (tiles; the button posts cover 0.1)
 // Door button: on a post at each side of the doorway (tiles from its middle, width), half-way
 // up, on the face that is on the right as seen from that side: in DM the button is on the
 // right of the door, from either side.

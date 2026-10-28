@@ -26,7 +26,7 @@ const FLOOR_THICKNESS = 0.05;
 const STEPS = 4;
 const dimensions = (wallHeight) => ({ wall: wallHeight, door: wallHeight, teleporter: wallHeight * 0.9 });
 // Part of the leaf still visible when an open door is raised into the lintel.
-const RAISED_DOOR_VISIBLE = 0.25;
+const RAISED_DOOR_VISIBLE = 0.15;
 const HIDDEN_OPACITY = 0.4; // invisible pits, imaginary walls: faded but visible
 const TELEPORTER_GAME_OPACITY = 0.3;
 
