@@ -548,6 +548,7 @@ async function openGame() {
       onAction: doAction,
       onHand: (i) => sim.swapHand(i),
       onRestart: () => sim.reset(),
+      onMouth: drink,
     });
     const spells = createSpellPanel(win.viewport, {
       onSymbol: (i) => sim.addSymbol(i),
@@ -652,6 +653,12 @@ function throwHeld(side) {
   else if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
 }
 
+// Click on the champion's box: he drinks the potion held by the cursor (docs/031).
+function drink() {
+  if (!sim.hand) return;
+  if (!sim.drink()) showInfo(`${itemName(sim.hand)} : ne se boit pas`);
+}
+
 // The champion's box: bars, hands, actions of the action hand.
 function showChampion() {
   const describe = (ref) => ref && { name: itemName(ref), color: CATEGORY_COLORS[ref.kind] };
@@ -743,13 +750,21 @@ sim.on('inventoryChanged', () => showInventory());
 sim.on('championChanged', showChampion);
 // Spell area (docs/030): the line of symbols changed; a spell was cast (G1: recognised, no effect yet).
 sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion));
-sim.on('spellCast', ({ champion, spell, power, reason }) => {
+sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   game?.panel.setReady(sim.fatigue === 0);
-  const who = champion.name[0] + champion.name.slice(1).toLowerCase();
+  const who = championName(champion);
   if (!spell) return showInfo(`${who} a prononcé un sort incompréhensible`);
+  const words = `${spell.name} (${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')})`;
+  if (reason === 'needsFlask') return showInfo(`${who} a besoin d’une flasque vide en main pour ${words}`);
+  if (reason === 'potion') return showInfo(`${who} lance ${words} : la flasque devient ${itemName(item)}`);
   const note = reason === 'unimplemented' ? 'pas encore implémenté' : 'effet à venir';
-  showInfo(`${who} lance ${spell.name} (${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')}) · ${note}`);
+  showInfo(`${who} lance ${words} · ${note}`);
 });
+const championName = (champion) => champion.name[0] + champion.name.slice(1).toLowerCase();
+const DRINK_EFFECTS = { health: 'PV', stamina: 'endurance', mana: 'mana' };
+sim.on('potionDrunk', ({ champion, name, effect, gained }) =>
+  showInfo(`${championName(champion)} boit ${name} : ${effect ? `+${gained} ${DRINK_EFFECTS[effect]}` : 'effet pas encore implémenté'}`),
+);
 // What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
 sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown }) => {
   game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');

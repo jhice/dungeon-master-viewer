@@ -1,8 +1,8 @@
 // Composing and casting spells (phase G1, docs/030): the champion's line of symbols, one per
 // step (power, element, form, class), as the spell area of DM keeps it (ReDMCSB MENUS.C).
 // The symbols are kept as indices 0..5 in their row (spell-info.js, SYMBOLS).
-// G1: a recognised spell always succeeds (no skill test, no experience, no mana, docs/029 Q2)
-// and has no effect yet; only its fatigue applies.
+// A recognised spell always succeeds (no skill test, no experience, no mana, docs/029 Q2), and
+// its fatigue applies. G2: potion spells fill an empty flask (potions.js); the others have no effect yet.
 
 import { findSpell } from '../core/spell-info.js';
 import { disableAction } from './champion.js';
@@ -22,17 +22,29 @@ export function deleteSymbol(champion) {
 }
 
 /**
- * Casts the line of symbols (F412): the spell, or null if meaningless. Either way the line
- * is emptied (G2 will keep it when a potion lacks a flask). `power` is 1..6 (Lo..Mon).
- * @returns {{ spell: object|null, power: number, reason: 'meaningless'|'noEffect'|'unimplemented' } | null}
- *   null if the line is empty; 'noEffect': retained spell whose effect comes with G2 / G3.
+ * Casts the line of symbols (F412): the spell, or null if meaningless. The line is emptied,
+ * except when a potion spell finds no empty flask: one can be taken and the spell cast again
+ * (F408). `power` is 1..6 (Lo..Mon).
+ * `effects.potion(spell, power)` fills an empty flask in hand; it returns the flask, or null if none.
+ * @returns {{ spell: object|null, power: number, item?: object,
+ *   reason: 'meaningless'|'needsFlask'|'potion'|'noEffect'|'unimplemented' } | null}
+ *   null if the line is empty; 'noEffect': retained spell whose effect comes with G3.
  */
-export function castSpell(champion, now) {
+export function castSpell(champion, now, effects) {
   if (!champion.symbols.length) return null;
   const spell = findSpell(champion.symbols);
   const power = champion.symbols[0] + 1;
+  if (!spell) {
+    champion.symbols = [];
+    return { spell: null, power, reason: 'meaningless' };
+  }
+  let result = { spell, power, reason: spell.retained ? 'noEffect' : 'unimplemented' };
+  if (spell.kind === 'potion') {
+    const item = effects.potion(spell, power);
+    if (!item) return { spell, power, reason: 'needsFlask' };
+    result = { spell, power, item, reason: 'potion' };
+  }
   champion.symbols = [];
-  if (!spell) return { spell: null, power, reason: 'meaningless' };
   disableAction(champion, now, spell.fatigue);
-  return { spell, power, reason: spell.retained ? 'noEffect' : 'unimplemented' };
+  return result;
 }

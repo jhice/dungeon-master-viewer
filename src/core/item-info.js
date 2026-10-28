@@ -124,7 +124,9 @@ const WEIGHTS = {
   [8, 0.3], // Dane Potion
   [9, 0.3], // Neta Potion
   [10, 0.3], // Bro Potion
+  [11, 0.3], // Ma Potion (made by a spell only, docs/031)
   [12, 0.3], // Ya Potion
+  [13, 0.3], // Ee Potion (made by a spell only, docs/031)
   [14, 0.3], // Vi Potion
   [15, 0.3], // Water Flask
   [19, 0.3], // Ful Bomb

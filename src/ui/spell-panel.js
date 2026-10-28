@@ -3,7 +3,7 @@
 // line of the symbols chosen, which casts the spell when clicked; the arrow deletes the last
 // symbol. Symbols are drawn from the Atari ST glyphs (7 × 7 pixels, spell-glyphs.js).
 
-import { SYMBOLS } from '../core/spell-info.js';
+import { SYMBOLS, spellManaCost } from '../core/spell-info.js';
 import { GLYPHS } from '../core/spell-glyphs.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -63,7 +63,8 @@ export function createSpellPanel(container, { onSymbol, onDelete, onCast }) {
       const names = champion.symbols.map((index, s) => SYMBOLS[s][index]);
       cast.replaceChildren(...names.map(glyph));
       cast.disabled = !names.length || champion.dead;
-      cast.title = names.length ? `Lancer le sort : ${names.join(' ')}` : 'Choisissez des symboles';
+      // The mana cost is shown, not spent yet (docs/029 Q2).
+      cast.title = names.length ? `Lancer le sort : ${names.join(' ')} (${spellManaCost(champion.symbols)} mana, non décompté)` : 'Choisissez des symboles';
       del.disabled = !names.length || champion.dead;
     },
     dispose() {

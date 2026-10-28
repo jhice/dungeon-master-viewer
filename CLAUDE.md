@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 030.
+> Mis à jour le 2026-10-28, après la doc 031.
 
 ### Données et visualiseur
 
@@ -83,6 +83,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Timeline fidèle à ReDMCSB (doc 026) :** les événements d'une même case au même tick fusionnent ; compteurs : `set` incrémente, `clear` décrémente.
 - **Portes animées (doc 028) :** crans 0 à 4, un par tick ; le groupe passe jusqu'à 1/4, une créature jusqu'à sa hauteur ; une porte qui se ferme sur quelqu'un remonte et le blesse ; bouton sur un montant fixe.
 - **Sorts, G1 (doc 030) :** panneau de sorts à droite du cadre de Zed (`src/ui/spell-panel.js`), glyphes Atari ST (`spell-glyphs.js`), 25 sorts reconnus (`spell-info.js`, `src/sim/spells.js`), sans effet sauf la fatigue.
+- **Sorts, G2 (doc 031) :** les sorts de potion remplissent une flasque vide en main (`src/sim/potions.js`) ; clic sur le cadre de Zed avec une potion au curseur : la boire (santé, endurance, mana).
 - **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`.
 
 ### En attente
@@ -97,7 +98,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2, H1, G3, G4, H2, H3.
+- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1, G3, G4, H2, H3.
 
 ## Simulation
 
@@ -107,4 +108,5 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 - résume toutes tes analyses suite à nos échanges dans un dossier `docs/` avec un préfixe 001, 002, 003.
 - lister toutes les sources (lien et description, pas d'extraits de code) que tu as utilisé
+- si l'extension Claude Chrome n'est pas connecté, j'ai en général un serveur qui tourne ici : http://127.0.0.1:5500/index.html
 - commiter après chaque étape

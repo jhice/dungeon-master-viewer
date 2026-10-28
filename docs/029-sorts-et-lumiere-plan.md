@@ -149,6 +149,8 @@ Le rendu la traduit en intensités.
 
 ### G2 — Conditions et potions
 
+> **Faite :** voir [031-sorts-phase-g2.md](031-sorts-phase-g2.md).
+
 **Objectif :** les sorts de potion remplissent une flasque, et on peut boire les potions.
 Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (Zo Ven) du magicien (Q1).
 

@@ -14,6 +14,7 @@ import { createChampion, championMirror, regenerate } from './champion.js';
 import { ACTIONS, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
 import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
+import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
@@ -127,6 +128,14 @@ export function createSimulation(dungeon) {
     const result = { ...outcome, group, killed, destroyed, thrown };
     events.emit('creatureHit', result);
     return result;
+  }
+
+  // A potion spell fills the empty flask of the action hand, or else of the ready hand (G2).
+  function fillHandFlask(spell, power) {
+    const hand = emptyFlaskHand(dungeon, state.hands);
+    if (hand < 0) return null;
+    fillFlask(dungeon.data.potions[state.hands[hand].index], spell, power, random);
+    return state.hands[hand];
   }
 
   // An action costs stamina and makes the champion tired for a while; null if he can act.
@@ -370,10 +379,28 @@ export function createSimulation(dungeon) {
     /** Casts the spell composed (G1: recognised, no effect but its fatigue); null if nothing to cast. */
     castSpell() {
       if (champion.dead) return null;
-      const result = castSpell(champion, clock.now);
+      const result = castSpell(champion, clock.now, { potion: fillHandFlask });
       if (!result) return null;
       events.emit('symbolsChanged', { champion });
+      if (result.item) events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
       events.emit('spellCast', { champion, ...result });
+      return result;
+    },
+    /**
+     * The champion drinks the potion held by the cursor (click on his box, the mouth of DM);
+     * the flask stays in hand, empty. Returns null if the cursor holds nothing drinkable.
+     * @returns {{ item, name, effect: 'health'|'stamina'|'mana'|null, gained } | null}
+     */
+    drink() {
+      const item = state.hand;
+      if (champion.dead || item?.kind !== 'potion') return null;
+      const entry = dungeon.data.potions[item.index];
+      if (!drinkable(entry)) return null;
+      const name = entry.name;
+      const result = { item, name, ...drinkPotion(champion, entry) };
+      events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
+      championChanged();
+      events.emit('potionDrunk', { champion, ...result });
       return result;
     },
     /** Advances the clock: delayed effects due by then are applied, and the creatures of the party's level act. */

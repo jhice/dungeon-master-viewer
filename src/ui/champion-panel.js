@@ -5,7 +5,8 @@
 // champion recovers from his last action (its fatigue, as in DM); after an action, the
 // damage done shows for a moment above them, as the action area of DM does. A hit taken shows
 // the damage on the box. When the champion dies, a veil covers the view with a
-// "Recommencer" button.
+// "Recommencer" button. A click on the box (out of the hands) with a potion held by the
+// cursor makes the champion drink it: the mouth of DM's inventory (docs/031).
 
 const RESULT_MS = 900;
 const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
@@ -16,8 +17,9 @@ const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
  * @param {(id: string) => void} options.onAction an action button ('hit', 'throw')
  * @param {(hand: number) => void} options.onHand a hand was clicked (0 left, 1 right)
  * @param {() => void} options.onRestart the button of the death veil
+ * @param {() => void} options.onMouth the box was clicked, out of the hands (drink the cursor's potion)
  */
-export function createChampionPanel(container, { onAction, onHand, onRestart }) {
+export function createChampionPanel(container, { onAction, onHand, onRestart, onMouth }) {
   const panel = element('div', 'champion-panel');
   const box = element('div', 'champion-box');
   const name = element('div', 'champion-name');
@@ -48,6 +50,10 @@ export function createChampionPanel(container, { onAction, onHand, onRestart }) 
   const wound = element('div', 'champion-wound');
   wound.hidden = true;
   box.append(name, body, wound);
+  box.title = 'Clic avec une potion au curseur : la boire';
+  box.addEventListener('click', (event) => {
+    if (!event.target.closest('.champion-hand')) onMouth();
+  });
 
   // Action panel: the actions of the action hand, or the result of the last one.
   const actions = element('div', 'champion-actions');
@@ -75,7 +81,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart }) 
 
   // `scale`: stored / shown (stamina is stored ×10).
   const setBar = ({ outer, fill, label }, value, max, scale = 1) => {
-    fill.style.height = `${max ? Math.round((100 * value) / max) : 0}%`;
+    fill.style.height = `${max ? Math.min(100, Math.round((100 * value) / max)) : 0}%`; // an Ee Potion can go past the maximum
     outer.title = `${label} : ${Math.floor(value / scale)} / ${Math.floor(max / scale)}`;
   };
 
