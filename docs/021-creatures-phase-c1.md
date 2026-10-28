@@ -147,7 +147,7 @@ C'est sans doute voulu : dans le jeu, elle la quitte **en mourant** (phase C4, d
 Pour vérifier la mécanique, le test ferme la trappe : la momie sort au bout de 11 ticks, et « YOU WILL REGRET THAT. » s'affiche.
 
 **Lenteur de la marche aléatoire (déjà présente avant cette phase) :** elle vient des actuators, avec **12 millions de déclenchements**
-pour 123 000 ticks, contre environ 700 ms pour les créatures. Un oscillateur s'emballe sans doute, voir doc 015. À examiner à part.
+pour 123 000 ticks, contre environ 700 ms pour les créatures. Un oscillateur s'emballe sans doute, voir doc 015. À examiner à part. **Expliqué et corrigé en 026** : la marche prend maintenant 0,6 s.
 
 **Chrome :**
 - niveau 1 : les momies et les Screamers se déplacent en 2D et en 3D ;

@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 025.
+> Mis à jour le 2026-10-28, après la doc 026.
 
 ### Données et visualiseur
 
@@ -77,7 +77,8 @@ Analyser le fichier XML en se concentrant d'abord sur
   - `creature-info.js` (espèces) ;
   - `item-info.js` (objets) ;
   - `creature-drops.js` (butin).
-- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`.
+- **Timeline fidèle à ReDMCSB (doc 026) :** les événements d'une même case au même tick fusionnent ; compteurs : `set` incrémente, `clear` décrémente.
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`.
 
 ### En attente
 
@@ -91,7 +92,6 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Lenteur de la marche aléatoire des tests**, due à un oscillateur d'actuators qui s'emballe (doc 021), à examiner.
 
 ## Simulation
 

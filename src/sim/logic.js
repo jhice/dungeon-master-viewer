@@ -99,7 +99,10 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (!a.remote) return;
     const { x, y, direction } = a.remote;
     const level = a.at.map;
-    clock.schedule(a.delay, () => applyEffect(level, x, y, FACINGS.indexOf(direction), effect, index));
+    // One event per target square and tick (per face for a wall): see clock.schedule().
+    const cell = FACINGS.indexOf(direction);
+    const key = state.tileAt(level, x, y)?.type === 'wall' ? `${level}:${x},${y}:${cell}` : `${level}:${x},${y}`;
+    clock.schedule(a.delay, () => applyEffect(level, x, y, cell, effect, index), key);
   }
 
   // Rotation: the first actuator of the face goes to the end of the list. The face
@@ -204,17 +207,17 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     fire(index, equal !== actuatorData(index).revert);
   }
 
-  // Counter: set decrements, clear increments; it fires when it reaches 0.
+  // Counter (ReDMCSB, TIMELINE.C, see docs/026): set increments (up to 511), clear and
+  // toggle decrement; it fires when it reaches 0, and stays there. A hold counter sends
+  // set while at 0 and clear otherwise, on every event.
   function counter(index, effect) {
     const runtime = state.actuator(index);
-    if (runtime.disabled) return;
-    if (effect === 'clear') {
-      runtime.data++;
-      return;
-    }
-    if (runtime.data <= 0) return;
-    runtime.data--;
-    if (runtime.data === 0) fire(index, !actuatorData(index).revert);
+    if (runtime.disabled || runtime.data <= 0) return;
+    if (effect === 'set') runtime.data = Math.min(511, runtime.data + 1);
+    else runtime.data--;
+    const a = actuatorData(index);
+    if (a.action === 'hold') fire(index, (runtime.data === 0) !== a.revert);
+    else if (runtime.data === 0) fire(index, true);
   }
 
   // --- Floor actuators: pressed or released ---------------------------------------------

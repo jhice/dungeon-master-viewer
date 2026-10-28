@@ -79,8 +79,8 @@ src/sim/
   - Dans les données, 75 envois visent une porte logique sur une autre face que la sienne, contre 36 sur la même.
   - Une fois le bit mis à jour, la porte est déclenchée si ses 4 bits sont égaux à la référence.
 - Les **compteurs** reçoivent eux aussi l'événement quelle que soit leur face :
-  - `set` décrémente, `clear` incrémente ;
-  - le compteur se déclenche en atteignant 0.
+  - ~~`set` décrémente, `clear` incrémente~~ : **corrigé en 026** d'après ReDMCSB. `set` incrémente, `clear` et `toggle` décrémentent ;
+  - le compteur se déclenche en atteignant 0, puis ne bouge plus.
 - Les **textes** de la face visée apparaissent ou disparaissent : ce sont les messages, affichés en phase D.
 
 ### Rotations et leviers
