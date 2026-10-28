@@ -39,12 +39,13 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 026.
+> Mis à jour le 2026-10-28, après la doc 027.
 
 ### Données et visualiseur
 
 - **Données :** le modèle `data/dungeon.json` est généré par `npm run build:data` (format : doc 002).
 - **Renderers :** leur contrat est dans `src/render/renderer.js`. Il y en a trois : ASCII (outil en ligne de commande), 2D (DOM/CSS), 3D (Three.js).
+  - La 2D affiche les coordonnées locales, et globales en repère global, sur les bords (doc 027).
 - **Logique du donjon :** le graphe des actuators, `buildLogic()` dans `src/core/logic.js`, est décrit dans la doc 009.
 - **Docs :** toutes les docs sont dans `docs/`. À lire en priorité : 009 (logique) et 002 (format JSON) ; les sources sont dans 000.
 
@@ -57,6 +58,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   - objets.
 - **Vue à la première personne :** `src/render/first-person/`, avec les décors dessinés dans `ornament-art.js` (doc 018).
   - Les téléporteurs y sont des cubes translucides, visibles de l'intérieur (doc 024).
+  - Murs pleins autour de la carte, textures inversées une case sur deux, trous au plafond sous les trappes du dessus (doc 027).
 - **Main, inventaire, coffres, portes cassables (doc 019).** Le curseur (`state.hand`) tient un objet ; clic droit dans la vue : le ranger.
 - **Créatures (plan : doc 020) :**
   - C1, déplacement, plaques, générateurs (doc 021) ;

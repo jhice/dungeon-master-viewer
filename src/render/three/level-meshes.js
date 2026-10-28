@@ -13,7 +13,8 @@
 // `game: true` builds what the party sees instead (first-person view): only
 // the with-states look, and hidden things stay hidden (closed or imaginary
 // fake walls look like walls, invisible pits and teleporters are not drawn; a visible
-// teleporter fills its whole tile, wall high, translucent).
+// teleporter fills its whole tile, wall high, translucent). Outside the map is solid
+// rock, as in DM: a ring of walls surrounds the level (info `outside: true`).
 
 import * as THREE from 'three';
 import { tileState } from '../../core/tile-states.js';
@@ -134,6 +135,16 @@ export function buildLevelMeshes(dungeon, levelIndex, theme, center, { wallHeigh
       if (tile.type === 'teleporter' && !game) add('teleporter', info, [px, h.teleporter / 2, pz]);
       if (tile.type === 'teleporter' && game && tile.detail.visible && tile.detail.open) add('teleporterGame', info, [px, h.wall / 2, pz]);
       if (tile.type === 'door') addDoor(add, info, px, pz, h, game);
+    }
+  }
+
+  if (game) {
+    for (let y = -1; y <= map.height; y++) {
+      for (let x = -1; x <= map.width; x++) {
+        if (x >= 0 && y >= 0 && x < map.width && y < map.height) continue;
+        const info = { level: levelIndex, x, y, gx: x + map.offset.x, gy: y + map.offset.y, type: 'wall', outside: true };
+        add('wall', info, [info.gx + 0.5 - center.x, h.wall / 2, info.gy + 0.5 - center.z]);
+      }
     }
   }
 

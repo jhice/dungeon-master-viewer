@@ -298,8 +298,10 @@ function showInfo(text) {
 function fitCell() {
   const b = dungeon.bounds;
   const map = dungeon.level(renderer?.currentLevel ?? prefs.level);
-  const cols = prefs.frame === 'global' ? b.maxX - b.minX : map.width;
-  const rows = prefs.frame === 'global' ? b.maxY - b.minY : map.height;
+  // The 2D view adds rulers (one or two tracks, about a tile each) on the left and top.
+  const rulers = prefs.renderer === 'dom' ? (prefs.frame === 'global' ? 2 : 1) : 0;
+  const cols = (prefs.frame === 'global' ? b.maxX - b.minX : map.width) + rulers;
+  const rows = (prefs.frame === 'global' ? b.maxY - b.minY : map.height) + rulers;
   // The right-hand panels overlay the view: keep the map beside them.
   const width = view.clientWidth - 32 - side.offsetWidth - 12;
   const size = Math.floor(Math.min(width / cols, (view.clientHeight - 32) / rows));

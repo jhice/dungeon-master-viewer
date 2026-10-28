@@ -5,6 +5,8 @@
 // change between levels; states are toggled by one class on the grid.
 // Items and creatures are small absolutely positioned markers inside the cells,
 // rebuilt for the tiles that have contents; layers are toggled by grid classes.
+// Rulers along the top and left edges give the local coordinates of the level,
+// and in the global frame the global ones too; they stay visible when scrolling.
 
 import { assertRenderer } from '../renderer.js';
 import { bindShiftWheel } from '../shift-wheel.js';
@@ -37,7 +39,18 @@ export function createDomRenderer(
   const grid = document.createElement('div');
   grid.className = 'dom-view';
   grid.classList.toggle('show-states', showStates);
-  container.append(grid);
+
+  // Frame: rulers (top, left) around the grid, sticky in the scrolling view.
+  const frameEl = document.createElement('div');
+  frameEl.className = 'dom-frame';
+  const rulerTop = document.createElement('div');
+  rulerTop.className = 'ruler ruler-top';
+  const rulerLeft = document.createElement('div');
+  rulerLeft.className = 'ruler ruler-left';
+  const corner = document.createElement('div');
+  corner.className = 'ruler-corner';
+  frameEl.append(corner, rulerTop, rulerLeft, grid);
+  container.append(frameEl);
 
   // Links overlay, in tile units (viewBox = frame size), so it scales with --cell.
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -105,9 +118,10 @@ export function createDomRenderer(
   }
 
   function ensureCells(width, height) {
-    if (cells.length === width * height && grid.style.getPropertyValue('--cols') === String(width)) return;
-    grid.style.setProperty('--cols', width);
-    grid.style.setProperty('--rows', height);
+    if (cells.length === width * height && frameEl.style.getPropertyValue('--cols') === String(width)) return;
+    // On the frame: the rulers share the grid tracks.
+    frameEl.style.setProperty('--cols', width);
+    frameEl.style.setProperty('--rows', height);
     cells = Array.from({ length: width * height }, (_, i) => {
       const cell = document.createElement('div');
       cell.dataset.i = i;
@@ -184,6 +198,35 @@ export function createDomRenderer(
     selected?.classList.add('is-selected');
   }
 
+  // One row (top) or column (left) of labels per coordinate system: global (global
+  // frame only), then local. Local labels only where the level has tiles.
+  function drawRulers() {
+    const { x0, y0, width, height, map } = area;
+    const systems = frame === 'global' ? ['global', 'local'] : ['local'];
+    frameEl.style.setProperty('--ruler-tracks', systems.length);
+    frameEl.classList.toggle('has-global', systems.length > 1);
+    const labels = (count, start, offset, size) =>
+      systems.flatMap((system, track) =>
+        Array.from({ length: count }, (_, i) => {
+          const local = start + i;
+          const label = document.createElement('span');
+          label.className = `ruler-label is-${system}`;
+          label.style.setProperty('--track', track + 1);
+          label.style.setProperty('--i', i + 1);
+          const shown = system === 'global' ? local + offset : local >= 0 && local < size ? local : null;
+          if (shown !== null) {
+            label.textContent = shown;
+            if (shown % 5 === 0) label.classList.add('is-major');
+          }
+          return label;
+        }),
+      );
+    rulerTop.replaceChildren(...labels(width, x0, map.offset.x, map.width));
+    rulerLeft.replaceChildren(...labels(height, y0, map.offset.y, map.height));
+    corner.textContent = systems.length > 1 ? 'G\nL' : '';
+    corner.title = systems.length > 1 ? 'Coordonnées globales (G), puis locales au niveau (L)' : 'Coordonnées locales au niveau';
+  }
+
   function areaOf(level) {
     const map = dungeon.level(level);
     if (frame === 'global') {
@@ -225,6 +268,7 @@ export function createDomRenderer(
       this.currentLevel = level;
       area = areaOf(level);
       ensureCells(area.width, area.height);
+      drawRulers();
       grid.dataset.level = level;
       cells.forEach((cell, i) => {
         const { x, y } = localOf(i);
@@ -272,7 +316,7 @@ export function createDomRenderer(
       grid.removeEventListener('pointerleave', onLeave);
       grid.removeEventListener('click', onClick);
       unbindShiftWheel();
-      grid.remove();
+      frameEl.remove();
     },
   });
 }

@@ -36,6 +36,96 @@
   box-shadow: 0 0 0 1px var(--frame-edge);
 }
 
+/* Rulers: coordinates along the top and left edges (global row/column first in the
+   global frame, then local). Sticky in the scrolling #view, whose padding is 1rem. */
+.dom-frame {
+  --ruler-h: max(10px, calc(var(--cell) * 0.75));
+  --ruler-w: max(15px, var(--cell));
+  --ruler-font: clamp(6px, calc(var(--cell) * 0.55), 11px);
+  display: grid;
+  grid-template-columns: calc(var(--ruler-tracks, 1) * var(--ruler-w)) max-content;
+  grid-template-rows: calc(var(--ruler-tracks, 1) * var(--ruler-h)) max-content;
+  width: max-content;
+}
+
+.ruler,
+.ruler-corner {
+  position: sticky;
+  z-index: 6;
+  background: var(--bg, #111);
+  color: var(--muted, #8a826e);
+  font: 500 var(--ruler-font) / 1 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.ruler {
+  display: grid;
+}
+
+.ruler-top {
+  top: -1rem;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  grid-template-rows: repeat(var(--ruler-tracks, 1), var(--ruler-h));
+}
+
+.ruler-left {
+  left: -1rem;
+  grid-template-rows: repeat(var(--rows), var(--cell));
+  grid-template-columns: repeat(var(--ruler-tracks, 1), var(--ruler-w));
+}
+
+.ruler-corner {
+  top: -1rem;
+  left: -1rem;
+  z-index: 7;
+  display: grid;
+  place-items: end;
+  padding: 0 2px 1px 0;
+  white-space: pre;
+  line-height: var(--ruler-h);
+  text-align: right;
+}
+
+.ruler-label {
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  white-space: nowrap;
+  /* Small tiles: only multiples of 5 keep a size (0 below 12 px per tile). */
+  font-size: clamp(0px, (var(--cell) - 11px) * 100, var(--ruler-font));
+}
+
+.ruler-top .ruler-label {
+  grid-column: var(--i);
+  grid-row: var(--track);
+}
+
+.ruler-left .ruler-label {
+  grid-row: var(--i);
+  grid-column: var(--track);
+  justify-items: end;
+  padding-right: 3px;
+}
+
+.ruler-label.is-major {
+  font-size: var(--ruler-font);
+  color: var(--fg, #d8d0b8);
+}
+
+/* Global coordinates: in the accent colour, faded. */
+.ruler-label.is-global {
+  color: color-mix(in srgb, var(--accent, #e0b050) 70%, transparent);
+}
+
+.ruler-label.is-global.is-major {
+  color: var(--accent, #e0b050);
+}
+
+/* Scrolling to the party or a highlighted tile: clear of the rulers. */
+.dom-view .tile {
+  scroll-margin: calc(var(--ruler-h) * 2 + var(--cell)) calc(var(--ruler-w) * 2 + var(--cell));
+}
+
 .tile {
   position: relative;
   background: var(--tile-outside);

@@ -12,6 +12,12 @@
 // Teleporter fields do not stop the pointer. A click elsewhere (far floor, far walls)
 // is reported too, with the side of the view (throwing, docs/024); so is a right click.
 // Items in flight (projectiles) are small cubes, set by main.js.
+//
+// Walls, floor and ceiling textures are mirrored on every other tile ((x + y) odd):
+// stepping along a straight corridor changes the picture, as in DM, which flips its
+// floor, ceiling and walls when (x + y + direction) is odd (ReDMCSB, DUNVIEW.C). The
+// ceiling shows a hole under each open pit of the level above (same global
+// coordinates, invisible or not: DM draws its "ceiling pit" graphic the same way).
 
 import * as THREE from 'three';
 import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
@@ -34,6 +40,7 @@ export const VIEW = {
 const ASPECT = 4 / 3;
 const WALL_HEIGHT = 0.7;
 const CEILING_COLOR = '#696660';
+const MIRRORED_PARTS = ['wall', 'floor'];
 
 /**
  * @param {HTMLElement} container element sized by the caller (4/3), the canvas fills it
@@ -76,6 +83,7 @@ export function createFirstPersonRenderer(
   scene.add(camera);
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
+  const ceilingTextures = { ceiling: ceilingTexture(false), ceilingPit: ceilingTexture(true) };
   const decor = createDecor(dungeon, state, WALL_HEIGHT);
 
   let level = null; // level index currently built
@@ -119,16 +127,46 @@ export function createFirstPersonRenderer(
         mesh.material.map = texture;
         mesh.material.needsUpdate = true;
       }
+      if (MIRRORED_PARTS.includes(mesh.userData.part)) mirrorOddTiles(mesh, mesh.userData.tiles);
     }
-    const ceiling = new THREE.Mesh(
-      new THREE.PlaneGeometry(map.width, map.height),
-      new THREE.MeshLambertMaterial({ color: CEILING_COLOR }),
-    );
-    ceiling.rotation.x = Math.PI / 2; // facing down
-    ceiling.position.set(map.width / 2, WALL_HEIGHT, map.height / 2);
-    group.add(ceiling);
+    const ceiling = buildCeiling(levelIndex);
+    for (const mesh of ceiling) group.add(mesh);
     scene.add(group);
     built = { group, meshes, ceiling, decorMeshes };
+  }
+
+  // Ceiling: one tile-sized panel over every tile but walls, with a hole under the open
+  // pits of the level above.
+  function buildCeiling(levelIndex) {
+    const map = dungeon.level(levelIndex);
+    const above = levelIndex > 0 ? dungeon.level(levelIndex - 1) : null;
+    const pitAbove = (x, y) => {
+      if (!above) return false;
+      const tile = state.tileAt(levelIndex - 1, x + map.offset.x - above.offset.x, y + map.offset.y - above.offset.y);
+      return tile?.type === 'pit' && tile.detail.open;
+    };
+    const lists = { ceiling: [], ceilingPit: [] };
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        if (state.tileAt(levelIndex, x, y).type === 'wall') continue;
+        lists[pitAbove(x, y) ? 'ceilingPit' : 'ceiling'].push({ x, y });
+      }
+    }
+    const geometry = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2); // facing down
+    const m4 = new THREE.Matrix4();
+    const meshes = Object.entries(lists)
+      .filter(([, tiles]) => tiles.length)
+      .map(([part, tiles]) => {
+        const material = new THREE.MeshLambertMaterial({ color: CEILING_COLOR, map: ceilingTextures[part] });
+        const mesh = new THREE.InstancedMesh(geometry.clone(), material, tiles.length);
+        tiles.forEach(({ x, y }, i) => mesh.setMatrixAt(i, m4.makeTranslation(x + 0.5, WALL_HEIGHT, y + 0.5)));
+        mesh.computeBoundingSphere();
+        mesh.userData = { part };
+        mirrorOddTiles(mesh, tiles);
+        return mesh;
+      });
+    geometry.dispose();
+    return meshes;
   }
 
   // Not seen by the party either: the "has contents" rings of chests and creatures (disposed).
@@ -159,8 +197,7 @@ export function createFirstPersonRenderer(
     if (!built) return;
     scene.remove(built.group);
     disposeLevelMeshes(built.meshes);
-    built.ceiling.geometry.dispose();
-    built.ceiling.material.dispose();
+    disposeLevelMeshes(built.ceiling);
     // Decor textures stay in the decor's cache.
     for (const mesh of built.decorMeshes) {
       mesh.geometry.dispose();
@@ -224,7 +261,7 @@ export function createFirstPersonRenderer(
     const pickable = built.meshes.filter((m) => m.isInstancedMesh && m.visible && m.userData.part !== 'teleporterGame');
     const hit = raycaster.intersectObjects(pickable, false)[0];
     const info = hit?.object.userData.tiles?.[hit.instanceId];
-    if (!info) return null;
+    if (!info || info.outside) return null;
     const [dx, dy] = SIDE_DELTAS[party.facing];
     const front = info.x === party.x + dx && info.y === party.y + dy;
     // A creature in front: the champion strikes it (main.js).
@@ -307,9 +344,12 @@ export function createFirstPersonRenderer(
     refreshPointer() {
       if (lastPointer) onMove(lastPointer);
     },
-    /** The state of a tile of the shown level changed: rebuild it (about 2 ms, see 007). */
+    /**
+     * The state of a tile of the shown level changed: rebuild it (about 2 ms, see 007).
+     * So does a change on the level above (a pit opening shows in the ceiling).
+     */
     updateTile(levelIndex) {
-      if (levelIndex !== level) return;
+      if (levelIndex !== level && levelIndex !== level - 1) return;
       build(level);
       render();
     },
@@ -331,11 +371,25 @@ export function createFirstPersonRenderer(
       tooltip.remove();
       clear();
       decor.dispose();
-      for (const texture of Object.values(textures)) texture.dispose();
+      for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures)]) texture.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
   };
+}
+
+// Mirrors the texture (u → 1 - u) of the instances whose tile has x + y odd: a
+// per-instance attribute read by the vertex shader. tiles[i] = { x, y } of instance i.
+function mirrorOddTiles(mesh, tiles) {
+  const mirror = new Float32Array(tiles.map((t) => (t && (t.x + t.y) & 1 ? 1 : 0)));
+  mesh.geometry.setAttribute('mirror', new THREE.InstancedBufferAttribute(mirror, 1));
+  mesh.material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float mirror;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  if (mirror > 0.5) vMapUv.x = 1.0 - vMapUv.x;\n#endif');
+  };
+  mesh.material.customProgramCacheKey = () => 'mirror-odd-tiles';
+  mesh.material.needsUpdate = true;
 }
 
 // --- Procedural textures (light patterns, tinted by the theme colour of each part) ---
@@ -359,7 +413,8 @@ function random(seed) {
   };
 }
 
-// Stone blocks in staggered rows, 4 rows per wall face.
+// Stone blocks in rows of uneven offsets, 4 rows per wall face. Asymmetric on
+// purpose: mirrored on every other tile, it must look different.
 function stoneTexture() {
   return canvasTexture(256, (g, size) => {
     const rand = random(7);
@@ -367,12 +422,13 @@ function stoneTexture() {
     const cols = 3;
     const rh = size / rows;
     const cw = size / cols;
+    const shifts = [0.15, 0.55, 0.3, 0.8]; // in block widths
     g.fillStyle = '#6a6660';
     g.fillRect(0, 0, size, size);
     for (let r = 0; r < rows; r++) {
-      const shift = r % 2 ? cw / 2 : 0;
+      const shift = shifts[r] * cw;
       for (let c = -1; c < cols; c++) {
-        const shade = 200 + Math.floor(rand() * 45);
+        const shade = 195 + Math.floor(rand() * 55);
         g.fillStyle = `rgb(${shade} ${shade - 4} ${shade - 12})`;
         g.fillRect(c * cw + shift + 3, r * rh + 3, cw - 6, rh - 6);
       }
@@ -381,19 +437,49 @@ function stoneTexture() {
   });
 }
 
-// Floor: four flagstones per tile.
+// Floor: four flagstones of uneven sizes per tile (asymmetric, see stoneTexture).
 function flagstoneTexture() {
   return canvasTexture(128, (g, size) => {
     const rand = random(11);
-    g.fillStyle = '#707070';
+    g.fillStyle = '#686868';
     g.fillRect(0, 0, size, size);
-    const half = size / 2;
-    for (const [x, y] of [[0, 0], [half, 0], [0, half], [half, half]]) {
-      const shade = 205 + Math.floor(rand() * 40);
+    const split = size * 0.4; // west column | east column
+    const left = size * 0.62; // row split of the west column
+    const right = size * 0.3; // and of the east one
+    const stones = [[0, 0, split, left], [0, left, split, size - left], [split, 0, size - split, right], [split, right, size - split, size - right]];
+    for (const [x, y, w, h] of stones) {
+      const shade = 195 + Math.floor(rand() * 50);
       g.fillStyle = `rgb(${shade} ${shade} ${shade})`;
-      g.fillRect(x + 2, y + 2, half - 4, half - 4);
+      g.fillRect(x + 2, y + 2, w - 4, h - 4);
     }
     speckle(g, size, rand, 500);
+  });
+}
+
+// Ceiling: large irregular slabs, darker joints; with a pit of the level above, a dark
+// square hole with a lit rim in the middle (the pit's size on the floor, 0.76 tile).
+function ceilingTexture(withPit) {
+  return canvasTexture(128, (g, size) => {
+    const rand = random(23);
+    g.fillStyle = '#5a5a5a';
+    g.fillRect(0, 0, size, size);
+    const slabs = [[0, 0, 70, 52], [70, 0, 58, 52], [0, 52, 44, 76], [44, 52, 84, 76]];
+    for (const [x, y, w, h] of slabs) {
+      const shade = 185 + Math.floor(rand() * 40);
+      g.fillStyle = `rgb(${shade} ${shade} ${shade})`;
+      g.fillRect(x + 2, y + 2, w - 4, h - 4);
+    }
+    speckle(g, size, rand, 700);
+    if (!withPit) return;
+    const hole = size * 0.76;
+    const at = (size - hole) / 2;
+    g.fillStyle = '#c8c8c8';
+    g.fillRect(at - 4, at - 4, hole + 8, hole + 8);
+    const depth = g.createRadialGradient(size / 2, size / 2, hole * 0.1, size / 2, size / 2, hole * 0.7);
+    depth.addColorStop(0, '#000');
+    depth.addColorStop(1, '#1c1a18');
+    g.fillStyle = depth;
+    g.fillRect(at, at, hole, hole);
   });
 }
 
