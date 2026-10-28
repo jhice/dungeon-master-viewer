@@ -95,7 +95,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, sous-phases G1 à G4 et H1 à H3, questions ouvertes au § 5.
+- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1, G2, H1, G3, G4, H2, H3.
 
 ## Simulation
 

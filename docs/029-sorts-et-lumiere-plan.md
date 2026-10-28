@@ -4,6 +4,7 @@
 > sections « Système de sorts (phase G) » et « Gestion de la lumière (phase H) ».
 > **Document de planification**, à lire au début de la session qui codera l'une des sous-phases.
 > Rien n'est implémenté ici. Une sous-phase par session, dans l'ordre (voir § 4).
+> Les questions du § 5 sont **tranchées** (réponses de l'utilisateur, 2026-10-28) et reportées dans les sous-phases.
 
 ## 1. Ce que dit le moteur original
 
@@ -52,7 +53,7 @@ Les symboles sont donnés **sans la puissance**.
 | Magicien | Oh Ir Ra | Light | autre (lumière) | non (phase H, plus tard) |
 | Magicien | Zo | **Open Door** | projectile | **oui** |
 | Magicien | Ful Ir | **Fireball** | projectile | **oui** |
-| Magicien | Zo Ven | Poison Potion (Ven Potion) | potion | voir Q1 |
+| Magicien | Zo Ven | Poison Potion (Ven Potion) | potion | **oui** (Q1) |
 | Magicien | Ya Bro Ros | Magic Footprints | autre | non |
 | Magicien | Oh Ew Ra | See Through Walls | autre | non |
 | Magicien | Oh Ew Sar | Invisibility | autre | non |
@@ -123,7 +124,8 @@ Le rendu la traduit en intensités.
 **Objectif :** composer un sort au clic et savoir lequel c'est. Aucun effet.
 
 - **Simulation,** nouveau `src/sim/spells.js`, sans DOM :
-  - table `SPELLS` : symboles, nom, classe, genre, compétence, difficulté, fatigue ;
+  - table `SPELLS` : symboles, nom, classe, genre, compétence, difficulté, fatigue, coût en mana.
+    Compétence, difficulté et coût en mana sont **stockés mais pas utilisés** : le sort réussit toujours, sans expérience (Q2). Ils serviront avec C3c ;
   - `champion.symbols` (0 à 4 symboles), `addSymbol(i)`, `deleteSymbol()`, `cast()` ;
   - `cast()` émet `spellCast { spell | null, reason }` et vide la ligne.
 - **Données du moteur,** nouveau `src/core/spell-info.js` : la table du § 1, avec sa source, comme `creature-info.js`.
@@ -132,23 +134,32 @@ Le rendu la traduit en intensités.
   - la rangée des 6 symboles de l'étape courante ;
   - la ligne du sort composé, cliquable pour lancer ;
   - la flèche d'effacement.
-- **Glyphes :** des SVG dessinés d'après la référence, ou extraits de la police de `graphics.dat` (voir Q4).
+- **Glyphes (Q4) :** les icônes Atari ST de l'Encyclopaedia, 7 × 7 pixels, une par symbole :
+  `http://dmweb.free.fr/files/Game,Dungeon_Master,Atari_ST,Symbol,<Nom>,Screenshot.png` (`<Nom>` = Lo, Um… ; URL vérifiée pour Lo, Mon, Ya, Zo, Ven, Gor, Ku, Sar).
+  - Les 24 PNG sont téléchargés une fois par un script (`tools/`), puis convertis en données (masque 7 × 7 par symbole, dans `src/core/spell-info.js` ou un fichier voisin).
+  - Le panneau les dessine agrandis en pixels nets (`image-rendering: pixelated`, ou SVG de carrés), dans la couleur du thème.
+  - Vérifier l'orthographe exacte de chaque nom dans l'URL (Dain ou Dane…). Ajouter l'Encyclopaedia aux sources (doc 000).
+- **Infobulle d'un symbole :** toujours son nom (« Ful »). Les sorts connus sont listés à part, dans le grimoire (G4).
 - **Retour :** le nom du sort dans la zone de messages, ou « Zed a prononcé un sort incompréhensible ».
 - **Clavier (proposition) :** aucun pour l'instant. Les touches libres sont rares (doc 012 § 5).
 - **Test Node :** `tools/test-spells.mjs`. On y vérifie la composition, l'effacement, la reconnaissance des 25 sorts, la puissance ignorée et la ligne vidée.
 - **Critère de fin :** « Lo Ful » affiche « Torch », « Lo Ya Ven » affiche le sort incompréhensible.
 
-### G2 — Conditions et potions (prêtre)
+### G2 — Conditions et potions
 
-**Objectif :** les sorts de potion remplissent une flasque.
+**Objectif :** les sorts de potion remplissent une flasque, et on peut boire les potions.
+Toutes les potions de la table du § 1 : celles du prêtre, plus Poison Potion (Zo Ven) du magicien (Q1).
 
 - **Condition :** une flasque vide en main d'action, sinon en main de réserve (ordre du moteur).
   Sinon « Zed a besoin d'une flasque vide en main », et les symboles restent.
 - **Effet :** la flasque change de type et de nom (Vi Potion…), avec la puissance `random(16) + 40 × p`. Le poids suit `item-info.js`.
-- **Fatigue :** la main d'action est bloquée pendant la durée du sort, comme pour les autres actions.
+- **Réussite :** toujours, sans test de compétence ni expérience (Q2).
+- **Fatigue :** gardée. La main d'action est bloquée pendant la durée du sort, comme pour les autres actions.
 - **Mana :** ignoré, mais on décompte déjà le coût si c'est gratuit à faire. Le panneau pourra griser les symboles trop chers plus tard.
-- **Boire une potion :** voir Q3.
-- **Test Node :** flasque en main d'action ou de réserve, pas de flasque, puissance bornée.
+- **Boire une potion (Q3) :** la potion devient une flasque vide (comme dans `F349_INVENTORY_ProcessCommand70_ClickOnMouth`, `INVNTORY.C`).
+  - Effets codés : Vi = santé, Ma (Mon) = endurance, Ee = mana, avec les formules de `F349`. Les autres potions se boivent sans effet, avec un message « pas encore implémenté ».
+  - Geste proposé : clic sur le cadre de Zed avec la potion au curseur. À confirmer en début de session si le cadre a déjà un rôle au clic.
+- **Test Node :** flasque en main d'action ou de réserve, pas de flasque, puissance bornée, Zo Ven, boire une Vi Potion.
 - **Critère de fin :** avec une flasque vide en main, « On Vi » donne une Vi Potion. Sans flasque, le message s'affiche et les symboles restent.
 
 ### G3 — Sorts de magicien : Open Door, Fireball, Torch
@@ -165,7 +176,7 @@ Le rendu la traduit en intensités.
   - une porte `fireball: true` est détruite (12 portes) ;
   - le groupe est blessé s'il est sur la case de l'explosion.
 - **Torch :** ajoute `party.magicalLight`, avec une durée et une décroissance par crans (événements de `clock.js`, § 1).
-  Sans la phase H, l'effet n'est visible que dans un indicateur de debug.
+  Le modèle de lumière existe déjà (H1 est faite avant G3) : le sort Torch y ajoute sa lumière magique. Elle ne se voit qu'avec H2.
 - **Test Node :** portée d'un projectile, porte à bouton ouverte puis refermée, porte cassable détruite, durée de la lumière magique.
 - **Critère de fin :** au niveau 1, « Lo Zo » face à la porte (1, 0) l'ouvre.
 
@@ -190,12 +201,13 @@ Le rendu la traduit en intensités.
 
 - **Nouveau `src/sim/light.js`, sans DOM :**
   - `lightAmount(state)` : 100 % au niveau 0 (difficulté 0), sinon torches en main (pondération du § 1) plus `magicalLight` ;
+  - `magicalLight` : la lumière des sorts, avec sa durée et sa décroissance par crans (`F257_TIMELINE_ProcessEvent70_Light`), prête pour le sort Torch de G3 ;
   - les tables `LightPowerToLightAmount` et `PaletteIndexToLightAmount`, à confirmer (§ 1) ;
-  - usure des torches tous les 512 ticks, en main de réserve, en main d'action **et tenues au curseur**.
-    Le curseur est un ajout : dans DM, le curseur ne compte pas. Voir Q5.
+  - usure des torches tous les 512 ticks, en main de réserve et en main d'action seulement.
+    Comme dans DM, une torche tenue au curseur n'éclaire pas et ne s'use pas (Q5). Cela remplace la demande de la doc 012.
 - **État des torches :** `lit`, `charges` sur l'objet, avec un nom ou un aspect « consumée » à 0.
 - **Événement** `lightChanged { amount, sources }` pour les vues.
-- **Test Node :** niveau 0 éclairé, une torche à 15 charges, usure après 512 ticks, deux torches pondérées, fin du sort Torch.
+- **Test Node :** niveau 0 éclairé, une torche à 15 charges, usure après 512 ticks, deux torches pondérées, torche au curseur sans effet, décroissance de la lumière magique.
 - **Critère de fin :** les tests passent. Le panneau de debug affiche la lumière courante.
 
 ### H2 — Rendu : torches, ombres, scintillement
@@ -204,14 +216,14 @@ Le rendu la traduit en intensités.
 
 - **Lumière globale :** `HemisphereLight` à `amount × réglage global`. Au niveau 0, elle reste pleine.
 - **Torche du groupe :**
-  - une `PointLight` rattachée au groupe, à hauteur de main, un peu à gauche ou à droite selon la main (au centre si tenue au curseur) ;
+  - une `PointLight` rattachée au groupe, à hauteur de main, un peu à gauche ou à droite selon la main ;
   - portée = **réglage « portée des torches »**, par défaut l'équivalent de `fogFar` (3,5 cases) ;
   - intensité selon les charges (`LightPowerToLightAmount`).
-- **Lumière magique :** une seconde lumière centrée sur le groupe, plus large, sans scintillement.
+- **Lumière magique (Q7) :** une seconde lumière **centrée sur le groupe**, plus large, sans scintillement. Elle remplace l'idée d'une lumière ambiante.
 - **Torches murales :** une `PointLight` devant chaque « Full Torch Holder » **du niveau courant**, qui disparaît quand on prend la torche.
 - **Ombres :**
   - les murs, les portes, les objets et les créatures projettent des ombres (`castShadow`, `receiveShadow`, compatibles avec les `InstancedMesh`) ;
-  - une `PointLight` avec ombre coûte **6 rendus** (carte cubique). Il faut donc un **budget** : la torche du groupe et les N porte-torches les plus proches (N = 2 au départ, réglable), les autres sans ombre ou éteintes au-delà de la portée.
+  - une `PointLight` avec ombre coûte **6 rendus** (carte cubique). Il faut donc un **budget** : la torche du groupe et les N porte-torches les plus proches (N = 2 au départ, réglable), les autres sans ombre ou éteintes au-delà de la portée (Q6).
 - **Scintillement :** un bruit lent sur l'intensité (±10 %) et un léger déplacement de la source. Option dans les réglages.
 - **Plafond et sol** : ils doivent recevoir les ombres, et le noir hors portée remplace le brouillard.
 - **Critère de fin :**
@@ -229,19 +241,15 @@ Le rendu la traduit en intensités.
 - **Relief des textures (optionnel) :** une normal map calculée depuis les textures procédurales (luminance → hauteur → Sobel). On ne la calcule qu'une fois par texture, et on la règle faible (`normalScale` ≈ 0,3). Une case à cocher pour comparer.
 - **Vues 2D et 3D :** inchangées. La lumière ne concerne que la première personne.
 
-## 4. Ordre proposé
+## 4. Ordre retenu
 
-**G1 → G2 → G3 → G4 → H1 → H2 → H3.**
+**G1 → G2 → H1 → G3 → G4 → H2 → H3.**
 
-G3 a besoin de H1 et H2 pour que le sort Torch se **voie**, mais pas pour fonctionner. Deux ordres sont possibles :
-- garder G avant H, comme demandé, avec un indicateur de debug pour Torch ;
-- ou faire **H1 juste après G2**, puis G3 : le sort Torch tombe alors directement dans le modèle de lumière.
-
-Le second évite de coder deux fois la lumière magique. C'est ma recommandation.
+H1 est faite juste après G2 : le sort Torch de G3 tombe directement dans le modèle de lumière, sans indicateur de debug à coder puis jeter.
 
 Les valeurs reprises sans vérification restent **provisoires** et sont marquées, comme dans les docs précédentes : les tables de lumière et les dégâts de la boule de feu.
 
-## 5. Questions ouvertes
+## 5. Questions (tranchées)
 
 1. **Poison Potion (Zo Ven)** est un sort de **magicien** qui crée une potion. Faut-il l'inclure aux potions de G2, ou rester à « prêtre : potions uniquement » ?
 2. **Test de compétence et expérience :** on les ignore, et le sort réussit toujours (en attendant C3c) ? Ou on applique déjà le tirage du moteur (§ 1, point 2) avec les compétences de Zed ?
@@ -252,3 +260,17 @@ Les valeurs reprises sans vérification restent **provisoires** et sont marquée
 5. **Torche tenue au curseur** : elle éclaire, comme le demande la doc 012. Dans DM, elle n'éclaire pas, et ne s'use pas non plus. Doit-elle s'user ?
 6. **Porte-torches :** combien éclairent en même temps avec des ombres ? Je propose 2 avec ombre, et tous ceux de la portée sans ombre. À ajuster selon les performances.
 7. **Lumière globale « venue des sorts de lumière, plus tard » :** la lumière magique (Torch, et plus tard Light) passe-t-elle par la lumière globale (ambiante), ou par une source centrée sur le groupe ? Je propose une source centrée sur le groupe, plus large que la torche : c'est plus lisible en 3D.
+
+### Réponses aux questions :
+
+1. on inclut la potion du magicien
+2. on ignore compétence et expérience, mais stocker leurs statistiques dans les tables de calcul. réussir toujours et garder la fatigue, OK.
+3. Ok pour boire la potion
+4. le SVG de la capture n'est pas complet, tu dois pouvoir télécharger et/ou extraire les icones de l'atari ST ici http://dmweb.free.fr/files/Game,Dungeon_Master,Atari_ST,Symbol,Lo,Screenshot.png en remplaçant le nom du symbole "Lo" ? format 7x7 pixels
+5. oublie ma suggestion pour la torche tenue en main, on garde le fonctionnement de DM
+6. je te suis pour les portes-torches
+7. OK pour une lumière globale centrée sur le groupe au lieu de ambiante
+
+pour l'ordre proposé (point 4) on peut traiter H1 juste après H2 en effet *(précisé ensuite : juste après **G2**)*
+
+annexe symbole : tooltip sur symbole = afficher le nom du symbole, à moins que le grimoire n'indique déjà les deux

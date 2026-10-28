@@ -85,6 +85,7 @@ http://dmweb.free.fr/games/dungeon-master/solutions/spells/
   - les torches en main (gauche ou droite) et murales deviennent des sources de lumière three.js
     - les murs projettent des ombres, les objets aussi
     - si le groupe tient une torche (dans une main ou tenu à la souris), la lumière se déplace avec le groupe
+      - *(doc 029, Q5 : finalement comme dans DM, une torche tenue à la souris n'éclaire pas)*
     - la portée d'une torche doit correspondre au fogFar de fp-renderer.js
     - les torches scintillent légèrement
     - les torches ont une durée de vie (charges, qui jouent sur sa puissance)
