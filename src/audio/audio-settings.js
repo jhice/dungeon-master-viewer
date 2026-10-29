@@ -4,5 +4,5 @@
 export const DEFAULT_AUDIO = {
   soundEnabled: true,
   soundVolume: 0.8, // 0..1: volume of a sound made on the party's tile
-  soundRange: 8, // 2..16 tiles (|dx| + |dy|): silent from there on; provisional, to adjust after tests
+  soundRange: 8, // 2..16 tiles (|dx| + |dy|): silent from there on; validated in play (docs/042 § 7)
 };

@@ -54,7 +54,7 @@ Test : `node tools/test-sounds.mjs` couvre :
 
 ## 4. Réglages
 
-- Défauts dans `src/audio/audio-settings.js`, tous **provisoires** :
+- Défauts dans `src/audio/audio-settings.js` (portée **validée** aux essais, § 7) :
   - `soundEnabled: true` ;
   - `soundVolume: 0.8` ;
   - `soundRange: 8` cases.
@@ -68,14 +68,20 @@ Test : `node tools/test-sounds.mjs` couvre :
 
 - Tests Node : les 9 passent (les 8 existants et `test-sounds.mjs`).
 - Navigateur (Chrome) : la section « Sons » s'affiche. Avancer contre un mur joue `14.mp3`, une fois par choc.
-- Dans la simulation, il y a **environ 250 pas de créatures par minute** au niveau 2. Seuls ceux à portée sont joués, au plus un par tick : la fréquence perçue reste à juger en jouant.
+- Dans la simulation, il y a **environ 250 pas de créatures par minute** au niveau 2. Seuls ceux à portée sont joués, au plus un par tick (fréquence validée aux essais, § 7).
 
 ## 6. Écarts et points ouverts
 
 - Les délais de DM (blessure et coup sur une porte, joués un tick plus tard) sont ignorés.
 - La chute joue le cri même sans dégâts : nos chutes n'en font pas encore.
-- Correspondances déduites des libellés, à confirmer :
+- Correspondances déduites des libellés, validées à l'écoute (§ 7) :
   - `thud` = son 03 ;
   - un seul son d'explosion (04) pour les explosions fortes et faibles.
 - Priorités et multiplicateurs de portée provisoires, faute de la table du graphisme 562.
-- À régler aux essais : la portée commune et la fréquence des pas.
+
+## 7. Retours d'essais de l'utilisateur (2026-10-29)
+
+- **Pas des créatures :** pas de submersion, très proche de l'original.
+- **Portée de 8 cases :** convient ; on entend 2 ou 3 groupes au plus.
+- **Stéréo :** fonctionne bien.
+- **Sons 03 (`thud`) et 04 (explosion) :** validés.
