@@ -172,7 +172,11 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     }
     if (detail.step === (effect === 'set' ? 0 : DOOR_CLOSED)) return;
     detail.moving = { effect, source };
-    animateDoor(level, x, y, detail, detail.moving);
+    // The first step falls on a tick, like the next ones (steady rhythm): within a tick, at
+    // once (F244); between two ticks (a click, the party's step), at the next one, as the
+    // door button of DM does (COMMAND.C: event at GameTime + 1).
+    const moving = detail.moving;
+    clock.schedule(clock.ticking ? 0 : 1, () => animateDoor(level, x, y, detail, moving));
   }
 
   // One step of a moving door. Closing on the party, it goes back up at once and wounds

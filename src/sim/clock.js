@@ -2,9 +2,10 @@
 // The duration of a tick is set by the caller (main.js); the simulation only
 // counts ticks, so it runs the same in Node.
 
-/** @returns {{ now: number, schedule(delay, run, key?): void, advance(ticks): void, flush(): void, clear(): void }} */
+/** @returns {{ now: number, ticking: boolean, schedule(delay, run, key?): void, advance(ticks): void, flush(): void, clear(): void }} */
 export function createClock() {
   let now = 0;
+  let ticking = false; // inside advance(): the events run belong to the current tick
   let order = 0; // events due at the same tick run in insertion order
   let queue = []; // [{ time, order, run }], sorted
 
@@ -16,6 +17,10 @@ export function createClock() {
   return {
     get now() {
       return now;
+    },
+    // False between ticks (a click, the party's step): what starts then waits for the next tick.
+    get ticking() {
+      return ticking;
     },
     get pending() {
       return queue.length;
@@ -35,9 +40,14 @@ export function createClock() {
       else queue.splice(i, 0, event);
     },
     advance(ticks = 1) {
-      for (let i = 0; i < ticks; i++) {
-        now++;
-        flush();
+      ticking = true;
+      try {
+        for (let i = 0; i < ticks; i++) {
+          now++;
+          flush();
+        }
+      } finally {
+        ticking = false;
       }
     },
     flush,

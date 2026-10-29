@@ -32,6 +32,11 @@ function buttonDoor(opening) {
   }
   return null;
 }
+// A click on the button, then the tick on which the door takes its first step (docs/043).
+const press = () => {
+  sim.clickFront();
+  sim.tick(1);
+};
 const stepOf = (door) => sim.state.tileAt(door.level, door.x, door.y).detail.step;
 // Steps of the door at once, then after each of `ticks` ticks.
 function steps(door, ticks, each = () => {}) {
@@ -52,22 +57,22 @@ const where = `N${door.level} (${door.x}, ${door.y})`;
   sim.reset();
   sim.teleport(door.level, ...door.from);
   face(door.facing);
-  sim.clickFront();
+  press();
   const opening = steps(door, 4);
   check(opening.join() === '3,2,1,0,0', `${where} : s'ouvre en 4 ticks (${opening.join(', ')})`);
-  sim.clickFront();
+  press();
   const passable = [];
   const closing = steps(door, 4, () => passable.push(blockReason(sim.state, door.level, door.x, door.y) === null));
   check(closing.join() === '1,2,3,4,4', `${where} : se ferme en 4 ticks (${closing.join(', ')})`);
   check(passable.join() === 'false,false,false,false', `${where} : infranchissable au-delà de 1/4 (${passable.join(', ')})`);
   // The button toggles: it closes only a door fully open (ReDMCSB F244), so a click while
   // the door opens does not turn it round.
-  sim.clickFront();
+  press();
   sim.tick(1);
   sim.clickFront();
   const on = steps(door, 3);
   check(on.join() === '2,1,0,0', `${where} : un clic pendant l'ouverture ne la renverse pas (${on.join(', ')})`);
-  sim.clickFront();
+  press();
   sim.tick(1);
   sim.clickFront(); // closing, not fully open: the toggle opens it again
   const back = steps(door, 3);
@@ -83,7 +88,7 @@ const where = `N${door.level} (${door.x}, ${door.y})`;
   face(door.facing);
   sim.clickFront();
   sim.tick(4);
-  sim.clickFront(); // closing: 1/4 closed, still passable
+  press(); // closing: 1/4 closed, still passable
   sim.command('forward');
   check(sim.party.x === door.x && sim.party.y === door.y, `${where} : le groupe passe sous la porte fermée à 1/4`);
   const hits = [];
@@ -109,7 +114,7 @@ function underDoor(d, type, ticks) {
   sim.clickFront();
   sim.tick(4);
   const group = sim.state.createGroup({ type, level: d.level, x: d.x, y: d.y, facing: 'N', members: [{ hp: 500, position: null }] });
-  sim.clickFront();
+  press();
   const list = steps(d, ticks, () => (group.nextMove = Infinity));
   return { list, hp: group.members[0].hp };
 }

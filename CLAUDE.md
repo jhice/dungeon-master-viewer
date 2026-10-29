@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-29, après la doc 042.
+> Mis à jour le 2026-10-29, après la doc 043.
 
 ### Données et visualiseur
 
@@ -82,7 +82,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   - `spell-info.js` (sorts) ;
   - résistance au feu des espèces (`creature-info.js`, doc 033).
 - **Timeline fidèle à ReDMCSB (doc 026) :** les événements d'une même case au même tick fusionnent ; compteurs : `set` incrémente, `clear` décrémente.
-- **Portes animées (doc 028) :** crans 0 à 4, un par tick ; le groupe passe jusqu'à 1/4, une créature jusqu'à sa hauteur ; une porte qui se ferme sur quelqu'un remonte et le blesse ; bouton sur un montant fixe.
+- **Portes animées (doc 028) :** crans 0 à 4, un par tick ; le groupe passe jusqu'à 1/4, une créature jusqu'à sa hauteur ; une porte qui se ferme sur quelqu'un remonte et le blesse ; bouton sur un montant fixe. Le premier cran tombe sur un tick : au tick suivant pour un clic ou un pas (doc 043).
 - **Sorts, G1 (doc 030) :** panneau de sorts à droite du cadre de Zed (`src/ui/spell-panel.js`), glyphes Atari ST (`spell-glyphs.js`), 25 sorts reconnus (`spell-info.js`, `src/sim/spells.js`), sans effet sauf la fatigue.
 - **Sorts, G2 (doc 031) :** les sorts de potion remplissent une flasque vide en main (`src/sim/potions.js`) ; clic sur le cadre de Zed avec une potion au curseur : la boire (santé, endurance, mana).
 - **Lumière, H1 (doc 032) :** modèle sans rendu (`src/sim/light.js`) : niveau 0 toujours éclairé, torches en main pondérées et usées tous les 512 ticks, lumière magique par crans ; affichée dans la ligne d'état du jeu.

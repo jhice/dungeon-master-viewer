@@ -56,12 +56,18 @@ check(Object.values(SOUNDS).every((s) => /^\d\d$/.test(s.file)), `${Object.keys(
   const { from, facing } = besides(level, x, y);
   sim.teleport(level, ...from);
   face(facing);
+  // The tick of each step: none at the click, then one per tick (steady rhythm, docs/043).
+  let tick = 0;
+  const stepTicks = [];
+  const off = sim.on('sound', (s) => s.id === 'door' && stepTicks.push(tick));
   const sounds = heard(() => {
     sim.clickFront();
-    sim.tick(6);
+    for (tick = 1; tick <= 6; tick++) sim.tick(1);
   });
+  off();
   const doorSounds = sounds.filter((s) => s.id === 'door');
   check(sounds[0]?.id === 'switch', `bouton de porte : ${sounds[0]?.id}`);
+  check(stepTicks.join() === '1,2,3,4', `porte : un cran par tick, le premier au tick suivant le clic (${stepTicks.join(', ')})`);
   check(doorSounds.length === 4 && doorSounds.every((s) => s.x === x && s.y === y), `porte N${level} (${x}, ${y}) : ${doorSounds.length} sons de cran (4 attendus)`);
 }
 
