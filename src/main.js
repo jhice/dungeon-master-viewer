@@ -19,6 +19,8 @@ import { createChampionPanel } from './ui/champion-panel.js';
 import { createSpellPanel } from './ui/spell-panel.js';
 import { createSimulation } from './sim/simulation.js';
 import { DEFAULT_LIGHTING } from './render/first-person/lighting-settings.js';
+import { DEFAULT_AUDIO } from './audio/audio-settings.js';
+import { createAudio } from './audio/audio.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
 import { ACTIONS } from './sim/combat.js';
@@ -69,6 +71,7 @@ const prefs = loadPreferences({
   playing: false, // the game window is open
   gameLayout: null, // its position and width
   lighting: {}, // light of the first-person view (docs/037), over DEFAULT_LIGHTING
+  audio: {}, // sounds (docs/041), over DEFAULT_AUDIO
 });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
@@ -407,6 +410,20 @@ const LIGHTING_SCHEMA = [
   { type: 'checkbox', key: 'torchHolders', label: 'Torches murales lumineuses' },
   { type: 'checkbox', key: 'occlusion', label: 'Lumière arrêtée par les murs' },
 ];
+// Sounds (docs/041): kept in the preferences as the light.
+const knownAudio = (values) => Object.fromEntries(Object.entries(values ?? {}).filter(([key]) => key in DEFAULT_AUDIO));
+const audioSettings = () => ({ ...DEFAULT_AUDIO, ...knownAudio(prefs.audio) });
+const AUDIO_SCHEMA = [
+  { type: 'heading', label: 'Sons' },
+  { type: 'checkbox', key: 'soundEnabled', label: 'Sons activés' },
+  { type: 'range', key: 'soundVolume', label: 'Volume', min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)} %` },
+  { type: 'range', key: 'soundRange', label: 'Portée', min: 2, max: 16, step: 1, format: (v) => `${v} cases` },
+];
+function changeAudio(changes) {
+  prefs.audio = { ...knownAudio(prefs.audio), ...changes };
+  savePreferences(prefs);
+  audio.setSettings(changes);
+}
 function changeLighting(changes) {
   prefs.lighting = { ...knownLighting(prefs.lighting), ...changes };
   savePreferences(prefs);
@@ -445,7 +462,7 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
     schema.push({ type: 'checkbox', key: 'autoFit', label: 'Auto-ajustement (repère local)' });
   }
-  return [...schema, ...(renderer.settingsSchema ?? []), ...LIGHTING_SCHEMA];
+  return [...schema, ...(renderer.settingsSchema ?? []), ...LIGHTING_SCHEMA, ...AUDIO_SCHEMA];
 }
 
 const panelValues = () => ({
@@ -460,12 +477,15 @@ const panelValues = () => ({
   autoFit: prefs.autoFit,
   ...renderer.settings,
   ...lighting(),
+  ...audioSettings(),
 });
 
 function onPanelChange(allChanges) {
   const lightingChanges = Object.fromEntries(Object.entries(allChanges).filter(([key]) => key in DEFAULT_LIGHTING));
   if (Object.keys(lightingChanges).length) changeLighting(lightingChanges);
-  const changes = Object.fromEntries(Object.entries(allChanges).filter(([key]) => !(key in DEFAULT_LIGHTING)));
+  const audioChanges = Object.fromEntries(Object.entries(allChanges).filter(([key]) => key in DEFAULT_AUDIO));
+  if (Object.keys(audioChanges).length) changeAudio(audioChanges);
+  const changes = Object.fromEntries(Object.entries(allChanges).filter(([key]) => !(key in DEFAULT_LIGHTING) && !(key in DEFAULT_AUDIO)));
   const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, ...settings } = changes;
   // Simple viewer preferences (no immediate effect beyond the next hover / level change).
   for (const [key, value] of Object.entries({ alwaysTooltip, autoFit })) {
@@ -538,6 +558,9 @@ window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell
 const sim = createSimulation(dungeon);
 // Duration of a game tick (actuator delays are in ticks). About 1/6 s in DM, to be checked.
 const TICK_MS = 1000 / 6;
+// Sounds of the simulation (docs/041): the files of DM Amiga 3.6, in assets/sounds/.
+const audio = createAudio({ base: 'assets/sounds/', party: () => sim.party, settings: audioSettings() });
+sim.on('sound', audio.request);
 const moveKey = createControls((command) => sim.command(command));
 let game = null; // { window, view, panel } while the game window is open
 let opening = false;
@@ -587,7 +610,7 @@ async function openGame() {
     view.setLight(sim.light);
     showInventory();
     game.clock = setInterval(() => {
-      sim.tick();
+      audio.tick(() => sim.tick());
       game.panel.setReady(sim.fatigue === 0);
     }, TICK_MS);
   } catch (error) {

@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-29, après la doc 041.
+> Mis à jour le 2026-10-29, après la doc 042.
 
 ### Données et visualiseur
 
@@ -109,7 +109,11 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Sons (docs 039 à 041) :** inventaire (doc 040) : 33 sons d'Amiga 3.6, déclencheurs pris dans ReDMCSB. Plan (doc 041) : événement `sound` de la simulation, module `src/audio/` en Web Audio API (Howler en réserve), volume linéaire selon la distance de Manhattan, stéréo, un son par tick, 4 voix. Étape 1 faite : la simulation émet `sound` (`src/core/sound-info.js`). Fichiers : l'utilisateur choisit la source.
+- **Sons (docs 039 à 042) :**
+  - inventaire : 33 sons d'Amiga 3.6, avec leurs déclencheurs pris dans ReDMCSB (doc 040) ;
+  - plan (doc 041) ;
+  - réalisation (doc 042) : la simulation émet `sound` (`src/core/sound-info.js`) ; `src/audio/audio.js` les joue en Web Audio (niveau du groupe, volume linéaire selon la distance de Manhattan, stéréo, un son par tick, 4 voix) ; section « Sons » du panneau (`audio-settings.js`) ;
+  - fichiers dans `assets/sounds/NN.mp3`, pris sur greatstone.
 - **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3 (faite, doc 036), puis la refonte de la lumière (docs 037, 038).
 
 ## Simulation
