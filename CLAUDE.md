@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-28, après la doc 036.
+> Mis à jour le 2026-10-29, après la doc 037.
 
 ### Données et visualiseur
 
@@ -88,8 +88,12 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Lumière, H1 (doc 032) :** modèle sans rendu (`src/sim/light.js`) : niveau 0 toujours éclairé, torches en main pondérées et usées tous les 512 ticks, lumière magique par crans ; affichée dans la ligne d'état du jeu.
 - **Sorts, G3 (doc 033) :** Open Door et Fireball en projectiles magiques (`src/sim/magic.js`, `projectiles.js`) : porte à bouton actionnée, porte cassée, créatures et groupe brûlés ; Torch ajoute de la lumière magique.
 - **Sorts, G4 (doc 034) :** grimoire des parchemins tenus (`src/sim/grimoire.js`, sorts reconnus dans le texte) ; infobulles détaillées des objets tenus (`itemDetails`, `item-info.js`).
-- **Lumière, H2 (doc 035) :** la vue à la première personne est éclairée par le modèle (`src/render/first-person/fp-lights.js`) : noir hors du niveau 0 sans torche, torche du groupe et porte-torches en `PointLight` avec ombres (budget : 3), lumière magique centrée sur le groupe, scintillement (intensité seule, ombres recalculées seulement quand la vue change).
-- **Lumière, H3 (doc 036) :** section « Lumière (vue du jeu) » du panneau de configuration, gardée dans les préférences : lumière globale, portée des torches, brouillard, scintillement, ombres, relief des textures (normal maps, `normal-map.js`) ; défauts dans `lighting-settings.js`.
+- **Lumière, H2 et H3 (docs 035, 036) :** remplacées par la refonte de la doc 037.
+- **Lumière, refonte (doc 037) :** dans `src/render/first-person/fp-lights.js`, toutes les lumières sont blanches et sans ombre.
+  - Une `PointLight` portée par le groupe ; la palette de DM (0 à 5) donne un ratio par paliers, qui module son intensité et sa portée.
+  - Les porte-torches ont une `PointLight` chacun (option, écart avec DM).
+  - Panneau « Lumière (vue du jeu) » : intensité, portée, atténuation, lumière permanente, torches murales lumineuses ; défauts dans `lighting-settings.js`.
+  - Plus d'ombres, de scintillement, de brouillard, de relief ni de lumière hémisphérique.
 - **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`.
 
 ### En attente
@@ -104,7 +108,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3 (faite, doc 036).
+- **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3 (faite, doc 036), puis la refonte de la lumière (doc 037).
 
 ## Simulation
 

@@ -1,12 +1,11 @@
 // First-person view of the simulation (Three.js): the party's level only, with
 // full-height walls, a ceiling, lit by the torches and spells of the party, the torch
-// holders of the walls, or fully on a level of difficulty 0 (fp-lights.js, docs/035).
+// holders of the walls, or fully on a level of difficulty 0 (fp-lights.js, docs/037).
 // Reuses level-meshes.js in its `game` look, fed by the simulation state.
 // Units as in level-meshes.js: 1 tile = 1 unit, x = east, z = south, y = up;
 // here the level is built in local coordinates (tile (x, y) spans [x, x+1]).
 //
-// Rendering is on demand (party moved, state changed, resize), and the shadows are drawn
-// again only then; while a flame flickers, its intensity changes about 30 times a second.
+// Rendering is on demand (party moved, state changed, resize).
 // Mouse: a click on the wall or door just in front of the party is reported
 // (wall buttons, levers, locks, alcoves, door buttons), and so is a click on the
 // floor (a sub-tile, maybe with an item): main.js picks up or drops there if it
@@ -26,7 +25,6 @@ import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents, buildLevelCreatures } from '../three/level-contents.js';
 import { createDecor } from './fp-decor.js';
 import { createLights } from './fp-lights.js';
-import { normalMapOf } from './normal-map.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
@@ -39,9 +37,6 @@ export const VIEW = {
   eyeHeight: 0.42,
   pullBack: 0.35, // towards the back of the tile, in tiles (0.5 = back edge)
 };
-// Relief of the walls, floor and ceiling (setting `relief`, docs/036): normal maps computed from
-// their textures, kept faint.
-const RELIEF = { strength: 2, normalScale: 0.7 };
 const ASPECT = 4 / 3;
 const WALL_HEIGHT = 0.7;
 const CEILING_COLOR = '#696660';
@@ -62,7 +57,7 @@ const MIRRORED_PARTS = ['wall', 'floor'];
  * @param {(side: 'left'|'right') => void} [options.onClickElsewhere] a click on nothing within reach
  * @param {() => void} [options.onContextMenu] a right click on the view
  * @param {(item: object) => string} [options.colorOf] colour of an item in flight
- * @param {object} [options.lighting] settings of the light (DEFAULT_LIGHTING, lighting-settings.js) and `relief`
+ * @param {object} [options.lighting] settings of the light (DEFAULT_LIGHTING, lighting-settings.js)
  * Every click handler also receives the side of the view clicked ('left' | 'right').
  */
 export function createFirstPersonRenderer(
@@ -74,9 +69,6 @@ export function createFirstPersonRenderer(
   const theme = readTheme();
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.shadowMap.autoUpdate = false; // drawn again by render() only, see below
   renderer.domElement.className = 'fp-canvas';
   container.append(renderer.domElement);
 
@@ -85,24 +77,10 @@ export function createFirstPersonRenderer(
 
   const camera = new THREE.PerspectiveCamera(VIEW.fov, ASPECT, 0.02, 60);
   scene.add(camera);
-  const { relief: reliefSetting = false, ...lightSettings } = lighting;
-  const lights = createLights(scene, camera, WALL_HEIGHT, lightSettings);
-  let relief = reliefSetting;
+  const lights = createLights(scene, camera, WALL_HEIGHT, lighting);
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
   const ceilingTextures = { ceiling: ceilingTexture(false), ceilingPit: ceilingTexture(true) };
-  // Their normal maps, computed once, on first use (relief on).
-  const normalMaps = new Map(); // texture -> normal map
-  const normalMap = (texture) => {
-    if (!normalMaps.has(texture)) normalMaps.set(texture, normalMapOf(texture, RELIEF.strength));
-    return normalMaps.get(texture);
-  };
-  // Gives (or takes away) its relief to a mesh of a textured part.
-  function setRelief(mesh, texture) {
-    mesh.material.normalMap = relief ? normalMap(texture) : null;
-    mesh.material.normalScale.setScalar(RELIEF.normalScale);
-    mesh.material.needsUpdate = true;
-  }
   const decor = createDecor(dungeon, state, WALL_HEIGHT);
 
   let level = null; // level index currently built
@@ -145,13 +123,12 @@ export function createFirstPersonRenderer(
       const texture = textures[mesh.userData.part];
       if (texture) {
         mesh.material.map = texture;
-        setRelief(mesh, texture);
+        mesh.material.needsUpdate = true;
       }
       if (MIRRORED_PARTS.includes(mesh.userData.part)) mirrorOddTiles(mesh, mesh.userData.tiles);
     }
     const ceiling = buildCeiling(levelIndex);
     for (const mesh of ceiling) group.add(mesh);
-    castShadows(group);
     scene.add(group);
     built = { group, meshes, ceiling, decorMeshes };
     lights.setGlowing(meshes.filter((m) => m.userData.part === 'teleporterGame').map((m) => m.material));
@@ -181,7 +158,6 @@ export function createFirstPersonRenderer(
       .map(([part, tiles]) => {
         const material = new THREE.MeshLambertMaterial({ color: CEILING_COLOR, map: ceilingTextures[part] });
         const mesh = new THREE.InstancedMesh(geometry.clone(), material, tiles.length);
-        setRelief(mesh, ceilingTextures[part]);
         tiles.forEach(({ x, y }, i) => mesh.setMatrixAt(i, m4.makeTranslation(x + 0.5, WALL_HEIGHT, y + 0.5)));
         mesh.computeBoundingSphere();
         mesh.userData = { part };
@@ -190,18 +166,6 @@ export function createFirstPersonRenderer(
       });
     geometry.dispose();
     return meshes;
-  }
-
-  // Shadows (docs/035): everything receives them; walls, doors, items and creatures cast them.
-  // Flat things (floor, ceiling, decals on walls and floors) and translucent ones do not.
-  const FLAT_PARTS = ['floor', 'pit', 'pitHidden', 'pitLid', 'pitLidHidden'];
-  function castShadows(group) {
-    group.traverse((object) => {
-      if (!object.isMesh) return;
-      object.receiveShadow = true;
-      const solid = !object.material.transparent && object.isInstancedMesh;
-      object.castShadow = solid && !FLAT_PARTS.includes(object.userData.part) && !object.userData.part?.startsWith('ceiling');
-    });
   }
 
   // Not seen by the party either: the "has contents" rings of chests and creatures (disposed).
@@ -223,7 +187,6 @@ export function createFirstPersonRenderer(
     const map = dungeon.level(level);
     const center = { x: map.offset.x, z: map.offset.y };
     for (const mesh of seenMeshes(buildLevelCreatures(dungeon, level, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents }))) {
-      mesh.castShadow = mesh.receiveShadow = true;
       built.group.add(mesh);
       built.meshes.push(mesh);
     }
@@ -284,26 +247,9 @@ export function createFirstPersonRenderer(
     camera.rotation.set(0, yaw, 0);
   }
 
-  // On demand, at once, with the shadows drawn again (something changed). While a flame
-  // flickers, `animate` changes its intensity every FLICKER_MS and renders without the shadows,
-  // which a mere change of intensity leaves valid.
-  const FLICKER_MS = 33;
-  let frame = 0;
-  let flickered = 0; // time of the last flicker frame
+  // On demand, at once (something changed).
   function render() {
-    renderer.shadowMap.needsUpdate = true;
     renderer.render(scene, camera);
-    if (lights.animated) frame ||= requestAnimationFrame(animate);
-  }
-  function animate(time) {
-    frame = 0;
-    if (!lights.animated) return;
-    if (time - flickered >= FLICKER_MS) {
-      flickered = time;
-      lights.flicker(time / 1000);
-      renderer.render(scene, camera);
-    }
-    frame = requestAnimationFrame(animate);
   }
 
   function resize() {
@@ -419,22 +365,11 @@ export function createFirstPersonRenderer(
       party = next;
       if (party.level !== level) build(party.level);
       placeCamera(party);
-      lights.setParty(party);
       render();
     },
-    /**
-     * Settings of the light changed (control panel, docs/036): some of DEFAULT_LIGHTING (lighting-settings.js),
-     * and `relief` (normal maps of the walls, floor and ceiling).
-     */
-    setLighting({ relief: nextRelief, ...changes }) {
+    /** Settings of the light changed (control panel, docs/037): some of DEFAULT_LIGHTING (lighting-settings.js). */
+    setLighting(changes) {
       lights.configure(changes);
-      if (nextRelief !== undefined && nextRelief !== relief) {
-        relief = nextRelief;
-        for (const mesh of [...(built?.meshes ?? []), ...(built?.ceiling ?? [])]) {
-          const texture = textures[mesh.userData.part] ?? ceilingTextures[mesh.userData.part];
-          if (texture) setRelief(mesh, texture);
-        }
-      }
       render();
     },
     /** The light of the simulation changed (sim.light, docs/032): torches, magical light. */
@@ -465,7 +400,6 @@ export function createFirstPersonRenderer(
     /** Items in flight on a level: [{ item, x, y, position (sub-tile) }]. */
     setProjectiles,
     dispose() {
-      cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('click', onClick);
       renderer.domElement.removeEventListener('contextmenu', onRightClick);
@@ -477,7 +411,7 @@ export function createFirstPersonRenderer(
       tooltip.remove();
       clear();
       decor.dispose();
-      for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures), ...normalMaps.values()]) texture.dispose();
+      for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures)]) texture.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
@@ -494,7 +428,7 @@ function mirrorOddTiles(mesh, tiles) {
       .replace('#include <common>', '#include <common>\nattribute float mirror;')
       .replace(
         '#include <uv_vertex>',
-        '#include <uv_vertex>\n#ifdef USE_MAP\n  if (mirror > 0.5) vMapUv.x = 1.0 - vMapUv.x;\n#endif\n#ifdef USE_NORMALMAP\n  if (mirror > 0.5) vNormalMapUv.x = 1.0 - vNormalMapUv.x;\n#endif',
+        '#include <uv_vertex>\n#ifdef USE_MAP\n  if (mirror > 0.5) vMapUv.x = 1.0 - vMapUv.x;\n#endif',
       );
   };
   mesh.material.customProgramCacheKey = () => 'mirror-odd-tiles';
