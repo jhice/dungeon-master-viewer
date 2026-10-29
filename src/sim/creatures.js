@@ -27,6 +27,7 @@ import { creaturePassage, resolveCreatureArrival } from './rules.js';
 import { perceiveParty, facingTowards, stepTowards } from './perception.js';
 import { mulberry32 } from './random.js';
 import { creatureDrops } from '../core/creature-drops.js';
+import { moveSound } from '../core/sound-info.js';
 
 const SEED = 0x0d4e0;
 const THIEF = 2; // Giggler: steals instead of attacking (hard-coded in DM)
@@ -212,6 +213,7 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     }));
     if (group.members.length) {
       if (items.length) logic.itemsDropped(at.level, at.x, at.y, items);
+      if (items.length) dropSound(at, items);
       emit('creaturesMoved', { group, from: at, to: at, killed: true });
       if (group.fleeUntil <= clock.now && randomInt(15) >= creatureInfo(group.type).fear) scare(group, 'fear');
       return false;
@@ -220,8 +222,14 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     items.push(...group.items.map((ref) => ({ kind: ref.kind, index: ref.index, position: position() })));
     group.items = [];
     if (items.length) logic.itemsDropped(at.level, at.x, at.y, items);
+    if (items.length) dropSound(at, items);
     emit('creaturesMoved', { group, from: at, to: null, killed: true });
     return true;
+  }
+
+  // Possessions falling: metallic if there is a weapon among them (ReDMCSB F186, F188).
+  function dropSound({ level, x, y }, items) {
+    emit('sound', { id: items.some((i) => i.kind === 'weapon') ? 'metal' : 'thud', level, x, y });
   }
 
   // One step on a shortest way towards `goal` (next to it, or onto it); false if none.
@@ -264,6 +272,9 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
   function move(group, to, step = to) {
     const from = { level: group.level, x: group.x, y: group.y, facing: group.facing };
     logic.moveGroup(group, to);
+    const stepId = step && moveSound(group.type);
+    if (stepId) emit('sound', { id: stepId, level: step.level, x: step.x, y: step.y });
+    if (to.audible) emit('sound', { id: 'teleport', level: to.level, x: to.x, y: to.y });
     emit('creaturesMoved', { group, from, to, carried: to !== step });
   }
 
@@ -307,6 +318,7 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     logic.groupAppeared(level, x, y, () => (created = state.createGroup(group)));
     const info = creatureInfo(created.type);
     created.nextMove = level !== activeLevel ? null : info.immobile ? clock.now + IMMOBILE_CHECK : nextMove(info);
+    emit('sound', { id: 'teleport', level, x, y });
     emit('creaturesMoved', { group: created, from: null, to: { level, x, y, facing: created.facing }, generated: true });
     return true;
   }

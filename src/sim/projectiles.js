@@ -73,6 +73,11 @@ export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
     drop(p.level, p.x, p.y, [{ kind: p.item.kind, index: p.item.index, position }]);
   }
 
+  // A thrown item hits something: metallic for a weapon (ReDMCSB F217).
+  function hitSound(p) {
+    emit('sound', { id: p.item.kind === 'weapon' ? 'metal' : 'thud', level: p.level, x: p.x, y: p.y });
+  }
+
   // One step: to the front row of its tile, or to the back row of the next tile.
   function advance(p) {
     if (p.spell) {
@@ -93,12 +98,16 @@ export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
       const door = p.spell && state.tileAt(p.level, nx, ny)?.type === 'door';
       if (!door && !passes(p.level, nx, ny)) {
         if (p.spell) impact(p, 'wall'); // meets the wall from its tile
+        else hitSound(p);
         return land(p); // against the wall: falls before it
       }
       Object.assign(p, { x: nx, y: ny, row: 'back' });
       // A creature: hit (it falls on its tile), unless missed; non-material ones let items through.
       const group = state.groupAt(p.level, nx, ny);
-      if (group && (p.spell || !creatureInfo(group.type).nonMaterial) && hitGroup(p, group)) return land(p);
+      if (group && (p.spell || !creatureInfo(group.type).nonMaterial) && hitGroup(p, group)) {
+        if (!p.spell) hitSound(p);
+        return land(p);
+      }
     }
     if (!p.spell && p.energy <= 0) land(p);
   }

@@ -95,7 +95,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   - Panneau « Lumière (vue du jeu) » : intensité, portée, atténuation, lumière permanente, torches murales lumineuses ; défauts dans `lighting-settings.js`.
   - Plus d'ombres, de scintillement, de brouillard, de relief ni de lumière hémisphérique.
 - **Lumière arrêtée par les murs (doc 038) :** option du panneau (`occlusion`, `fp-occlusion.js`). Un masque par case et par lumière, calculé par rayons sur la grille, est lu par le shader des matériaux Lambert de la vue.
-- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`.
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`.
 
 ### En attente
 
@@ -109,7 +109,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   
   Chaque doc les signale.
 - **Phase F de la simulation** (doc 012) : transitions animées, 16/9, sauvegarde de partie.
-- **Sons (docs 039 à 041) :** inventaire (doc 040) : 33 sons d'Amiga 3.6, déclencheurs pris dans ReDMCSB. Plan (doc 041) : événement `sound` de la simulation, module `src/audio/` en Web Audio API (Howler en réserve), volume linéaire selon la distance de Manhattan, stéréo, un son par tick, 4 voix. Fichiers : l'utilisateur choisit la source.
+- **Sons (docs 039 à 041) :** inventaire (doc 040) : 33 sons d'Amiga 3.6, déclencheurs pris dans ReDMCSB. Plan (doc 041) : événement `sound` de la simulation, module `src/audio/` en Web Audio API (Howler en réserve), volume linéaire selon la distance de Manhattan, stéréo, un son par tick, 4 voix. Étape 1 faite : la simulation émet `sound` (`src/core/sound-info.js`). Fichiers : l'utilisateur choisit la source.
 - **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3 (faite, doc 036), puis la refonte de la lumière (docs 037, 038).
 
 ## Simulation

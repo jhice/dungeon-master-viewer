@@ -21,6 +21,7 @@ import { createGrimoire } from './grimoire.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
 import { mulberry32 } from './random.js';
+import { attackSound } from '../core/sound-info.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
 // Seed of the combat random draws (a game replays the same way).
@@ -34,6 +35,8 @@ export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRi
  */
 export function createSimulation(dungeon) {
   const events = createEmitter();
+  // A sound made on a tile (docs/041); the audio module decides whether it is heard.
+  const sound = (id, { level, x, y }, immediate = false) => events.emit('sound', { id, level, x, y, immediate });
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
@@ -108,11 +111,14 @@ export function createSimulation(dungeon) {
   function creatureAttacks(group, info) {
     if (champion.dead) return;
     const outcome = creatureStrikes(champion, info, random);
+    const attackId = attackSound(group.type);
+    if (attackId) sound(attackId, group);
+    if (outcome.result === 'hit') sound('wounded', party);
     if (outcome.result === 'hit') champion.health = Math.max(0, champion.health - outcome.damage);
     champion.dead = champion.health === 0;
     events.emit('championHit', { group, ...outcome });
     championChanged();
-    if (champion.dead) events.emit('championDied', { champion, group });
+    if (champion.dead) died(group);
   }
 
   /**
@@ -123,6 +129,7 @@ export function createSimulation(dungeon) {
    */
   function doorCrushes({ level, x, y, group }) {
     const attack = () => 4 + Math.floor(random() * 2);
+    sound(group ? 'thud' : 'wall', { level, x, y });
     if (!group) return woundChampion(Math.floor((attack() * 130) / 64), { door: { level, x, y } });
     let killed = 0;
     let destroyed = false;
@@ -143,9 +150,15 @@ export function createSimulation(dungeon) {
     if (champion.dead) return;
     champion.health = Math.max(0, champion.health - damage);
     champion.dead = champion.health === 0;
+    sound('wounded', party);
     events.emit('championHit', { group: null, ...cause, result: 'hit', damage });
     championChanged();
-    if (champion.dead) events.emit('championDied', { champion, group: null, ...cause });
+    if (champion.dead) died(null, cause);
+  }
+
+  function died(group, cause = {}) {
+    sound('scream', party, true);
+    events.emit('championDied', { champion, group, ...cause });
   }
 
   // The outcome of a strike or of a thrown item on a group: a member chosen at random
@@ -221,6 +234,7 @@ export function createSimulation(dungeon) {
     const action = ACTIONS.hit;
     const refused = spend(action);
     if (refused) return { result: refused };
+    sound('combat', party, true);
     const [dx, dy] = SIDE_DELTAS[party.facing];
     const [x, y] = [party.x + dx, party.y + dy];
     const group = state.groupAt(party.level, x, y);
@@ -242,6 +256,7 @@ export function createSimulation(dungeon) {
     if (!item) return { result: 'nothing' };
     const refused = spend(ACTIONS.throw);
     if (refused) return { result: refused };
+    sound('combat', party, true);
     if (from === 'cursor') state.hand = null;
     else state.hands[from] = null;
     events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
@@ -280,6 +295,7 @@ export function createSimulation(dungeon) {
     }
     const result = step(state, party, name);
     if (result.blocked) {
+      if (result.blocked !== 'creature') sound('wall', party, true);
       events.emit('blocked', { party, reason: result.blocked });
       return;
     }
@@ -290,6 +306,10 @@ export function createSimulation(dungeon) {
   // Moves the party, then the floor actuators of the tile left and of the tile reached act.
   function arrive(from, arrival, kind) {
     party = arrival.party;
+    for (const effect of arrival.effects) {
+      if (effect.type === 'fall') sound('scream', effect.party, true);
+      if (effect.type === 'teleport' && effect.detail.sound) sound('teleport', effect.party, true);
+    }
     events.emit('partyMoved', { party, from, kind, effects: arrival.effects, loop: arrival.loop });
     logic.partyLeft(from);
     logic.partyEntered(party);
@@ -435,6 +455,7 @@ export function createSimulation(dungeon) {
       const result = { item, name, ...drinkPotion(champion, entry) };
       events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
       championChanged();
+      sound('swallow', party, true);
       events.emit('potionDrunk', { champion, ...result });
       return result;
     },

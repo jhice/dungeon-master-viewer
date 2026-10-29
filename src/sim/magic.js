@@ -95,6 +95,7 @@ export function createMagic(dungeon, state, clock, hooks) {
    */
   function explode(level, x, y, energy) {
     emit('explosion', { level, x, y, spell: 'fireball' });
+    emit('sound', { id: 'explosion', level, x, y });
     let attack = explosionAttack(energy);
     const p = party();
     if (p.level === level && p.x === x && p.y === y) hooks.hurtChampion(attack);
@@ -126,6 +127,7 @@ export function createMagic(dungeon, state, clock, hooks) {
    * On a wall, a fireball explodes on its own tile. Returns true if the projectile stops.
    */
   function impact(p, target) {
+    if (p.spell === 'openDoor') emit('sound', { id: 'spell', level: p.level, x: p.x, y: p.y });
     if (target === 'door') {
       const detail = state.tileAt(p.level, p.x, p.y).detail;
       if (p.spell === 'openDoor') {

@@ -34,7 +34,7 @@ Une table `id → { file, range }`. `range` multiplie la portée commune.
 | `attack:<n>` | 03, 12, 15 à 20, 28 à 30 | 1 | attaque d'une créature : son de son espèce (tableau 3.2 de la 040) |
 | `move:<n>` | 21 à 23, 25, 26, 31, 32 | 1 | pas d'une créature (pas les demi-tours sur place) : son de son espèce (tableau 3.3 de la 040) |
 
-- Les sons d'espèce s'ajoutent à `creature-info.js` : `attackSound` et `moveSound` (numéro Amiga, ou `null`).
+- Les sons d'espèce sont dans `sound-info.js` (et non `creature-info.js`, finalement), avec `attackSound(type)` et `moveSound(type)`.
 - Le **cri de guerre** et le **Horn of Fear** attendront que leurs actions existent (C3c).
 - Les correspondances 03 et 04 restent déduites des libellés (040).
 

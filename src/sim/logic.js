@@ -65,6 +65,7 @@ const DOOR_RETRY = 2;
  */
 export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderParty, onOpenedUnderGroup, generate, crush }) {
   const actuatorData = (index) => dungeon.data.actuators[index];
+  const sound = (id, level, x, y) => emit('sound', { id, level, x, y });
   const partyOn = (level, x, y) => {
     const p = party();
     return p.level === level && p.x === x && p.y === y;
@@ -84,6 +85,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (a.onceOnly) runtime.disabled = true;
     firedCount++;
     emit('actuatorFired', { index, actuator: a, effect });
+    // An audible actuator clicks (a generator: its group buzzes as it appears, creatures.js).
+    if (a.sound && !(a.kind === 'floor' && a.type === FLOOR_GENERATOR)) sound('switch', a.at.map, a.at.x, a.at.y);
     if (a.kind === 'floor' && a.type === FLOOR_GENERATOR) {
       // The generator then rests for `delay` before it can act again.
       generate?.(index);
@@ -204,6 +207,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (step === detail.step) return;
     detail.step = step;
     detail.open = step === 0;
+    sound('door', level, x, y);
     emit('tileChanged', { level, x, y, type: 'door', detail, source });
   }
 
@@ -501,11 +505,13 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     if (door.force && !tile.detail.open && state.hand?.kind === 'weapon') {
       const needed = DOOR_HITS[dungeon.level(level).doorTypes[door.type]] ?? Infinity;
       tile.detail.hits = (tile.detail.hits ?? 0) + 1;
+      sound('thud', level, x, y);
       if (tile.detail.hits < needed) return { target: 'door', fired: 0, hits: tile.detail.hits, needed };
       breakDoor(level, x, y, tile);
       return { target: 'door', fired: 0, hits: tile.detail.hits, needed, broken: true };
     }
     if (!door.button) return { target: 'door', fired: 0 };
+    sound('switch', level, x, y);
     setOpen(level, x, y, tile, 'toggle', null);
     return { target: 'door', fired: 1 };
   }

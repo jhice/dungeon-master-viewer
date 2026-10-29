@@ -25,6 +25,8 @@
 //   'doorBroken' { level, x, y, by: 'fireball' } a fireball broke a door (magic.js)
 //                (creatureHit and championHit carry `spell: 'fireball'` when a fireball wounds)
 //   'grimoireChanged' { scrolls: [index], learned: [spell] } the party held new scrolls (grimoire.js)
+//   'sound'      { id, level, x, y, immediate? } a sound made on a tile (ids: core/sound-info.js, docs/041);
+//                immediate: an action of the party, played at once even during a tick
 //   'reset'      { party }
 
 export function createEmitter() {

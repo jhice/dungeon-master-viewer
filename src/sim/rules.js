@@ -133,6 +133,7 @@ export function resolveCreatureArrival(dungeon, state, info, place) {
 function carry(dungeon, state, place, scopes, falls) {
   const seen = new Set();
   let current = place;
+  let audible = false;
   for (let i = 0; i < MAX_CHAIN; i++) {
     const key = `${current.level}:${current.x},${current.y}`;
     if (seen.has(key)) break;
@@ -145,10 +146,12 @@ function carry(dungeon, state, place, scopes, falls) {
           ? teleport(dungeon, current, tile.detail, scopes)
           : null;
     if (!effect) break;
+    audible ||= Boolean(effect.type === 'teleport' && effect.detail.sound);
     current = effect.party;
   }
   const moved = current.level !== place.level || current.x !== place.x || current.y !== place.y || current.facing !== place.facing;
-  return moved ? current : null;
+  if (!moved) return null;
+  return audible ? { ...current, audible } : current;
 }
 
 // Stairs: the matching stairs of the adjacent level are at the same global
