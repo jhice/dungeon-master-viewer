@@ -22,7 +22,7 @@
 //   'lightChanged' { amount, palette, permanent, torches: [{ hand, item, charges }], magical } (light.js)
 //   'torchesWorn' { torches: [{ hand, item, charges }] } the torches in hand lost a charge (every 512 ticks)
 //   'explosion'  { level, x, y, spell: 'fireball' } a fireball exploded on a tile (magic.js)
-//   'doorBroken' { level, x, y, by: 'fireball' } a fireball broke a door (magic.js)
+//   'doorBroken' { level, x, y, by: 'fireball'|'melee' } a fireball or a strike broke a door (magic.js)
 //                (creatureHit and championHit carry `spell: 'fireball'` when a fireball wounds)
 //   'grimoireChanged' { scrolls: [index], learned: [spell] } the party held new scrolls (grimoire.js)
 //   'sound'      { id, level, x, y, immediate? } a sound made on a tile (ids: core/sound-info.js, docs/041);

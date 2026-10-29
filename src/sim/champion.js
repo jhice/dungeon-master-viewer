@@ -4,6 +4,7 @@
 // Regeneration is provisional (docs/023 § 3).
 
 import { decodeChampion } from '../core/texts.js';
+import { SKILLS } from '../core/action-info.js';
 
 export const DEFAULT_CHAMPION = 'ZED';
 // Wall actuator "Champion portrait" (type 127): the mirror of a champion, where his items lie.
@@ -16,7 +17,8 @@ const MANA_EVERY = 60;
 /**
  * Creates the champion from his sheet: { name, title, health, maxHealth, stamina,
  * maxStamina (×10), mana, maxMana, strength, dexterity, wisdom, vitality, antiMagic,
- * antiFire, luck, skills, readyAt, symbols, dead }.
+ * antiFire, luck, skills, experience, readyAt, symbols, dead }. `skills`: the levels of the sheet;
+ * `experience`: by skill name (SKILLS), as the engine sets it when the champion joins (see skillLevel).
  */
 export function createChampion(dungeon, name = DEFAULT_CHAMPION) {
   const text = dungeon.data.texts.find((t) => t.text.split('\n')[0] === name);
@@ -40,10 +42,34 @@ export function createChampion(dungeon, name = DEFAULT_CHAMPION) {
     antiMagic,
     antiFire,
     skills: Object.fromEntries(sheet.classes.flatMap((c) => c.skills.map((s) => [s.skill, s.level]))),
+    experience: startingExperience(sheet),
     readyAt: 0, // tick from which he can act again (fatigue of the last action)
     symbols: [], // spell being composed: symbol indices per step, the power first (spells.js)
     dead: false,
   };
+}
+
+// ReDMCSB F280: a hidden skill of level n starts with 125 << n experience points (0 for level 0),
+// a base skill with the sum of its 4 hidden skills.
+function startingExperience(sheet) {
+  const levels = Object.fromEntries(sheet.classes.flatMap((c) => c.skills.map((s) => [s.skill, s.level])));
+  const experience = Object.fromEntries(SKILLS.slice(4).map((skill) => [skill, levels[skill] > 0 ? 125 << levels[skill] : 0]));
+  SKILLS.slice(0, 4).forEach((base, i) => (experience[base] = SKILLS.slice(4 + 4 * i, 8 + 4 * i).reduce((sum, s) => sum + experience[s], 0)));
+  return experience;
+}
+
+/**
+ * Level of a skill (ReDMCSB F303): for a hidden skill, the average of its experience and of its base
+ * skill's; then 1, plus one for each halving down to less than 500. No temporary experience nor
+ * object bonus yet.
+ */
+export function skillLevel(champion, skill) {
+  const index = SKILLS.indexOf(skill);
+  let experience = champion.experience[skill] ?? 0;
+  if (index > 3) experience = (experience + champion.experience[SKILLS[(index - 4) >> 2]]) >> 1;
+  let level = 1;
+  for (; experience >= 500; experience >>= 1) level++;
+  return level;
 }
 
 /**

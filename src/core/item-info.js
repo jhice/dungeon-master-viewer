@@ -1,61 +1,77 @@
 // Characteristics of the item types that the engine keeps out of Dungeon.xml
 // (graphics.dat item 559): weight, and for the weapons the strength bonus, the
-// kinetic energy when thrown and the actions (combo). Used to wield and throw items
-// (docs/024). Indexed by category and type, as the catalog of dungeon.json.
+// kinetic energy when thrown and the combo (actions, docs/044). Used to wield, throw and
+// use items (docs/024). Indexed by category and type, as the catalog of dungeon.json.
 // Source: Dungeon Master Encyclopaedia, "Dungeon Master Items"
 // (http://dmweb.free.fr/games/dungeon-master/solutions/items/), extracted from DM for
-// Atari ST; damage of each action in 1/32 ("Actions and Combos").
+// Atari ST; the actions, their minimum skill level and charge: "Actions and Combos".
 
 import { ITEM_POOLS } from './contents.js';
+import { parseCombo } from './action-info.js';
 
+// A combo (action-info.js, parseCombo): actions, `:n` minimum skill level, `*` needs a charge.
 // prettier-ignore
 const WEAPONS = [
-  // type, weight (kg), strength, kinetic energy, actions (name:damage)
-  [0, 0.1, 2, 0, 'Punch:32 Freeze_Life:0'], // Eye Of Time
-  [1, 0.1, 2, 0, 'Swing:16 Lightning:0'], // Stormring
-  [2, 1.1, 8, 2, 'Swing:16'], // Torch
-  [3, 1.2, 10, 80, 'Swing:16 Fireball:0'], // Flamitt
-  [4, 0.9, 16, 7, 'Slash:16 Brandish:0 Confuse:0'], // Staff Of Claws
-  [5, 3.0, 49, 110, 'Jab:8 Chop:48 Lightning:0'], // Bolt Blade
-  [6, 4.7, 55, 20, 'Chop:48 Melee:60 Fireball:0'], // Fury
-  [7, 2.4, 25, 10, 'Parry:8 Brandish:0 Fireshield:0'], // The Firestaff
-  [8, 0.5, 10, 19, 'Throw:0 Stab:48 Slash:16'], // Dagger
-  [9, 3.3, 30, 8, 'Swing:16 Parry:8 Chop:48'], // Falchion
-  [10, 3.2, 34, 10, 'Swing:16 Parry:8 Chop:48'], // Sword
-  [11, 2.6, 38, 10, 'Jab:8 Parry:8 Thrust:66'], // Rapier
-  [12, 3.5, 42, 11, 'Slash:16 Parry:8 Melee:60'], // Sabre
-  [13, 3.6, 46, 12, 'Slash:16 Parry:8 Melee:60'], // Samurai Sword
-  [14, 3.3, 50, 14, 'Chop:48 Melee:60 Thrust:66'], // Delta
-  [15, 3.7, 62, 14, 'Stab:48 Chop:48 Cleave:48'], // Diamond Edge
-  [16, 3.0, 48, 13, 'Jab:8 Cleave:48 Disrupt:55'], // Vorpal Blade
-  [17, 3.9, 58, 15, 'Swing:16 Thrust:66 Berzerk:96'], // The Inquisitor
-  [18, 4.3, 49, 33, 'Swing:16 Chop:48 Melee:60'], // Axe
-  [19, 6.5, 70, 44, 'Chop:48 Cleave:48 Berzerk:96'], // Hardcleave
-  [20, 3.1, 32, 10, 'Swing:16 Bash:50 Stun:16'], // Mace
-  [21, 4.1, 42, 13, 'Swing:16 Bash:50 Stun:16'], // Mace Of Order
-  [22, 5.0, 60, 15, 'Swing:16 Stun:16 Melee:60'], // Morningstar
-  [23, 3.6, 19, 10, 'Throw:0 Bash:50'], // Club
-  [24, 11.0, 44, 22, 'Throw:0 Bash:50'], // Stone Club (dropped by Stone Golems)
-  [25, 1.0, 1, 50, 'Shoot:0'], // Bow
-  [26, 2.8, 1, 180, 'Shoot:0'], // Crossbow
-  [27, 0.2, 2, 10, 'Throw:0 Stab:48'], // Arrow
-  [28, 0.2, 2, 28, 'Throw:0 Stab:48'], // Slayer
-  [29, 1.9, 5, 20, 'Shoot:0'], // Sling
-  [30, 1.0, 6, 18, 'Throw:0'], // Rock
-  [31, 0.3, 7, 23, 'Throw:0 Stab:48'], // Poison Dart
-  [32, 0.1, 3, 19, 'Throw:0'], // Throwing Star
-  [34, 2.6, 12, 4, 'Swing:16'], // Staff
-  [35, 0.1, 0, 0, 'Calm:0 Spellshield:0 Heal:0'], // Wand
-  [36, 0.2, 1, 20, 'Spellshield:0 Fireshield:0'], // Teowand
-  [37, 3.5, 18, 6, 'Parry:8 Light:0 Dispell:0'], // Yew Staff
-  [38, 2.9, 0, 4, 'Swing:16'], // Staff Of Manar
-  [39, 2.1, 0, 3, 'Heal:0 Calm:0 Brandish:0'], // Snake Staff
-  [41, 0.8, 3, 1, 'Swing:16'], // Dragon Spit
-  [42, 1.8, 9, 4, 'Parry:8 Heal:0'], // Sceptre Of Lyf
-  [43, 0.8, 1, 1, 'Blow_Horn:0'], // Horn Of Fear
-  [44, 3.0, 1, 220, 'Shoot:0'], // Speedbow
-  [45, 3.6, 100, 50, 'Invoke:0 Fuse:0 Fluxcage:0'], // The Firestaff (Complete)
+  // type, weight (kg), strength, kinetic energy, combo
+  [0, 0.1, 2, 0, 'Punch Freeze_Life*'], // Eye Of Time
+  [1, 0.1, 2, 0, 'Swing Lightning:3*'], // Stormring
+  [2, 1.1, 8, 2, 'Swing'], // Torch
+  [3, 1.2, 10, 80, 'Swing Fireball:7*'], // Flamitt
+  [4, 0.9, 16, 7, 'Slash Brandish:2 Confuse:3*'], // Staff Of Claws
+  [5, 3.0, 49, 110, 'Jab Chop Lightning:4*'], // Bolt Blade
+  [6, 4.7, 55, 20, 'Chop Melee:2 Fireball:6*'], // Fury
+  [7, 2.4, 25, 10, 'Parry Brandish:3 Fireshield:5'], // The Firestaff
+  [8, 0.5, 10, 19, 'Throw Stab Slash:2'], // Dagger
+  [9, 3.3, 30, 8, 'Swing Parry:2 Chop:3'], // Falchion
+  [10, 3.2, 34, 10, 'Swing Parry:2 Chop:3'], // Sword
+  [11, 2.6, 38, 10, 'Jab Parry:1 Thrust:5'], // Rapier
+  [12, 3.5, 42, 11, 'Slash Parry:1 Melee:5'], // Sabre
+  [13, 3.6, 46, 12, 'Slash Parry:1 Melee:5'], // Samurai Sword
+  [14, 3.3, 50, 14, 'Chop Melee:5 Thrust:6'], // Delta
+  [15, 3.7, 62, 14, 'Stab Chop:2 Cleave:5'], // Diamond Edge
+  [16, 3.0, 48, 13, 'Jab Cleave:2 Disrupt:4'], // Vorpal Blade
+  [17, 3.9, 58, 15, 'Swing Thrust:5 Berzerk:7'], // The Inquisitor
+  [18, 4.3, 49, 33, 'Swing Chop Melee:5'], // Axe
+  [19, 6.5, 70, 44, 'Chop Cleave:3 Berzerk:8'], // Hardcleave
+  [20, 3.1, 32, 10, 'Swing Bash:2 Stun:4'], // Mace
+  [21, 4.1, 42, 13, 'Swing Bash:2 Stun:4'], // Mace Of Order
+  [22, 5.0, 60, 15, 'Swing Stun:3 Melee:6'], // Morningstar
+  [23, 3.6, 19, 10, 'Throw Bash'], // Club
+  [24, 11.0, 44, 22, 'Throw Bash'], // Stone Club (dropped by Stone Golems)
+  [25, 1.0, 1, 50, 'Shoot'], // Bow
+  [26, 2.8, 1, 180, 'Shoot'], // Crossbow
+  [27, 0.2, 2, 10, 'Throw Stab'], // Arrow
+  [28, 0.2, 2, 28, 'Throw Stab'], // Slayer
+  [29, 1.9, 5, 20, 'Shoot'], // Sling
+  [30, 1.0, 6, 18, 'Throw'], // Rock
+  [31, 0.3, 7, 23, 'Throw Stab'], // Poison Dart
+  [32, 0.1, 3, 19, 'Throw'], // Throwing Star
+  [34, 2.6, 12, 4, 'Swing'], // Staff
+  [35, 0.1, 0, 0, 'Calm Spellshield:2* Heal:3'], // Wand
+  [36, 0.2, 1, 20, 'Calm Spellshield:3* Fireshield:4*'], // Teowand
+  [37, 3.5, 18, 6, 'Parry Light* Dispell:3*'], // Yew Staff
+  [38, 2.9, 0, 4, 'Swing Dispell:3* Fireshield:4*'], // Staff Of Manar
+  [39, 2.1, 0, 3, 'Heal Calm:2 Brandish:3'], // Snake Staff
+  [41, 0.8, 3, 1, 'Swing'], // Dragon Spit
+  [42, 1.8, 9, 4, 'Parry Heal:3 Light:4*'], // Sceptre Of Lyf
+  [43, 0.8, 1, 1, 'Blow_Horn'], // Horn Of Fear
+  [44, 3.0, 1, 220, 'Shoot'], // Speedbow
+  [45, 3.6, 100, 50, 'Invoke Fuse Fluxcage'], // The Firestaff (Complete)
 ];
+
+// Combos of the other items ("Dungeon Master Items"); every other item has none.
+// prettier-ignore
+const OTHER_COMBOS = {
+  cloth: { 28: 'Block Hit:2', 29: 'Block Hit:2', 30: 'Block Hit:2', 31: 'Block Hit:2', 42: 'Block Hit:2', 47: 'Block Hit:2', 52: 'Block Hit:2' }, // shields
+  potion: { 3: 'Throw', 19: 'Throw' }, // Ven Potion, Ful Bomb
+  miscellaneous: { 6: 'Flip', 7: 'Flip', 8: 'Flip', 42: 'Freeze_Life', 43: 'Freeze_Life', 45: 'Climb_Down' }, // coins, magical boxes, rope
+};
+
+// Shooting (ReDMCSB F407, "Shoot"): the launcher, the ammunition it takes from the ready hand,
+// its shoot damage and the energy its projectile loses each step ("Class / DeltaEnergy").
+// prettier-ignore
+const LAUNCHERS = { 25: ['arrow', 50, 4], 26: ['arrow', 120, 14], 44: ['arrow', 125, 10], 29: ['rock', 50, 7] }; // bows, sling
+const AMMUNITION = { 27: 'arrow', 28: 'arrow', 30: 'rock' }; // Arrow, Slayer; Rock
 
 // prettier-ignore
 const WEIGHTS = {
@@ -190,40 +206,32 @@ const WEIGHTS = {
   ],
 };
 
-const WEAPON_INFO = new Map(
-  WEAPONS.map(([type, weight, strength, kinetic, actions]) => [
-    type,
-    {
-      weight,
-      strength,
-      kinetic,
-      actions: actions.split(' ').map((a) => {
-        const [name, damage] = a.split(':');
-        return { name: name.replace('_', ' '), damage: Number(damage) };
-      }),
-    },
-  ]),
-);
+const WEAPON_INFO = new Map(WEAPONS.map(([type, weight, strength, kinetic, combo]) => [type, { weight, strength, kinetic, combo: parseCombo(combo) }]));
 const WEIGHT = Object.fromEntries(Object.entries(WEIGHTS).map(([kind, rows]) => [kind, new Map(rows)]));
+const COMBO = Object.fromEntries(Object.entries(OTHER_COMBOS).map(([kind, rows]) => [kind, new Map(Object.entries(rows).map(([type, combo]) => [Number(type), parseCombo(combo)]))]));
 
 /**
- * Characteristics of an item ({ kind, index }): { weight (kg), strength, kinetic, actions,
- * weapon, throwable, melee }. `throwable`: its combo has the action Throw; `melee`: it
- * is a weapon with a striking action (any action with damage).
+ * Characteristics of an item ({ kind, index }): { weight (kg), strength, kinetic, combo, weapon,
+ * throwable, launcher?, ammunition? }. `combo`: [{ action, minLevel, needsCharge }] (action-info.js);
+ * `throwable`: its combo has the action Throw; `launcher`: { ammunition, shootDamage, stepLoss } of a
+ * bow or sling; `ammunition`: 'arrow' or 'rock'.
  */
 export function itemInfo(dungeon, { kind, index }) {
   const type = dungeon.data[ITEM_POOLS[kind]][index]?.type ?? 0;
   const weapon = kind === 'weapon' ? WEAPON_INFO.get(type) : null;
   if (weapon) {
+    const launcher = LAUNCHERS[type];
     return {
       ...weapon,
       weapon: true,
-      throwable: weapon.actions.some((a) => a.name === 'Throw'),
-      melee: weapon.actions.some((a) => a.damage > 0),
+      throwable: weapon.combo.some((c) => c.action.name === 'Throw'),
+      launcher: launcher && { ammunition: launcher[0], shootDamage: launcher[1], stepLoss: launcher[2] },
+      ammunition: AMMUNITION[type],
     };
   }
   const weight = WEIGHT[kind]?.get(type) ?? 1;
-  return { weight, strength: 0, kinetic: 0, actions: [], weapon: false, throwable: false, melee: false };
+  const combo = COMBO[kind]?.get(type) ?? [];
+  return { weight, strength: 0, kinetic: 0, combo, weapon: false, throwable: combo.some((c) => c.action.name === 'Throw') };
 }
 
 const POWER_SYMBOLS = ['Lo', 'Um', 'On', 'Ee', 'Pal', 'Mon'];
@@ -252,9 +260,13 @@ export function itemDetails(dungeon, ref) {
   if (info.weapon) {
     if (info.strength) lines.push(`Bonus de force : ${info.strength}`);
     if (info.kinetic) lines.push(`Énergie cinétique (lancer) : ${info.kinetic}`);
-    const actions = info.actions.filter((a) => a.name !== 'N');
-    if (actions.length) lines.push(`Actions : ${actions.map((a) => (a.damage ? `${a.name} (${a.damage})` : a.name)).join(', ')}`);
   }
+  // The actions of its combo, with their damage (1/32) and the minimum skill level (docs/044).
+  const actions = info.combo.map(({ action, minLevel }) => {
+    const notes = [action.damage && `dégâts ${action.damage}`, minLevel && `niveau ${minLevel}`].filter(Boolean);
+    return notes.length ? `${action.label} (${notes.join(', ')})` : action.label;
+  });
+  if (actions.length) lines.push(`Actions : ${actions.join(', ')}`);
   const states = [entry.poisoned && 'empoisonné', entry.cursed && 'maudit', entry.broken && 'cassé'].filter(Boolean);
   if (states.length) lines.push(states.join(', '));
   if (ref.kind === 'container' && entry.items) lines.push(`${entry.items.length} objet${entry.items.length > 1 ? 's' : ''} dedans`);

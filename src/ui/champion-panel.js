@@ -1,10 +1,10 @@
 // The champion's box over the first-person view, top left, as in DM (docs/023, 024): his
 // name, his two hands and three bars (health, stamina, mana). A click on a hand swaps
 // the item held by the cursor with the item of the hand. Below, the action panel of the
-// action hand (right): one button per action ("Frapper", "Lancer"), disabled while the
+// action hand (right): one button per action of its combo (docs/044), disabled while the
 // champion recovers from his last action (its fatigue, as in DM); after an action, the
-// damage done shows for a moment above them, as the action area of DM does. A hit taken shows
-// the damage on the box. When the champion dies, a veil covers the view with a
+// damage done or the action's name shows for a moment above them, as the action area of
+// DM does. A hit taken shows the damage on the box. When the champion dies, a veil covers the view with a
 // "Recommencer" button. A click on the box (out of the hands) with a potion held by the
 // cursor makes the champion drink it: the mouth of DM's inventory (docs/031).
 
@@ -14,7 +14,7 @@ const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
 /**
  * @param {HTMLElement} container the game viewport
  * @param {object} options
- * @param {(id: string) => void} options.onAction an action button ('hit', 'throw')
+ * @param {(id: number) => void} options.onAction an action button (index of the action, action-info.js)
  * @param {(hand: number) => void} options.onHand a hand was clicked (0 left, 1 right)
  * @param {() => void} options.onRestart the button of the death veil
  * @param {() => void} options.onMouth the box was clicked, out of the hands (drink the cursor's potion)
@@ -88,7 +88,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart, on
   return {
     /**
      * Shows the champion ({ name, health, stamina (×10), mana… }), his hands
-     * ([{ name, color, details? } or null, …]) and the actions of the action hand ([{ id, name }]).
+     * ([{ name, color, details? } or null, …]) and the actions of the action hand ([{ id (index), name }]).
      */
     update(champion, handItems, actionList) {
       name.textContent = champion.name;

@@ -1,20 +1,16 @@
 // Melee combat between the champion and the creatures (phase C3a, docs/023).
 // Pure functions: the caller gives the random generator (random() in [0, 1)).
 //
-// From the Encyclopaedia ("Actions and Combos"): the action "Hit" (Frapper), its
+// From the Encyclopaedia ("Actions and Combos"): each melee action (action-info.js) has its
 // stamina, hit probability, damage factor (1/32) and fatigue; an attack hits if one of
 // three tests succeeds (dexterity, a 1/4 chance, luck with the hit probability).
 // Non-material creatures ignore normal attacks ("Creature Details").
 // The exact formulas of the engine are not in the Encyclopaedia: the damage and the
 // tests below are PROVISIONAL, to be checked against ReDMCSB (docs/023 § 3).
 
-// Action 12 "Hit" / "Frapper" (Actions and Combos): skill Fight. Action 42 "Throw" /
-// "Lancer": its fatigue and stamina are 0 in the table (the engine sets them elsewhere):
-// provisional values here.
-export const ACTIONS = {
-  hit: { name: 'Frapper', stamina: 3, hitProbability: 20, damage: 20, fatigue: 4 },
-  throw: { name: 'Lancer', stamina: 2, fatigue: 4 },
-};
+// Action 42 "Throw" / "Lancer": its fatigue and stamina are 0 in the table (the engine sets
+// them elsewhere): provisional values here, also for a click that throws the cursor's item.
+export const THROW_COST = { stamina: 2, fatigue: 4 };
 
 // Defence of the champion by attack type ("Attacks and Defenses"): the statistic that counts.
 const DEFENCE_STAT = { blunt: 'vitality', sharp: 'vitality', fire: 'antiFire', magic: 'antiMagic', mental: 'wisdom' };
@@ -26,10 +22,11 @@ const randomInt = (random, n) => Math.floor(random() * n); // 0..n-1
 /**
  * The champion strikes a creature of species `info` with `action`, with the strength
  * bonus of the weapon in his action hand ("Dungeon Master Items": strength).
+ * `hitsNonMaterial`: Disrupt, or the Vorpal Blade (ReDMCSB F402).
  * @returns {{ result: 'immaterial'|'miss'|'hit', damage: number }}
  */
-export function championStrikes(champion, info, action, random, weaponStrength = 0) {
-  if (info.nonMaterial) return { result: 'immaterial', damage: 0 };
+export function championStrikes(champion, info, action, random, weaponStrength = 0, hitsNonMaterial = false) {
+  if (info.nonMaterial && !hitsNonMaterial) return { result: 'immaterial', damage: 0 };
   const hits =
     randomInt(random, champion.dexterity + info.dexterity + 1) >= info.dexterity || // dexterity test
     randomInt(random, 4) === 0 || // a quarter of the time

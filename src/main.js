@@ -23,7 +23,6 @@ import { DEFAULT_AUDIO } from './audio/audio-settings.js';
 import { createAudio } from './audio/audio.js';
 import { createControls } from './sim/controls.js';
 import { BLOCK_LABELS } from './sim/rules.js';
-import { ACTIONS } from './sim/combat.js';
 import { SYMBOLS } from './core/spell-info.js';
 import { itemDetails } from './core/item-info.js';
 
@@ -655,14 +654,15 @@ async function teleportToSelection() {
 
 // Click on the wall or door in front of the party (mouse in the view, or Space); on a
 // creature in front, the item held by the cursor is thrown at it, or else the champion
-// strikes it ("Frapper" of his action hand).
+// strikes it with the first melee action of his action hand (docs/044).
 // `kind`: what the pointer designates in the view ('front': the wall or the door, even with a
 // creature under it; 'creature'); from the keyboard (none), a creature in front comes first.
 function clickFront(side = 'right', kind = null) {
   const [dx, dy] = SIDE_DELTAS[sim.party.facing];
   if (kind !== 'front' && sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) {
     if (sim.hand) return throwHeld(side);
-    return sim.actions.includes('hit') ? doAction('hit') : showInfo('Aucune action de frappe avec cet objet');
+    const melee = sim.actions.find((a) => a.kind === 'melee');
+    return melee ? doAction(melee.index) : showInfo('Aucune action de frappe avec cet objet');
   }
   const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
   if (broken) {
@@ -674,26 +674,39 @@ function clickFront(side = 'right', kind = null) {
   else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
-// An action of the action hand (docs/024): "Frapper" the creature in front, "Lancer" the
-// item of the hand. What it does to a creature is shown by the 'creatureHit' handler.
-function doAction(id) {
-  const { result, item } = sim.act(id);
+// An action of the action hand (docs/044), by its index. What a strike or a shot does to a
+// creature is shown by the 'creatureHit' handler; the other results here, in the action area
+// (as DM writes the action done there) and in the status bar.
+function doAction(index) {
+  const { result, item, action, broken, healed, group } = sim.act(index);
   game?.panel.setReady(sim.fatigue === 0); // disabled at once, not at the next tick
-  if (result === 'nothing') return showInfo('Rien à lancer');
-  if (result === 'exhausted') return showInfo('Trop fatigué');
-  if (result === 'thrown') return showInfo(`Lancé : ${itemName(item)}`);
-  // A strike that meets no creature (the 'creatureHit' handler shows the others).
-  const missed = STRIKE_WORDS[result];
-  if (missed) {
-    game?.panel.showResult(missed[0]);
-    showInfo(missed[1]);
-  }
+  const label = action?.label ?? '';
+  const words = {
+    nothing: ['', action?.kind === 'climb' ? 'Pas de trappe ouverte devant' : action?.kind === 'heal' ? 'Rien à guérir' : 'Rien à lancer'],
+    exhausted: ['', 'Trop fatigué'],
+    pending: [label, `${label} : pas encore implémenté`],
+    thrown: [label, `Lancé : ${item && itemName(item)}`],
+    shot: [label, `Tiré : ${item && itemName(item)}`],
+    noAmmo: ['Pas de munitions', 'Il faut des munitions dans la main gauche'],
+    cast: [label, label],
+    light: [label, 'La lumière magique se répand'],
+    healed: [label, `${championName(sim.champion)} regagne ${healed} PV`],
+    heads: [label, 'C’est face'],
+    tails: [label, 'C’est pile'],
+    climbed: [label, 'Descente à la corde'],
+    done: [label, label],
+    nobody: [label, `${label} : personne devant`],
+    frightened: [label, group && `${describeGroup(dungeon, group).name} : pris de peur, il s’enfuit`],
+    resisted: [label, group && `${describeGroup(dungeon, group).name} : ne se laisse pas impressionner`],
+    doorHit: [label, broken ? '' : 'Coup sur la porte, qui tient bon'], // broken: see 'doorBroken'
+    air: [label, 'Le coup frappe dans le vide'],
+    wall: [label, 'Le coup frappe le mur'],
+    door: [label, 'Le coup frappe la porte, sans l’abîmer'],
+  }[result];
+  if (!words) return;
+  if (words[0]) game?.panel.showResult(words[0]);
+  if (words[1]) showInfo(words[1]);
 }
-const STRIKE_WORDS = {
-  air: ['Dans le vide', 'Le coup frappe dans le vide'],
-  wall: ['Mur', 'Le coup frappe le mur'],
-  door: ['Porte', 'Le coup frappe la porte, sans l’abîmer'],
-};
 
 // A click with an item held by the cursor, out of reach (or on a creature): it is thrown
 // from that side of the view.
@@ -717,7 +730,7 @@ function showChampion() {
   game?.panel.update(
     sim.champion,
     sim.hands.map(describe),
-    sim.actions.map((id) => ({ id, name: ACTIONS[id].name })),
+    sim.actions.map((a) => ({ id: a.index, name: a.label })),
   );
   game?.spells.update(sim.champion, sim.knownSpells);
 }
@@ -854,8 +867,8 @@ sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown, spell
   else if (spell) showInfo(`${name} brûlé : ${damage} PV`);
 });
 // A fireball broke a door (docs/033).
-sim.on('doorBroken', () => {
-  showInfo('La boule de feu fait voler la porte en éclats');
+sim.on('doorBroken', ({ by }) => {
+  showInfo(by === 'melee' ? 'La porte vole en éclats' : 'La boule de feu fait voler la porte en éclats');
   game?.window.flash();
 });
 sim.on('itemStolen', ({ group, item }) => showInfo(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));

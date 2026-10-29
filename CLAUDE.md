@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-29, après la doc 043.
+> Mis à jour le 2026-10-29, après la doc 044.
 
 ### Données et visualiseur
 
@@ -75,6 +75,7 @@ Analyser le fichier XML en se concentrant d'abord sur
     - les deux mains de Zed et un panneau d'actions par objet, avec délai de fatigue ;
     - lancer de tout objet et moteur de projectiles (`projectiles.js`) ;
     - caractéristiques des objets dans `src/core/item-info.js`.
+  - Actions des objets (doc 044) : les combos de DM remplacent « Frapper » (`src/core/action-info.js`, combos dans `item-info.js`), filtrés par niveau de compétence (`skillLevel`, F303) et charges ; frappes (et portes), tir, sorts d'objets, peur, lumière, soin, pile ou face, corde ; les autres « pas encore implémentés ».
 - **Données du moteur reconstituées** depuis la *Dungeon Master Encyclopaedia* :
   - `creature-info.js` (espèces) ;
   - `item-info.js` (objets) ;
@@ -99,7 +100,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ### En attente
 
-- **C3b** (projectiles muraux, sorts des créatures) et **C3c** (fidélité du combat : vraies formules, actions des combos, expérience, armures, cri de guerre) : mises de côté **en attendant le système de sorts du groupe**.
+- **C3b** (projectiles muraux, sorts des créatures) et **C3c** (fidélité du combat : vraies formules, expérience, armures, défense des actions, actions restantes des combos) : mises de côté **en attendant le système de sorts du groupe**.
 - **Valeurs provisoires**, à confirmer dans ReDMCSB :
   - formules de dégâts et de toucher ;
   - portée et dégâts des objets lancés ;

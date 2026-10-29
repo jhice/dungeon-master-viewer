@@ -51,6 +51,20 @@ export function createMagic(dungeon, state, clock, hooks) {
     return { energy, stepLoss };
   }
 
+  /**
+   * A spell projectile of a given energy, as an action of an item casts it (F327, docs/044): Fireball,
+   * Spit. The step loss of the caster as above. Mana is the caller's business.
+   */
+  function launchAction(spell, energy) {
+    let stepLoss = 10 - Math.min(8, champion().maxMana >> 3);
+    if (energy < stepLoss << 2) {
+      energy += 3;
+      stepLoss--;
+    }
+    const p = party();
+    return projectiles.launch({ spell, attack: SPELL_ATTACK, level: p.level, x: p.x, y: p.y, direction: p.facing, side: 'right', energy, stepLoss });
+  }
+
   /** Casts a projectile spell (Open Door, Fireball) in front of the party, from its right side. */
   function launch(spell, power) {
     const p = party();
@@ -77,14 +91,15 @@ export function createMagic(dungeon, state, clock, hooks) {
     return attack + rnd(attack) + 1;
   }
 
-  // F232: a closed door of a destructible kind gives way to an attack at least equal to its defence.
-  function attackDoor(level, x, y, attack, magic) {
+  // F232: a closed door of a destructible kind gives way to an attack at least equal to its defence:
+  // magic (an explosion) or not (a fireball's impact, a strike that breaks doors: `by` 'melee', docs/044).
+  function attackDoor(level, x, y, attack, magic, by = 'fireball') {
     const door = logic.doorAt(level, x, y);
     const detail = state.tileAt(level, x, y)?.detail;
     if (!door || !detail || detail.broken || !(magic ? door.fireball : door.force)) return false;
     if (attack < (DOOR_DEFENSE[dungeon.level(level).doorTypes[door.type]] ?? Infinity) || doorStep(detail) !== DOOR_CLOSED) return false;
     logic.breakDoor(level, x, y);
-    emit('doorBroken', { level, x, y, by: 'fireball' });
+    emit('doorBroken', { level, x, y, by });
     return true;
   }
 
@@ -164,5 +179,5 @@ export function createMagic(dungeon, state, clock, hooks) {
     return true;
   }
 
-  return { launch, torch, impact, hitGroup, projectileEnergy };
+  return { launch, launchAction, torch, impact, hitGroup, attackDoor, projectileEnergy };
 }

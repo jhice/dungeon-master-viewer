@@ -178,6 +178,17 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     emit('groupFled', { group, reason });
   }
 
+  /**
+   * An action of the champion (War Cry, Calm, Brandish, Blow Horn, Confuse) frightens the group
+   * (ReDMCSB F401): it flees for (16 − fear resistance) × 4 ticks (the engine counts that many ticks
+   * divided by its movement duration, in moves: about as long).
+   */
+  function frighten(group) {
+    group.fleeUntil = Math.max(group.fleeUntil ?? 0, clock.now + ((16 - creatureInfo(group.type).fear) << 2));
+    group.target = null;
+    emit('groupFled', { group, reason: 'fear' });
+  }
+
   // One step that takes the group farther from the party; false if none does.
   function flee(group, info, p) {
     const distance = (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y);
@@ -323,5 +334,5 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     return true;
   }
 
-  return { update, settle, generate, provoke, alarm, kill, reset };
+  return { update, settle, generate, provoke, alarm, kill, frighten, reset };
 }

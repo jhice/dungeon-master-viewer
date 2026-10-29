@@ -10,8 +10,8 @@ import { createLogic } from './logic.js';
 import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
-import { createChampion, championMirror, regenerate } from './champion.js';
-import { ACTIONS, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
+import { createChampion, championMirror, regenerate, skillLevel } from './champion.js';
+import { THROW_COST, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
 import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
@@ -20,6 +20,9 @@ import { createMagic } from './magic.js';
 import { createGrimoire } from './grimoire.js';
 import { creatureInfo } from '../core/creature-info.js';
 import { itemInfo } from '../core/item-info.js';
+import { EMPTY_HAND } from '../core/action-info.js';
+import { ITEM_POOLS } from '../core/contents.js';
+import { DOOR_CLOSED, doorStep } from '../core/tile-states.js';
 import { mulberry32 } from './random.js';
 import { attackSound } from '../core/sound-info.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
@@ -27,6 +30,10 @@ import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 // Seed of the combat random draws (a game replays the same way).
 const COMBAT_SEED = 0xc3a;
 const LORD_CHAOS = 23; // cannot be damaged ("archenemy", ReDMCSB F190)
+const VORPAL_BLADE = 16; // weapon type: its strikes reach non-material creatures (F402)
+const DOOR_FATIGUE = 6; // F407: fatigue of a strike on a closed door
+const LIGHT_POWER = 2; // F407, Light: magical light of power 2…
+const LIGHT_TICKS = 2500; // …for 2500 ticks (F404)
 
 export const COMMANDS = ['forward', 'back', 'left', 'right', 'turnLeft', 'turnRight'];
 
@@ -186,23 +193,55 @@ export function createSimulation(dungeon) {
     return state.hands[hand];
   }
 
-  // An action costs stamina and makes the champion tired for a while; null if he can act.
-  function spend(action) {
+  // Whether the champion can act now with `stamina` to spend: null if so, else why not.
+  function refusal(stamina) {
     if (champion.dead) return 'dead';
     if (clock.now < champion.readyAt) return 'busy';
-    if (champion.stamina < action.stamina) return 'exhausted';
-    champion.stamina -= action.stamina;
-    champion.readyAt = clock.now + action.fatigue;
-    championChanged();
+    if (champion.stamina < stamina) return 'exhausted';
     return null;
   }
 
-  // Actions of an item in the action hand (docs/024): a melee weapon or the empty hand
-  // strike ("Frapper"), a throwable weapon is thrown ("Lancer"); other items have none.
+  // What an action costs once done (F407): its stamina (plus 0 or 1, ×10 as stored) and its fatigue.
+  function pay(stamina, fatigue) {
+    champion.stamina = Math.max(0, champion.stamina - stamina);
+    champion.readyAt = clock.now + fatigue;
+    championChanged();
+  }
+  const payAction = (action, fatigue = action.fatigue) => pay(action.stamina + Math.floor(random() * 2), fatigue);
+
+  // An action with a fixed cost (Throw, see THROW_COST): null if paid, else why not.
+  function spend(cost) {
+    const refused = refusal(cost.stamina);
+    if (refused) return refused;
+    pay(cost.stamina, cost.fatigue);
+    return null;
+  }
+
+  const entryOf = (item) => dungeon.data[ITEM_POOLS[item.kind]][item.index];
+  const front = () => {
+    const [dx, dy] = SIDE_DELTAS[party.facing];
+    return [party.x + dx, party.y + dy];
+  };
+
+  /**
+   * Actions of the action hand (docs/044, ReDMCSB F383): the combo of its item, or Punch, Kick and
+   * War Cry with an empty hand. The first one is always there; the others need the champion's level
+   * in their skill, and a charge of the item when the combo says so.
+   */
   function actionsOf(item) {
-    if (!item) return ['hit'];
-    const info = itemInfo(dungeon, item);
-    return [...(info.throwable ? ['throw'] : []), ...(info.melee ? ['hit'] : [])];
+    const combo = item ? itemInfo(dungeon, item).combo : EMPTY_HAND;
+    const charges = item ? (entryOf(item)?.charges ?? 0) : 0;
+    return combo
+      .filter((c, i) => i === 0 || ((!c.needsCharge || charges > 0) && skillLevel(champion, c.action.skill) >= c.minLevel))
+      .map((c) => c.action);
+  }
+
+  // F405: the item of the action hand loses a charge.
+  function useCharge() {
+    const entry = state.hands[1] && entryOf(state.hands[1]);
+    if (!entry?.charges) return;
+    entry.charges--;
+    events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
   }
 
   /**
@@ -223,25 +262,189 @@ export function createSimulation(dungeon) {
   }
 
   /**
-   * The champion strikes in front of him ("Frapper"), with the weapon of his action hand.
-   * The strike always costs its stamina and fatigue, whatever it meets: the group in front
-   * (wounded or missed), a wall ('wall', a closed fake wall too), a closed door ('door':
-   * "Hit" is not one of the actions that break doors, "Actions and Combos" note e), or
-   * nothing ('air': an open door, an imaginary wall, an empty tile).
-   * @returns {{ result: 'dead'|'busy'|'exhausted'|'air'|'wall'|'door'|'immaterial'|'miss'|'hit', damage?, group?, killed?, destroyed? }}
+   * A melee action (F402): the champion strikes the group in front, with the weapon of his action hand.
+   * On a closed door, an action that breaks doors attacks it instead (F232, `doorHit`, fatigue 6);
+   * against a wall, a door or nothing ('wall', 'door', 'air'), it costs half its fatigue (F407).
+   * @returns {{ result: 'air'|'wall'|'door'|'doorHit'|'immaterial'|'miss'|'hit', broken?, damage?, group?, killed?, destroyed? }}
    */
-  function attack() {
-    const action = ACTIONS.hit;
-    const refused = spend(action);
-    if (refused) return { result: refused };
+  function strike(action) {
     sound('combat', party, true);
-    const [dx, dy] = SIDE_DELTAS[party.facing];
-    const [x, y] = [party.x + dx, party.y + dy];
-    const group = state.groupAt(party.level, x, y);
-    if (!group) return { result: blockReason(state, party.level, x, y) === 'door' ? 'door' : blockReason(state, party.level, x, y) ? 'wall' : 'air' };
+    const [x, y] = front();
     const weapon = state.hands[1];
-    const bonus = weapon ? itemInfo(dungeon, weapon).strength : 0;
-    return damageGroup(group, championStrikes(champion, creatureInfo(group.type), action, random, bonus));
+    const bonus = weapon?.kind === 'weapon' ? itemInfo(dungeon, weapon).strength : 0;
+    const group = state.groupAt(party.level, x, y);
+    if (!group) {
+      const blocked = blockReason(state, party.level, x, y);
+      const tile = state.tileAt(party.level, x, y);
+      if (blocked === 'door' && action.breaksDoors && !tile.detail.broken && doorStep(tile.detail) === DOOR_CLOSED) {
+        payAction(action, DOOR_FATIGUE);
+        sound('thud', party);
+        // F312, simplified: (strength + 0..15 + the weapon's bonus) / 2, at most 100 (provisional).
+        const attack = Math.min(100, (champion.strength + Math.floor(random() * 16) + bonus) >> 1);
+        return { result: 'doorHit', broken: magic.attackDoor(party.level, x, y, attack, false, 'melee') };
+      }
+      payAction(action, action.fatigue >> 1);
+      return { result: blocked === 'door' ? 'door' : blocked ? 'wall' : 'air' };
+    }
+    payAction(action);
+    const nonMaterial = action.name === 'Disrupt' || (weapon?.kind === 'weapon' && entryOf(weapon).type === VORPAL_BLADE);
+    return damageGroup(group, championStrikes(champion, creatureInfo(group.type), action, random, bonus, nonMaterial));
+  }
+
+  /**
+   * The champion strikes in front of him with a melee action of his action hand: `index`, or else
+   * its first one (a click on a creature in the view, the tests).
+   */
+  function attack(index) {
+    const melee = actionsOf(state.hands[1]).filter((a) => a.kind === 'melee');
+    const action = melee.find((a) => a.index === index) ?? melee[0];
+    if (!action) return { result: 'unavailable' };
+    return act(action.index);
+  }
+
+  /**
+   * Shoots with the bow or sling of the action hand the ammunition of the ready hand (F407, F326):
+   * energy = kinetic energy of both, step loss of the launcher; the shoot damage and the Shoot skill
+   * add to the damage (provisional, docs/044). Paid even without ammunition, as in DM.
+   */
+  function shoot(action) {
+    payAction(action);
+    const launcherInfo = itemInfo(dungeon, state.hands[1]);
+    const ammo = state.hands[0];
+    const ammoInfo = ammo && itemInfo(dungeon, ammo);
+    if (!launcherInfo.launcher || ammoInfo?.ammunition !== launcherInfo.launcher.ammunition) return { result: 'noAmmo' };
+    state.hands[0] = null;
+    events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
+    sound('combat', party, true);
+    const attack = (launcherInfo.launcher.shootDamage + skillLevel(champion, 'Shoot')) << 1;
+    projectiles.launch({
+      item: ammo,
+      level: party.level,
+      x: party.x,
+      y: party.y,
+      direction: party.facing,
+      side: 'right',
+      energy: launcherInfo.kinetic + ammoInfo.kinetic,
+      stepLoss: launcherInfo.launcher.stepLoss,
+      kinetic: ammoInfo.kinetic + (attack >> 2),
+      mass: 1,
+      attack,
+    });
+    return { result: 'shot', item: ammo };
+  }
+
+  /**
+   * A spell projectile of an item (F407, F327): Fireball, Spit, Invoke (a fireball 3 times out of 6;
+   * its poison bolts and clouds and its spell against non-material beings are not done yet). It costs
+   * 7 − min(6, skill level) mana; with less mana, its energy shrinks in proportion (at least 2).
+   */
+  function castAction(action) {
+    let { spell, energy } = action;
+    if (spell === 'invoke') {
+      energy = Math.floor(random() * 128) + 100;
+      spell = Math.floor(random() * 6) >= 3 ? 'fireball' : null;
+    }
+    let mana = 7 - Math.min(6, skillLevel(champion, action.skill));
+    if (champion.mana < mana) {
+      energy = Math.max(2, Math.floor((champion.mana * energy) / mana));
+      mana = champion.mana;
+    }
+    champion.mana -= mana;
+    payAction(action);
+    useCharge();
+    if (!spell) return { result: 'pending' };
+    magic.launchAction(spell, energy);
+    return { result: 'cast', spell };
+  }
+
+  /**
+   * War Cry, Calm, Brandish, Blow Horn, Confuse (F401): the group in front flees unless its fear
+   * resistance beats a draw below the action's fright plus the Influence skill level (15: immune).
+   */
+  function frighten(action) {
+    payAction(action);
+    if (action.usesCharge) useCharge();
+    const group = state.groupAt(party.level, ...front());
+    if (!group) return { result: 'nobody' };
+    const fear = creatureInfo(group.type).fear;
+    if (fear === 15 || fear > Math.floor(random() * (action.fright + skillLevel(champion, 'Influence')))) return { result: 'resisted', group };
+    creatures.frighten(group);
+    return { result: 'frightened', group };
+  }
+
+  /**
+   * Heal (F407, DM 1.1 and later): as long as health is missing and mana is left, the champion gains
+   * min(missing, min(10, Heal level)) health for 2 mana.
+   */
+  function heal(action) {
+    payAction(action);
+    let missing = champion.maxHealth - champion.health;
+    if (missing <= 0 || !champion.mana) return { result: 'nothing' };
+    const step = Math.min(10, skillLevel(champion, 'Heal'));
+    let healed = 0;
+    do {
+      const amount = Math.min(missing, step);
+      champion.health += amount;
+      healed += amount;
+      missing -= amount;
+      champion.mana -= 2;
+    } while (champion.mana > 0 && missing > 0);
+    champion.mana = Math.max(0, champion.mana);
+    championChanged();
+    return { result: 'healed', healed };
+  }
+
+  // Climb Down (F407): with the rope, the party goes down the open pit in front (if no group is
+  // over it); else nothing happens, without fatigue.
+  function climb(action) {
+    const [x, y] = front();
+    const tile = state.tileAt(party.level, x, y);
+    if (tile?.type !== 'pit' || !tile.detail.open || state.groupAt(party.level, x, y)) {
+      payAction(action, 0);
+      return { result: 'nothing' };
+    }
+    payAction(action);
+    command('forward');
+    return { result: 'climbed' };
+  }
+
+  const ACTS = {
+    melee: strike,
+    shoot,
+    spell: castAction,
+    fright: frighten,
+    heal,
+    climb,
+    light(action) {
+      payAction(action);
+      useCharge();
+      light.addMagical(LIGHT_POWER, LIGHT_TICKS);
+      return { result: 'light' };
+    },
+    flip(action) {
+      payAction(action);
+      return { result: random() < 0.5 ? 'heads' : 'tails' };
+    },
+    defend(action) {
+      payAction(action);
+      return { result: 'done' };
+    },
+  };
+
+  /**
+   * An action of the action hand (docs/044, F407), by its index in action-info.js. Throw throws the
+   * item of the hand; the actions not done yet ('pending') cost nothing.
+   * @returns {{ result: string, action?, ... }} 'unavailable', 'pending', 'dead', 'busy', 'exhausted',
+   *   or the result of the action
+   */
+  function act(index) {
+    const action = actionsOf(state.hands[1]).find((a) => a.index === index);
+    if (!action) return { result: 'unavailable' };
+    if (action.kind === 'pending') return { result: 'pending', action };
+    if (action.kind === 'throw') return { ...throwItem(1), action };
+    const refused = refusal(action.stamina);
+    if (refused) return { result: refused, action };
+    return { ...ACTS[action.kind](action), action };
   }
 
   /**
@@ -254,7 +457,7 @@ export function createSimulation(dungeon) {
   function throwItem(from, side = from === 0 ? 'left' : 'right') {
     const item = from === 'cursor' ? state.hand : state.hands[from];
     if (!item) return { result: 'nothing' };
-    const refused = spend(ACTIONS.throw);
+    const refused = spend(THROW_COST);
     if (refused) return { result: refused };
     sound('combat', party, true);
     if (from === 'cursor') state.hand = null;
@@ -350,14 +553,12 @@ export function createSimulation(dungeon) {
       return champion;
     },
     attack,
-    /** Actions of the item in the action hand: ['hit' (Frapper)?, 'throw' (Lancer)?]. */
+    /** Actions of the action hand, as the panel shows them: [action of action-info.js]. */
     get actions() {
       return actionsOf(state.hands[1]);
     },
-    /** Does an action of the action hand: 'hit' or 'throw'. */
-    act(id) {
-      return id === 'throw' ? throwItem(1) : attack();
-    },
+    /** Does an action of the action hand, by its index (action-info.js). */
+    act,
     /** Throws the item held by the cursor, from the left or right side of the view. */
     throwHeld: (side) => throwItem('cursor', side),
     /** The champion's hands: [left (ready), right (action)]. */
