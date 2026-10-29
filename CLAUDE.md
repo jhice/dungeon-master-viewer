@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-29, après la doc 046.
+> Mis à jour le 2026-10-29, après la doc 047.
 
 ### Données et visualiseur
 
@@ -96,6 +96,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   - Panneau « Lumière (vue du jeu) » : intensité, portée, atténuation, lumière permanente, torches murales lumineuses ; défauts dans `lighting-settings.js`.
   - Plus d'ombres, de scintillement, de brouillard, de relief ni de lumière hémisphérique.
 - **Lumière arrêtée par les murs (doc 038) :** option du panneau (`occlusion`, `fp-occlusion.js`). Un masque par case et par lumière, calculé par rayons sur la grille, est lu par le shader des matériaux Lambert de la vue.
+- **Durée d'un tick (doc 047) :** 220 ms (`TICK_MS`, `main.js`), soit 11 synchronisations verticales à 50 Hz, comme la boucle de jeu de DM en PAL.
 - **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`.
 
 ### En attente
@@ -113,7 +114,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Sons (docs 039 à 042) :**
   - inventaire : 33 sons d'Amiga 3.6, avec leurs déclencheurs pris dans ReDMCSB (doc 040) ;
   - plan (doc 041) ;
-  - chocs et sons différés (doc 045) : un mur heurté coûte 2 PV au premier rang ; un clic sans effet sur un mur joue le bruit sourd ; blessure, porte frappée et butin sonnent après l'attaque, avec un délai fixe joué par le module audio (`LATER_TICKS`, doc 046) ;
+  - chocs et sons différés (doc 045) : un mur heurté coûte 2 PV au premier rang ; un clic sans effet sur un mur joue le bruit sourd ; blessure, porte frappée et butin sonnent après l'attaque, avec un délai fixe d'un tick joué par le module audio (`LATER_TICKS`, doc 046) ;
   - réalisation (doc 042) : la simulation émet `sound` (`src/core/sound-info.js`) ; `src/audio/audio.js` les joue en Web Audio (niveau du groupe, volume linéaire selon la distance de Manhattan, stéréo, un son par tick, 4 voix) ; section « Sons » du panneau (`audio-settings.js`) ;
   - fichiers dans `assets/sounds/NN.mp3`, pris sur greatstone.
 - **Phases G (sorts) et H (lumière)** : planifiées dans la doc 029, questions tranchées. Ordre : G1 (faite, doc 030), G2 (faite, doc 031), H1 (faite, doc 032), G3 (faite, doc 033), G4 (faite, doc 034), H2 (faite, doc 035), H3 (faite, doc 036), puis la refonte de la lumière (docs 037, 038).

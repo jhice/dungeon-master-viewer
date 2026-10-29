@@ -555,8 +555,9 @@ window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell
 // One simulation shared by every view: the first-person window, and the party
 // marker of the 2D/3D renderers, whose shown level follows the party.
 const sim = createSimulation(dungeon);
-// Duration of a game tick (actuator delays are in ticks). About 1/6 s in DM, to be checked.
-const TICK_MS = 1000 / 6;
+// Duration of a game tick (actuator delays are in ticks): DM's game loop advances every 11
+// vertical blanks (ReDMCSB MAIN.C), 220 ms on a 50 Hz PAL screen, as the Amiga 3.6 of our sounds (docs/047).
+const TICK_MS = (11 * 1000) / 50;
 // Sounds of the simulation (docs/041): the files of DM Amiga 3.6, in assets/sounds/.
 const audio = createAudio({ base: 'assets/sounds/', party: () => sim.party, tickMs: TICK_MS, settings: audioSettings() });
 sim.on('sound', audio.request);

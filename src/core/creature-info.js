@@ -6,7 +6,7 @@
 // Smell range, Attack Ticks, Defense, Attack, Dexterity, Fear resistance; attack types
 // from the page "Attacks and Defenses". Where versions differ, the values of DM Amiga 3.6 / PC 3.4 (column "d").
 //
-// moveTicks   minimum ticks (1/6 s) between two moves; 255 = never moves
+// moveTicks   minimum ticks (220 ms, docs/047) between two moves; 255 = never moves
 // levitation  passes over pits, does not press floor plates
 // nonMaterial passes through doors of any type
 // size        0 = 4 per tile, 1 = 2 per tile, 2 = 1 per tile (centre)

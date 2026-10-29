@@ -8,7 +8,7 @@
 // symbols     the symbols after the power one (1 to 3 names)
 // kind        'potion' | 'projectile' | 'other' (M67_SPELL_KIND)
 // difficulty  base required skill level; required level = difficulty + power (1..6), F412
-// fatigue     ticks (1/6 s) during which the action hand is disabled after the cast
+// fatigue     ticks (220 ms, docs/047) during which the action hand is disabled after the cast
 // skill       index of the skill trained and tested (0..3 classes, 4..19 hidden skills)
 // potion      name and type (engine potion type, DEFS.H) of the potion a potion spell fills a flask with
 // effect      what the spell does, for the phases that code it (G2 potions, G3 torch, openDoor, fireball)
