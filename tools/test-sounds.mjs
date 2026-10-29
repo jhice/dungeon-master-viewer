@@ -38,14 +38,19 @@ function besides(level, x, y) {
 // 0. Every sound has a file.
 check(Object.values(SOUNDS).every((s) => /^\d\d$/.test(s.file)), `${Object.keys(SOUNDS).length} sons, chacun avec son fichier`);
 
-// 1. Running into a wall: immediate, on the party's tile; into a creature: nothing.
+// 1. Running into a wall: immediate, on the party's tile, and Zed loses 2 health (F366); a click on
+// the bare wall knocks on it (thud).
 {
   sim.reset();
   const { level, x, y } = sim.party;
-  const wall = Object.keys(SIDE_DELTAS).find((f) => blockReason(sim.state, level, x + SIDE_DELTAS[f][0], y + SIDE_DELTAS[f][1]) === 'wall');
+  const wall = Object.keys(SIDE_DELTAS).find((f) => blockReason(sim.state, level, x + SIDE_DELTAS[f][0], y + SIDE_DELTAS[f][1]) === 'wall' && !sim.state.actuatorsAt(level, x + SIDE_DELTAS[f][0], y + SIDE_DELTAS[f][1]).length);
   face(wall);
+  const health = sim.champion.health;
   const sounds = heard(() => sim.command('forward'));
   check(ids(sounds).join() === 'wall' && sounds[0].immediate && sounds[0].x === x && sounds[0].y === y, `mur heurté : ${ids(sounds).join() || 'rien'}`);
+  check(sim.champion.health === health - 2, `mur heurté : Zed perd ${health - sim.champion.health} PV (2 attendus)`);
+  const knock = heard(() => sim.clickFront());
+  check(ids(knock).join() === 'thud', `clic sur le mur nu : ${ids(knock).join() || 'rien'}`);
 }
 
 // 2. A door: one sound per step, on its tile; its button clicks.
@@ -127,6 +132,19 @@ for (const audible of [true, false]) {
   for (let t = 0; t < 6 * 30 && !sounds.some((s) => s.id === expected); t++) sounds.push(...heard(() => sim.tick(1)));
   const attack = sounds.find((s) => s.id === expected);
   check(attack && attack.x === group.x && attack.y === group.y, `attaque du groupe N2 (10, 20) : ${expected}`);
+  // The wound sounds a tick after the attack that causes it (F230, C02_MODE_PLAY_ONE_TICK_LATER).
+  {
+    const delays = [];
+    let tick = 0;
+    let attackTick = null;
+    const off = sim.on('sound', (s) => {
+      if (s.id === expected) attackTick = tick;
+      if (s.id === 'wounded' && attackTick !== null) delays.push(tick - attackTick);
+    });
+    for (; tick < 6 * 60 && !delays.length; tick++) sim.tick(1);
+    off();
+    check(delays[0] === 1, `blessure de Zed : un tick après l'attaque (${delays[0]})`);
+  }
   for (let t = 0; t < 6 * 60 && !sounds.some((s) => s.id === 'wounded'); t++) sounds.push(...heard(() => sim.tick(1)));
   const wound = sounds.find((s) => s.id === 'wounded');
   check(wound && wound.x === sim.party.x && wound.y === sim.party.y, 'Zed blessé : son sur la case du groupe');
@@ -140,6 +158,26 @@ for (const audible of [true, false]) {
   for (let t = 0; t < 6 * 60; t++) sounds.push(...heard(() => sim.tick(1)));
   const steps = sounds.filter((s) => s.id.startsWith('move:'));
   check(steps.length > 0, `pas des créatures du niveau 2 en 1 min : ${steps.length}`);
+}
+
+// 7. A sword on a closed door: the combat sound now, the thud of the door a tick later (F407).
+{
+  sim.reset();
+  const map = dungeon.level(0);
+  let door = null;
+  for (let y = 0; y < map.height && !door; y++)
+    for (let x = 0; x < map.width && !door; x++) {
+      const tile = sim.state.tileAt(0, x, y);
+      if (tile?.type !== 'door' || tile.detail.open) continue;
+      const found = besides(0, x, y);
+      if (found) door = { x, y, ...found };
+    }
+  sim.teleport(0, ...door.from);
+  face(door.facing);
+  sim.state.hands[1] = { kind: 'weapon', index: dungeon.data.weapons.findIndex((w) => w.name === 'Sword') };
+  const now = heard(() => sim.attack());
+  const later = heard(() => sim.tick(1));
+  check(ids(now).join() === 'combat' && ids(later).includes('thud'), `épée sur la porte N0 (${door.x}, ${door.y}) : ${ids(now).join()} puis ${ids(later).join()}`);
 }
 
 console.log(failures ? `\n${failures} échec(s)` : '\nTout est bon.');

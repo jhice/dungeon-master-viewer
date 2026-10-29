@@ -238,9 +238,11 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     return true;
   }
 
-  // Possessions falling: metallic if there is a weapon among them (ReDMCSB F186, F188).
+  // Possessions falling: metallic if there is a weapon among them (ReDMCSB F186, F188), a tick
+  // after the death so that the sound of the blow plays first (C02_MODE_PLAY_ONE_TICK_LATER).
   function dropSound({ level, x, y }, items) {
-    emit('sound', { id: items.some((i) => i.kind === 'weapon') ? 'metal' : 'thud', level, x, y });
+    const id = items.some((i) => i.kind === 'weapon') ? 'metal' : 'thud';
+    clock.schedule(1, () => emit('sound', { id, level, x, y }));
   }
 
   // One step on a shortest way towards `goal` (next to it, or onto it); false if none.

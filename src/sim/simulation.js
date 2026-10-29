@@ -32,6 +32,7 @@ const COMBAT_SEED = 0xc3a;
 const LORD_CHAOS = 23; // cannot be damaged ("archenemy", ReDMCSB F190)
 const VORPAL_BLADE = 16; // weapon type: its strikes reach non-material creatures (F402)
 const DOOR_FATIGUE = 6; // F407: fatigue of a strike on a closed door
+const WALL_ATTACK = 1; // F366: attack on the front row when the party runs into a wall
 const LIGHT_POWER = 2; // F407, Light: magical light of power 2…
 const LIGHT_TICKS = 2500; // …for 2500 ticks (F404)
 
@@ -44,6 +45,8 @@ export function createSimulation(dungeon) {
   const events = createEmitter();
   // A sound made on a tile (docs/041); the audio module decides whether it is heard.
   const sound = (id, { level, x, y }, immediate = false) => events.emit('sound', { id, level, x, y, immediate });
+  // A sound one tick later (ReDMCSB C02_MODE_PLAY_ONE_TICK_LATER): after the attack sound played now.
+  const soundLater = (id, at) => clock.schedule(1, () => sound(id, at));
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
@@ -120,7 +123,7 @@ export function createSimulation(dungeon) {
     const outcome = creatureStrikes(champion, info, random);
     const attackId = attackSound(group.type);
     if (attackId) sound(attackId, group);
-    if (outcome.result === 'hit') sound('wounded', party);
+    if (outcome.result === 'hit') soundLater('wounded', party); // F230: a tick after the attack
     if (outcome.result === 'hit') champion.health = Math.max(0, champion.health - outcome.damage);
     champion.dead = champion.health === 0;
     events.emit('championHit', { group, ...outcome });
@@ -152,12 +155,12 @@ export function createSimulation(dungeon) {
     events.emit('doorCrushed', { level, x, y, group, killed, destroyed });
   }
 
-  // The champion loses health from a door or a spell (`cause`: { door } or { spell }); he dies at 0.
+  // The champion loses health from a door, a spell or a wall (`cause`: { door }, { spell } or { wall });
+  // he dies at 0. DM plays the wounded sound only for the attacks of creatures (creatureAttacks).
   function woundChampion(damage, cause) {
     if (champion.dead) return;
     champion.health = Math.max(0, champion.health - damage);
     champion.dead = champion.health === 0;
-    sound('wounded', party);
     events.emit('championHit', { group: null, ...cause, result: 'hit', damage });
     championChanged();
     if (champion.dead) died(null, cause);
@@ -278,7 +281,7 @@ export function createSimulation(dungeon) {
       const tile = state.tileAt(party.level, x, y);
       if (blocked === 'door' && action.breaksDoors && !tile.detail.broken && doorStep(tile.detail) === DOOR_CLOSED) {
         payAction(action, DOOR_FATIGUE);
-        sound('thud', party);
+        soundLater('thud', party); // after the combat sound (F407)
         // F312, simplified: (strength + 0..15 + the weapon's bonus) / 2, at most 100 (provisional).
         const attack = Math.min(100, (champion.strength + Math.floor(random() * 16) + bonus) >> 1);
         return { result: 'doorHit', broken: magic.attackDoor(party.level, x, y, attack, false, 'melee') };
@@ -498,8 +501,13 @@ export function createSimulation(dungeon) {
     }
     const result = step(state, party, name);
     if (result.blocked) {
-      if (result.blocked !== 'creature') sound('wall', party, true);
       events.emit('blocked', { party, reason: result.blocked });
+      // Running into a wall, a closed door or fake wall (ReDMCSB F366): the champions of the front
+      // row take an attack of 1 "self" ((1 × 130) / 64 = 2 without armour), and the party cries out.
+      if (result.blocked !== 'creature') {
+        sound('wall', party, true);
+        woundChampion(Math.floor((WALL_ATTACK * 130) / 64), { wall: true });
+      }
       return;
     }
     // Stairs, pits, teleporters: applied in chain until the party stays somewhere.
@@ -578,7 +586,16 @@ export function createSimulation(dungeon) {
       return Math.max(0, champion.readyAt - clock.now);
     },
     /** Click on what is in front of the party (wall face, door, alcove), with the item in hand. */
-    clickFront: () => (champion.dead ? { target: null, fired: 0 } : logic.clickFront(party)),
+    clickFront() {
+      if (champion.dead) return { target: null, fired: 0 };
+      const result = logic.clickFront(party);
+      // Nothing happens on a wall, a door or a closed fake wall: the hand knocks on it (thud). An
+      // imaginary or vanished fake wall lets the hand through: no sound.
+      const { target, fired, took, placed, hits, broken } = result;
+      const solid = target === 'wall' || target === 'door' || (target === 'fakewall' && blockReason(state, party.level, ...front()) === 'fakewall');
+      if (solid && !fired && !took && !placed && !hits && !broken) sound('thud', party, true);
+      return result;
+    },
     /** Items carried: [{ kind, index }]. */
     get inventory() {
       return state.inventory;
