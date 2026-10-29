@@ -143,3 +143,11 @@ Le plan détaillé (phase 3) proposera un événement unique **`sound`** `{ id, 
 3. **Distances :** les seuils `LoudDistance` et `SoftDistance` de chaque son sont dans les données du jeu, pas dans le code. Je propose des valeurs provisoires, signalées comme les autres, à confirmer si on trouve la table du graphisme 562.
 4. **Pas des créatures :** à chaque pas, ou seulement pour les créatures à moins de N cases ? Sans source pour l'Amiga, je propose les seuils de la question 3.
 5. **Sons sans équivalent :** heurter une créature (le groupe est bloqué sans dégâts) reste silencieux, comme dans DM ?
+
+### Réponses
+
+1. le code du ST correspondaient à ses limitations techniques. nous n'en avons pas, on peut donc partir sur un algo à nous comme suggéré ;
+2. ok pour ta proposition ;
+3. n'est-ce pas déjà géré par le point 1, gain continu selon la distance de Manhattan ? si oui, oubli ce point 3, sinon demande-moi ;
+4. même question que pour le point 3. c'est quelque chose qu'on pourra ajuster après tests je pense. de mémoire, les sons sont fréquents mais pas omniprésents ;
+5. c'est ça ;
