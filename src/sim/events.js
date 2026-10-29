@@ -25,7 +25,8 @@
 //   'doorBroken' { level, x, y, by: 'fireball'|'melee' } a fireball or a strike broke a door (magic.js)
 //                (creatureHit and championHit carry `spell: 'fireball'` when a fireball wounds)
 //   'grimoireChanged' { scrolls: [index], learned: [spell] } the party held new scrolls (grimoire.js)
-//   'sound'      { id, level, x, y, immediate? } a sound made on a tile (ids: core/sound-info.js, docs/041);
+//   'sound'      { id, level, x, y, immediate?, delay? } a sound made on a tile (ids: core/sound-info.js, docs/041);
+//                `delay`: to play that many ticks later (LATER_TICKS, docs/046);
 //                immediate: an action of the party, played at once even during a tick
 //   'reset'      { party }
 

@@ -27,7 +27,7 @@ import { creaturePassage, resolveCreatureArrival } from './rules.js';
 import { perceiveParty, facingTowards, stepTowards } from './perception.js';
 import { mulberry32 } from './random.js';
 import { creatureDrops } from '../core/creature-drops.js';
-import { moveSound } from '../core/sound-info.js';
+import { moveSound, LATER_TICKS } from '../core/sound-info.js';
 
 const SEED = 0x0d4e0;
 const THIEF = 2; // Giggler: steals instead of attacking (hard-coded in DM)
@@ -238,11 +238,10 @@ export function createCreatures(dungeon, state, clock, logic, { emit, party, par
     return true;
   }
 
-  // Possessions falling: metallic if there is a weapon among them (ReDMCSB F186, F188), a tick
-  // after the death so that the sound of the blow plays first (C02_MODE_PLAY_ONE_TICK_LATER).
+  // Possessions falling: metallic if there is a weapon among them (ReDMCSB F186, F188), after the
+  // death so that the sound of the blow plays first (LATER_TICKS, docs/046).
   function dropSound({ level, x, y }, items) {
-    const id = items.some((i) => i.kind === 'weapon') ? 'metal' : 'thud';
-    clock.schedule(1, () => emit('sound', { id, level, x, y }));
+    emit('sound', { id: items.some((i) => i.kind === 'weapon') ? 'metal' : 'thud', level, x, y, delay: LATER_TICKS });
   }
 
   // One step on a shortest way towards `goal` (next to it, or onto it); false if none.

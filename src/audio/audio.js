@@ -5,6 +5,8 @@
 // - stereo: left / right of the party, as it faces;
 // - during a tick, only the winner plays: the loudest, then the highest priority (sound-info.js);
 //   outside a tick (actions of the party) and for immediate sounds, at once;
+// - a sound with a `delay` (ticks) plays exactly that long after its request, apart from the
+//   winners of the ticks, wherever the party then stands (docs/046);
 // - at most MAX_VOICES at a time: the oldest stops.
 
 import { SOUNDS, soundPriority } from '../core/sound-info.js';
@@ -18,9 +20,10 @@ const REPEAT_MS = 50; // the same sound asked again within this delay is not pla
  * @param {object} options
  * @param {string} options.base URL of the folder of the files (NN.mp3)
  * @param {() => { level, x, y, facing }} options.party where the party stands
+ * @param {number} options.tickMs duration of a tick of the game clock
  * @param {object} [options.settings] over DEFAULT_AUDIO
  */
-export function createAudio({ base, party, settings = {} }) {
+export function createAudio({ base, party, tickMs, settings = {} }) {
   let current = { ...DEFAULT_AUDIO, ...settings };
   let context = null;
   const buffers = new Map(); // file -> Promise<AudioBuffer|null>
@@ -90,16 +93,19 @@ export function createAudio({ base, party, settings = {} }) {
     if (i >= 0) voices.splice(i, 1);
   }
 
+  // A sound announced by the simulation.
+  function request(sound) {
+    if (!current.soundEnabled) return;
+    if (sound.delay) return void setTimeout(() => request({ ...sound, delay: 0, immediate: true }), sound.delay * tickMs);
+    const heard = placement(sound);
+    if (!heard) return;
+    if (!inTick || sound.immediate) return void play(sound.id, heard);
+    const better = !pending || heard.gain > pending.heard.gain || (heard.gain === pending.heard.gain && soundPriority(sound.id) < soundPriority(pending.id));
+    if (better) pending = { id: sound.id, heard };
+  }
+
   return {
-    /** A sound announced by the simulation. */
-    request(sound) {
-      if (!current.soundEnabled) return;
-      const heard = placement(sound);
-      if (!heard) return;
-      if (!inTick || sound.immediate) return void play(sound.id, heard);
-      const better = !pending || heard.gain > pending.heard.gain || (heard.gain === pending.heard.gain && soundPriority(sound.id) < soundPriority(pending.id));
-      if (better) pending = { id: sound.id, heard };
-    },
+    request,
     /** Runs a tick of the simulation: of the sounds it asks for, the winner plays at the end. */
     tick(run) {
       inTick = true;

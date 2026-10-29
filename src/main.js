@@ -558,7 +558,7 @@ const sim = createSimulation(dungeon);
 // Duration of a game tick (actuator delays are in ticks). About 1/6 s in DM, to be checked.
 const TICK_MS = 1000 / 6;
 // Sounds of the simulation (docs/041): the files of DM Amiga 3.6, in assets/sounds/.
-const audio = createAudio({ base: 'assets/sounds/', party: () => sim.party, settings: audioSettings() });
+const audio = createAudio({ base: 'assets/sounds/', party: () => sim.party, tickMs: TICK_MS, settings: audioSettings() });
 sim.on('sound', audio.request);
 const moveKey = createControls((command) => sim.command(command));
 let game = null; // { window, view, panel } while the game window is open

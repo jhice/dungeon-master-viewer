@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Dungeon, SIDE_DELTAS, FACINGS } from '../src/core/dungeon.js';
 import { createSimulation } from '../src/sim/simulation.js';
 import { blockReason } from '../src/sim/rules.js';
-import { SOUNDS, attackSound } from '../src/core/sound-info.js';
+import { SOUNDS, attackSound, LATER_TICKS } from '../src/core/sound-info.js';
 
 const dungeon = new Dungeon(JSON.parse(readFileSync(new URL('../data/dungeon.json', import.meta.url))));
 const sim = createSimulation(dungeon);
@@ -132,18 +132,18 @@ for (const audible of [true, false]) {
   for (let t = 0; t < 6 * 30 && !sounds.some((s) => s.id === expected); t++) sounds.push(...heard(() => sim.tick(1)));
   const attack = sounds.find((s) => s.id === expected);
   check(attack && attack.x === group.x && attack.y === group.y, `attaque du groupe N2 (10, 20) : ${expected}`);
-  // The wound sounds a tick after the attack that causes it (F230, C02_MODE_PLAY_ONE_TICK_LATER).
+  // The wound is asked with the attack that causes it, to be played LATER_TICKS after it (docs/046).
   {
-    const delays = [];
-    let tick = 0;
     let attackTick = null;
+    let wound = null;
+    let tick = 0;
     const off = sim.on('sound', (s) => {
       if (s.id === expected) attackTick = tick;
-      if (s.id === 'wounded' && attackTick !== null) delays.push(tick - attackTick);
+      if (s.id === 'wounded' && attackTick !== null) wound = { ...s, tick };
     });
-    for (; tick < 6 * 60 && !delays.length; tick++) sim.tick(1);
+    for (; tick < 6 * 60 && !wound; tick++) sim.tick(1);
     off();
-    check(delays[0] === 1, `blessure de Zed : un tick après l'attaque (${delays[0]})`);
+    check(wound?.tick === attackTick && wound?.delay === LATER_TICKS, `blessure de Zed : demandée avec l'attaque, délai ${wound?.delay} ticks (${LATER_TICKS} attendus)`);
   }
   for (let t = 0; t < 6 * 60 && !sounds.some((s) => s.id === 'wounded'); t++) sounds.push(...heard(() => sim.tick(1)));
   const wound = sounds.find((s) => s.id === 'wounded');
@@ -160,7 +160,7 @@ for (const audible of [true, false]) {
   check(steps.length > 0, `pas des créatures du niveau 2 en 1 min : ${steps.length}`);
 }
 
-// 7. A sword on a closed door: the combat sound now, the thud of the door a tick later (F407).
+// 7. A sword on a closed door: the combat sound now, the thud of the door delayed (F407, docs/046).
 {
   sim.reset();
   const map = dungeon.level(0);
@@ -176,8 +176,26 @@ for (const audible of [true, false]) {
   face(door.facing);
   sim.state.hands[1] = { kind: 'weapon', index: dungeon.data.weapons.findIndex((w) => w.name === 'Sword') };
   const now = heard(() => sim.attack());
-  const later = heard(() => sim.tick(1));
-  check(ids(now).join() === 'combat' && ids(later).includes('thud'), `épée sur la porte N0 (${door.x}, ${door.y}) : ${ids(now).join()} puis ${ids(later).join()}`);
+  const thud = now.find((s) => s.id === 'thud');
+  check(now[0]?.id === 'combat' && !now[0].delay && thud?.delay === LATER_TICKS, `épée sur la porte N0 (${door.x}, ${door.y}) : ${now.map((s) => s.id + (s.delay ? ` (+${s.delay})` : '')).join(', ')}`);
+}
+
+// 8. Loot falling after a death: delayed like the wound (docs/046).
+{
+  sim.reset();
+  const group = sim.state.groupAt(1, 8, 24); // Screamers, with possessions
+  const { from, facing } = besides(group.level, group.x, group.y);
+  sim.teleport(group.level, ...from);
+  face(facing);
+  Object.assign(sim.champion, { health: 1e9, maxHealth: 1e9 });
+  const drops = [];
+  const off = sim.on('sound', (s) => (s.id === 'metal' || s.id === 'thud') && drops.push(s));
+  for (let i = 0; i < 300 && sim.state.groupAt(1, 8, 24) === group; i++) {
+    sim.tick(sim.fatigue);
+    sim.attack();
+  }
+  off();
+  check(drops.length > 0 && drops.every((s) => s.delay === LATER_TICKS), `butin des Screamers : ${drops.length} son(s), délai ${drops.map((s) => s.delay).join(', ')}`);
 }
 
 console.log(failures ? `\n${failures} échec(s)` : '\nTout est bon.');

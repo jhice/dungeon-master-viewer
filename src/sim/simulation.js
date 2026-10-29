@@ -24,7 +24,7 @@ import { EMPTY_HAND } from '../core/action-info.js';
 import { ITEM_POOLS } from '../core/contents.js';
 import { DOOR_CLOSED, doorStep } from '../core/tile-states.js';
 import { mulberry32 } from './random.js';
-import { attackSound } from '../core/sound-info.js';
+import { attackSound, LATER_TICKS } from '../core/sound-info.js';
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 
 // Seed of the combat random draws (a game replays the same way).
@@ -45,8 +45,9 @@ export function createSimulation(dungeon) {
   const events = createEmitter();
   // A sound made on a tile (docs/041); the audio module decides whether it is heard.
   const sound = (id, { level, x, y }, immediate = false) => events.emit('sound', { id, level, x, y, immediate });
-  // A sound one tick later (ReDMCSB C02_MODE_PLAY_ONE_TICK_LATER): after the attack sound played now.
-  const soundLater = (id, at) => clock.schedule(1, () => sound(id, at));
+  // A sound after the one of its cause (LATER_TICKS): asked now, delayed by the audio module, so that
+  // the delay does not depend on when, between two ticks, the champion strikes (docs/046).
+  const soundLater = (id, { level, x, y }) => events.emit('sound', { id, level, x, y, delay: LATER_TICKS });
   const state = createState(dungeon);
   const clock = createClock();
   let party = createParty(dungeon.start);
@@ -123,7 +124,7 @@ export function createSimulation(dungeon) {
     const outcome = creatureStrikes(champion, info, random);
     const attackId = attackSound(group.type);
     if (attackId) sound(attackId, group);
-    if (outcome.result === 'hit') soundLater('wounded', party); // F230: a tick after the attack
+    if (outcome.result === 'hit') soundLater('wounded', party); // F230: after the attack
     if (outcome.result === 'hit') champion.health = Math.max(0, champion.health - outcome.damage);
     champion.dead = champion.health === 0;
     events.emit('championHit', { group, ...outcome });

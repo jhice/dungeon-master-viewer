@@ -7,6 +7,11 @@
 // The order of SOUNDS is the priority, highest first: when several sounds are asked during
 // the same tick, the loudest plays, then the one listed first (docs/041 § 3).
 
+// Delay of the sounds that follow the one of their cause (ReDMCSB C02_MODE_PLAY_ONE_TICK_LATER:
+// 1 tick in DM), in ticks: the wound after the attack, the thud of a door after the blow, the
+// loot after the death. The audio module plays them that long after their request (docs/046).
+export const LATER_TICKS = 2;
+
 const sound = (file, range = 1) => ({ file: String(file).padStart(2, '0'), range });
 
 export const SOUNDS = {
