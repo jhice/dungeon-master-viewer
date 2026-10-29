@@ -401,10 +401,11 @@ const lighting = () => ({ ...DEFAULT_LIGHTING, ...knownLighting(prefs.lighting) 
 const LIGHTING_SCHEMA = [
   { type: 'heading', label: 'Lumière (vue du jeu)' },
   { type: 'range', key: 'intensity', label: 'Intensité', min: 0.1, max: 10, step: 0.1, format: (v) => v.toFixed(1) },
-  { type: 'range', key: 'distance', label: 'Portée', min: 1, max: 6, step: 0.5, format: (v) => `${v.toFixed(1)} cases` },
+  { type: 'range', key: 'distance', label: 'Portée', min: 1, max: 6, step: 0.1, format: (v) => `${v.toFixed(1)} cases` },
   { type: 'range', key: 'decay', label: 'Atténuation', min: 0, max: 10, step: 0.1, format: (v) => v.toFixed(1) },
   { type: 'checkbox', key: 'permanentLight', label: 'Lumière permanente (tout à 100 %)' },
   { type: 'checkbox', key: 'torchHolders', label: 'Torches murales lumineuses' },
+  { type: 'checkbox', key: 'occlusion', label: 'Lumière arrêtée par les murs' },
 ];
 function changeLighting(changes) {
   prefs.lighting = { ...knownLighting(prefs.lighting), ...changes };

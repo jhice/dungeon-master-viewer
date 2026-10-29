@@ -78,6 +78,17 @@ export function createLights(scene, camera, wallHeight, settings = {}) {
       glowing = materials;
       apply();
     },
+    /**
+     * The point lights that light, in the order of the scene (the party's, then the holders'),
+     * null for an unlit one: { x, z, reach } in tiles (fp-occlusion.js).
+     */
+    sources() {
+      return [party, ...holders].map((l, i) => {
+        if (!l.intensity) return null;
+        const { x, z } = i ? l.position : camera.position; // the party's light is at the eye
+        return { x, z, reach: l.distance };
+      });
+    },
     /** Full torch holders of the level built: [{ x, y, face }] (local coordinates of the wall tile). */
     setHolders(list) {
       spots = list.map(({ x, y, face }) => {

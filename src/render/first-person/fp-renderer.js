@@ -25,6 +25,8 @@ import { buildLevelMeshes, disposeLevelMeshes } from '../three/level-meshes.js';
 import { buildLevelContents, buildLevelCreatures } from '../three/level-contents.js';
 import { createDecor } from './fp-decor.js';
 import { createLights } from './fp-lights.js';
+import { createOcclusion, lightMasks, opaqueTile } from './fp-occlusion.js';
+import { DEFAULT_LIGHTING } from './lighting-settings.js';
 import { isAlcove } from '../../core/ornaments.js';
 import { tileContents } from '../../core/contents.js';
 import { readTheme } from '../three/theme.js';
@@ -78,6 +80,10 @@ export function createFirstPersonRenderer(
   const camera = new THREE.PerspectiveCamera(VIEW.fov, ASPECT, 0.02, 60);
   scene.add(camera);
   const lights = createLights(scene, camera, WALL_HEIGHT, lighting);
+  // Walls stop the light (docs/038): masks of the lights computed again before a render when stale.
+  const occlusion = createOcclusion();
+  occlusion.enabled = lighting.occlusion ?? DEFAULT_LIGHTING.occlusion;
+  let masksStale = true;
 
   const textures = { wall: stoneTexture(), floor: flagstoneTexture() };
   const ceilingTextures = { ceiling: ceilingTexture(false), ceilingPit: ceilingTexture(true) };
@@ -130,6 +136,8 @@ export function createFirstPersonRenderer(
     const ceiling = buildCeiling(levelIndex);
     for (const mesh of ceiling) group.add(mesh);
     scene.add(group);
+    group.traverse(patchMaterials);
+    masksStale = true;
     built = { group, meshes, ceiling, decorMeshes };
     lights.setGlowing(meshes.filter((m) => m.userData.part === 'teleporterGame').map((m) => m.material));
   }
@@ -187,9 +195,23 @@ export function createFirstPersonRenderer(
     const map = dungeon.level(level);
     const center = { x: map.offset.x, z: map.offset.y };
     for (const mesh of seenMeshes(buildLevelCreatures(dungeon, level, center, { wallHeight: WALL_HEIGHT, contentsAt: seenContents }))) {
+      patchMaterials(mesh);
       built.group.add(mesh);
       built.meshes.push(mesh);
     }
+  }
+
+  function patchMaterials(object) {
+    if (!object.isMesh) return;
+    for (const material of [object.material].flat()) occlusion.patchMaterial(material);
+  }
+
+  // Bits of the lights seeing each tile of the level (fp-occlusion.js).
+  function updateMasks() {
+    masksStale = false;
+    const map = dungeon.level(level);
+    const opaque = (x, y) => opaqueTile(state.tileAt(level, x, y));
+    occlusion.setMasks(lightMasks(map.width, map.height, opaque, lights.sources()), map.width, map.height);
   }
 
   function clear() {
@@ -249,6 +271,7 @@ export function createFirstPersonRenderer(
 
   // On demand, at once (something changed).
   function render() {
+    if (occlusion.enabled && masksStale && built) updateMasks();
     renderer.render(scene, camera);
   }
 
@@ -365,16 +388,25 @@ export function createFirstPersonRenderer(
       party = next;
       if (party.level !== level) build(party.level);
       placeCamera(party);
+      masksStale = true;
       render();
     },
     /** Settings of the light changed (control panel, docs/037): some of DEFAULT_LIGHTING (lighting-settings.js). */
     setLighting(changes) {
       lights.configure(changes);
+      masksStale = true;
+      if ('occlusion' in changes && changes.occlusion !== occlusion.enabled) {
+        occlusion.enabled = changes.occlusion;
+        built?.group.traverse((object) => {
+          if (object.isMesh) for (const material of [object.material].flat()) material.needsUpdate = true;
+        });
+      }
       render();
     },
     /** The light of the simulation changed (sim.light, docs/032): torches, magical light. */
     setLight(light) {
       lights.setLight(light);
+      masksStale = true;
       render();
     },
     /** Colour of the item in hand (cursor), or null for an empty hand. */
@@ -410,6 +442,7 @@ export function createFirstPersonRenderer(
       renderer.domElement.removeEventListener('pointerleave', onLeave);
       tooltip.remove();
       clear();
+      occlusion.dispose();
       decor.dispose();
       for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures)]) texture.dispose();
       renderer.dispose();
