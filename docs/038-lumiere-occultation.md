@@ -30,6 +30,10 @@ Elle s'active avec la case **« Lumière arrêtée par les murs »** du panneau 
 - La case du fragment vient de sa position dans le monde, décalée de 0,05 le long de sa normale. Un fragment posé sur une face de mur tombe ainsi dans la case que regarde cette face.
 - Hors de la carte, le bit vaut 0.
 - Le patch s'ajoute au `onBeforeCompile` existant, celui du miroir une case sur deux, et la clé de cache du programme intègre l'état de l'option.
+- Les uniformes du masque sont ajoutés **même quand l'option est décochée**. Sinon :
+  - un matériau garde ses programmes compilés, un par clé ;
+  - quand on recoche l'option, Three.js réutilise le programme déjà compilé sans rappeler `onBeforeCompile`, avec les uniformes de la dernière compilation, faite sans le masque ;
+  - le shader lit alors une autre texture comme masque, ce qui donnait des taches noires autour du groupe (retour de l'utilisateur, niveau 0, case (4,11)).
 
 **3. Quand recalculer** : les masques sont recalculés au rendu suivant un changement :
 - déplacement du groupe ;

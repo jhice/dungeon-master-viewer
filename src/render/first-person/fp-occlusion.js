@@ -66,8 +66,10 @@ export function createOcclusion() {
   let enabled = false;
 
   function patch(shader) {
-    if (!enabled) return;
+    // Always: a material keeps its programs by cache key, and switching back to one already
+    // compiled reuses the uniforms of its last compile, without calling onBeforeCompile again.
     Object.assign(shader.uniforms, uniforms);
+    if (!enabled) return;
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vOccTile;').replace(
       '#include <project_vertex>',
       `#include <project_vertex>
