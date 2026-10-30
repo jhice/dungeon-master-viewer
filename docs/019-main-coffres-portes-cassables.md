@@ -1,5 +1,7 @@
 # 019 — Objet en main, coffres, portes cassables
 
+> **Mise à jour (doc 051) :** le compteur de coups (`DOOR_HITS`) est supprimé. ReDMCSB (F232) confirme la défense : une porte cède à une seule attaque au moins égale à sa défense. Un objet tenu, cliqué sur une porte, est maintenant lancé.
+
 > Suite de [018-decors.md](018-decors.md), après une exploration du donjon par l'utilisateur.
 > Objectif : se rapprocher du comportement d'origine, où l'on trie les objets devant soi avec la main (le pointeur), sans passer par l'inventaire.
 

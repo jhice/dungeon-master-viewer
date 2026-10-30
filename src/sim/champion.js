@@ -94,6 +94,18 @@ export function championMirror(dungeon, name = DEFAULT_CHAMPION) {
   return a ? { level: a.at.map, x: a.at.x, y: a.at.y } : null;
 }
 
+/**
+ * Maximum load of the champion, in 100 g (ReDMCSB F309): 8 × strength + 100, lower when his
+ * stamina is under half (F306), rounded to the ten above. No wounds nor Elven Boots yet.
+ */
+export function maximumLoad(champion) {
+  let load = (champion.strength << 3) + 100;
+  const half = champion.maxStamina >> 1;
+  if (champion.stamina < half) load = (load >> 1) + Math.floor(((load >> 1) * champion.stamina) / half);
+  load += 9;
+  return load - (load % 10);
+}
+
 /** One tick of regeneration; returns true if a value changed. */
 export function regenerate(champion, now) {
   if (champion.dead) return false;

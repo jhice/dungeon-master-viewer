@@ -37,10 +37,6 @@ const WALL_GATE = 5;
 const WALL_COUNTER = 6;
 const WALL_ITEM_HOLDER = 13; // "item storage": torch holder
 const LOCAL_ROTATION = 1;
-// Hits with a weapon in hand to break a breakable door ("force"), by door type. In DM,
-// each hit compares the attack (champion, weapon, chance) to the defence of the door
-// type, without adding up; the party being abstract, a fixed count stands for it.
-const DOOR_HITS = { Wooden: 3, Porticullis: 6 };
 
 // Rest of a creature generator, in ticks: values above 127 count by 64 ticks
 // ((delay - 126) × 64), Encyclopaedia, "Dungeon Files" (docs/021).
@@ -469,7 +465,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
    * a lock ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
    * takes the item it expects from the hand, or gives it back to an empty hand.
    * @param {object} p party
-   * @returns {{ target: string, fired: number, took?: number, placed?: boolean, hits?: number, broken?: boolean, filled?: 'waterskin'|'flask'|null }}
+   * @returns {{ target: string, fired: number, took?: number, placed?: boolean, filled?: 'waterskin'|'flask'|null }}
    */
   function clickFront(p) {
     const [dx, dy] = SIDE_DELTAS[p.facing];
@@ -532,21 +528,12 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     return { target: 'wall', fired, took: top ? 1 : 0 };
   }
 
-  // Door: a click on its button toggles it; a closed breakable door ("force") is hit
-  // with the weapon in hand, and breaks after DOOR_HITS hits (see the constant).
+  // Door: a click on its button, with an empty hand, toggles it (ReDMCSB F377). An item held is
+  // thrown at the door instead (the simulation), which a breakable door may not withstand (docs/051).
   function clickDoor(level, x, y, tile) {
     const ref = tile.detail.items?.find((item) => item.kind === 'door');
     const door = ref && dungeon.data.doors[ref.index];
-    if (!door) return { target: 'door', fired: 0 };
-    if (door.force && !tile.detail.open && state.hand?.kind === 'weapon') {
-      const needed = DOOR_HITS[dungeon.level(level).doorTypes[door.type]] ?? Infinity;
-      tile.detail.hits = (tile.detail.hits ?? 0) + 1;
-      sound('thud', level, x, y);
-      if (tile.detail.hits < needed) return { target: 'door', fired: 0, hits: tile.detail.hits, needed };
-      breakDoor(level, x, y, tile);
-      return { target: 'door', fired: 0, hits: tile.detail.hits, needed, broken: true };
-    }
-    if (!door.button) return { target: 'door', fired: 0 };
+    if (!door?.button || state.hand) return { target: 'door', fired: 0 };
     sound('switch', level, x, y);
     setOpen(level, x, y, tile, 'toggle', null);
     return { target: 'door', fired: 1 };

@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-30, après la doc 050.
+> Mis à jour le 2026-10-30, après la doc 051.
 
 ### Données et visualiseur
 
@@ -99,8 +99,9 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Lumière arrêtée par les murs (doc 038) :** option du panneau (`occlusion`, `fp-occlusion.js`). Un masque par case et par lumière, calculé par rayons sur la grille, est lu par le shader des matériaux Lambert de la vue.
 - **Messages du jeu (doc 048) :** `say()` (`main.js`) les écrit dans la zone de messages de la simulation et dans la barre d'état ; les informations de débogage restent dans la barre d'état seule.
 - **Eau (doc 050) :** gourdes à 4 états (`src/sim/water.js`), fontaines qui remplissent gourde et flasque vide, comme DM ; bouche sous l'objet tenu (remplace le clic sur le cadre de Zed) ; jauge d'eau de Zed sans effet (faim et soif en attente).
+- **Portes et chutes (doc 051) :** une porte cède à une attaque au moins égale à sa défense (F232), sans compteur de coups ; un objet tenu, cliqué sur une porte, est lancé, l'attaque et tombe devant le battant ; une chute coûte 34 à 44 PV à Zed (F324), la corde épargne la première trappe contre de l'endurance.
 - **Durée d'un tick (doc 047) :** 220 ms (`TICK_MS`, `main.js`), soit 11 synchronisations verticales à 50 Hz, comme la boucle de jeu de DM en PAL.
-- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`, `node tools/test-map-tools.mjs`, `node tools/test-water.mjs`.
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`, `node tools/test-map-tools.mjs`, `node tools/test-water.mjs`, `node tools/test-falls-doors.mjs`.
 
 ### En attente
 

@@ -12,6 +12,9 @@
 // then before each step it vanishes if its energy is not above the step loss. It enters a
 // closed door's tile and meets the door there; against a wall it meets the wall from its own
 // tile. What happens then (explosion, door toggled) is up to the simulation (hooks.impact).
+//
+// A thrown item enters a door's tile too, and meets a closed door as it crosses the middle of the
+// tile (ReDMCSB F217, docs/051): it may break it (hooks.impact), then falls in front of the leaf.
 
 import { SIDE_DELTAS, FACINGS } from '../core/dungeon.js';
 import { doorPassable } from '../core/tile-states.js';
@@ -34,8 +37,8 @@ export function subTile(direction, side, row) {
  * @param {(projectile, group) => boolean} hooks.hitGroup the projectile reaches a group: true if it hits it
  *   (a spell is also offered to non-material creatures)
  * @param {(level, x, y, items) => void} hooks.drop the item falls on a tile (logic.itemsDropped)
- * @param {(projectile, target: 'door'|'wall') => boolean} hooks.impact a spell meets the door of its
- *   tile, or the wall in front of its tile: true if it stops there
+ * @param {(projectile, target: 'door'|'wall') => boolean} hooks.impact a spell or an item meets the door
+ *   of its tile, or a spell the wall in front of its tile: true if it stops there
  */
 export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
   let flying; // id -> projectile
@@ -89,13 +92,17 @@ export function createProjectiles(state, { emit, hitGroup, drop, impact }) {
       }
     } else p.energy -= p.stepLoss;
     if (p.row === 'back') {
+      // A projectile crossing a door's tile meets the door (F219 then F217); an item that does not
+      // go through falls in front of the leaf, on the row it has reached.
+      if (state.tileAt(p.level, p.x, p.y)?.type === 'door' && impact(p, 'door')) {
+        if (!p.spell) hitSound(p);
+        return land(p);
+      }
       p.row = 'front';
-      // A spell crossing a door's tile meets the door (F219 then F217).
-      if (p.spell && state.tileAt(p.level, p.x, p.y)?.type === 'door' && impact(p, 'door')) return land(p);
     } else {
       const [dx, dy] = SIDE_DELTAS[p.direction];
       const [nx, ny] = [p.x + dx, p.y + dy];
-      const door = p.spell && state.tileAt(p.level, nx, ny)?.type === 'door';
+      const door = state.tileAt(p.level, nx, ny)?.type === 'door';
       if (!door && !passes(p.level, nx, ny)) {
         if (p.spell) impact(p, 'wall'); // meets the wall from its tile
         else hitSound(p);

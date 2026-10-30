@@ -10,7 +10,7 @@ import { createLogic } from './logic.js';
 import { createCreatures } from './creatures.js';
 import { createParty, step, turn } from './party.js';
 import { blockReason, resolveArrival } from './rules.js';
-import { createChampion, championMirror, regenerate, skillLevel } from './champion.js';
+import { createChampion, championMirror, regenerate, skillLevel, maximumLoad } from './champion.js';
 import { THROW_COST, championStrikes, creatureStrikes, creatureReaches, projectileStrikes } from './combat.js';
 import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
@@ -34,6 +34,7 @@ const LORD_CHAOS = 23; // cannot be damaged ("archenemy", ReDMCSB F190)
 const VORPAL_BLADE = 16; // weapon type: its strikes reach non-material creatures (F402)
 const DOOR_FATIGUE = 6; // F407: fatigue of a strike on a closed door
 const WALL_ATTACK = 1; // F366: attack on the front row when the party runs into a wall
+const FALL_ATTACK = 20; // MOVE.C (F267): attack on every champion at each pit fallen through (F324)
 const LIGHT_POWER = 2; // F407, Light: magical light of power 2…
 const LIGHT_TICKS = 2500; // …for 2500 ticks (F404)
 
@@ -55,6 +56,7 @@ export function createSimulation(dungeon) {
   let champion;
   let random;
   let invincible = false; // test option: the champion takes hits but loses no health
+  let climbing = false; // Climb Down: the rope spares the first fall (docs/051)
   const logic = createLogic(dungeon, state, clock, {
     emit: events.emit,
     party: () => party,
@@ -413,7 +415,9 @@ export function createSimulation(dungeon) {
       return { result: 'nothing' };
     }
     payAction(action);
+    climbing = true;
     command('forward');
+    climbing = false;
     return { result: 'climbed' };
   }
 
@@ -481,6 +485,8 @@ export function createSimulation(dungeon) {
       y: party.y,
       direction: party.facing,
       side,
+      // F328: attack 40..200 from the Throw skill (it counts in the impact on a door, docs/051).
+      attack: Math.min(200, Math.max(40, (skillLevel(champion, 'Throw') << 3) + Math.floor(random() * 32))),
       energy: champion.strength + info.kinetic + Math.floor(random() * 16),
       stepLoss: 4 + (weight >> 1),
       kinetic: info.weapon ? info.kinetic : weight >> 1,
@@ -521,15 +527,43 @@ export function createSimulation(dungeon) {
   }
 
   // Moves the party, then the floor actuators of the tile left and of the tile reached act.
+  // Each pit fallen through hurts the champion, who screams; climbing down with the rope spares
+  // the first one, for some stamina (MOVE.C, docs/051).
   function arrive(from, arrival, kind) {
     party = arrival.party;
+    const falls = arrival.effects.filter((effect) => effect.type === 'fall');
     for (const effect of arrival.effects) {
-      if (effect.type === 'fall') sound('scream', effect.party, true);
+      if (effect.type === 'fall' && !(climbing && effect === falls[0])) sound('scream', effect.party, true);
       if (effect.type === 'teleport' && effect.detail.sound) sound('teleport', effect.party, true);
     }
     events.emit('partyMoved', { party, from, kind, effects: arrival.effects, loop: arrival.loop });
+    falls.forEach((effect, i) => (climbing && i === 0 ? climbStamina() : fallDamage()));
     logic.partyLeft(from);
     logic.partyEntered(party);
+  }
+
+  // A fall through a pit (F324 with an attack of 20, wounds to the legs and feet, "self" attack):
+  // 17 + random(6), against half the defence of the legs and feet; without armour yet (C3c), that
+  // defence is random(vitality / 8 + 1) (F313). F321: damage = attack × (130 − defence) / 64.
+  function fallDamage() {
+    const spread = (FALL_ATTACK >> 3) + 1;
+    const attack = Math.max(1, FALL_ATTACK - spread + Math.floor(random() * (spread << 1)));
+    const legs = () => Math.floor(random() * ((champion.vitality >> 3) + 1));
+    const defense = ((legs() + legs()) >> 1) >> 1;
+    woundChampion((attack * (130 - defense)) >> 6, { fall: true });
+  }
+
+  // Climbing down with the rope (MOVE.C): stamina (load × 25 / maximum load) + 1, no damage.
+  function climbStamina() {
+    if (champion.dead) return;
+    const carried = [...state.inventory, ...state.hands, state.hand].filter(Boolean);
+    const load = carried.reduce((sum, item) => sum + Math.round(itemInfo(dungeon, item).weight * 10), 0);
+    champion.stamina -= Math.floor((load * 25) / maximumLoad(champion)) + 1;
+    if (champion.stamina < 0) {
+      const lack = -champion.stamina;
+      champion.stamina = 0;
+      woundChampion(lack >> 1, { fall: true }); // F325: out of stamina, the lack hurts
+    } else championChanged();
   }
 
   // A pit opened or a teleporter was activated under the party (actuator): its effect applies now.
@@ -608,9 +642,9 @@ export function createSimulation(dungeon) {
       const result = logic.clickFront(party);
       // Nothing happens on a wall, a door or a closed fake wall: the hand knocks on it (thud). An
       // imaginary or vanished fake wall lets the hand through: no sound.
-      const { target, fired, took, placed, hits, broken, filled } = result;
+      const { target, fired, took, placed, filled } = result;
       const solid = target === 'wall' || target === 'door' || (target === 'fakewall' && blockReason(state, party.level, ...front()) === 'fakewall');
-      if (solid && !fired && !took && !placed && !hits && !broken && !filled) sound('thud', party, true);
+      if (solid && !fired && !took && !placed && !filled) sound('thud', party, true);
       return result;
     },
     /** Items carried: [{ kind, index }]. */

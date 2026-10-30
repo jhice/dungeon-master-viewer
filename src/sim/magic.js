@@ -6,6 +6,7 @@
 
 import { SKILLS } from '../core/spell-info.js';
 import { creatureInfo } from '../core/creature-info.js';
+import { itemInfo } from '../core/item-info.js';
 import { DOOR_CLOSED, doorStep } from '../core/tile-states.js';
 
 const DOOR_DEFENSE = { Porticullis: 110, Wooden: 42, Iron: 230, Ra: 255 };
@@ -77,9 +78,16 @@ export function createMagic(dungeon, state, clock, hooks) {
     light.addMagical((spellPower >> 2) + 1, 2000 + ((spellPower - 3) << 7));
   }
 
-  // Attack of a fireball meeting a door or a creature (F216).
+  // Base attack of a thrown item (F216): the kinetic energy of a weapon, else 0..3, plus half its
+  // weight (in 100 g).
+  function itemAttack(item) {
+    const info = itemInfo(dungeon, item);
+    return (info.weapon ? info.kinetic : rnd(4)) + (Math.round(info.weight * 10) >> 1);
+  }
+
+  // Attack of a fireball or a thrown item meeting a door or a creature (F216).
   function impactAttack(p) {
-    let attack = rnd(16) + rnd(16) + 10;
+    let attack = p.item ? itemAttack(p.item) : rnd(16) + rnd(16) + 10;
     attack = ((attack + p.energy) >> 4) + 1;
     attack += rnd((attack >> 1) + 1) + rnd(4);
     return Math.max(attack >> 1, attack - (32 - (p.attack >> 3)));
@@ -92,7 +100,8 @@ export function createMagic(dungeon, state, clock, hooks) {
   }
 
   // F232: a closed door of a destructible kind gives way to an attack at least equal to its defence:
-  // magic (an explosion) or not (a fireball's impact, a strike that breaks doors: `by` 'melee', docs/044).
+  // magic (an explosion) or not (a fireball's impact, a strike that breaks doors: `by` 'melee', docs/044;
+  // a thrown item: 'thrown', docs/051). Each attack is compared alone: hits do not add up.
   function attackDoor(level, x, y, attack, magic, by = 'fireball') {
     const door = logic.doorAt(level, x, y);
     const detail = state.tileAt(level, x, y)?.detail;
@@ -139,7 +148,8 @@ export function createMagic(dungeon, state, clock, hooks) {
    * A spell projectile meets the door of its tile, or the wall in front of it (F217): Open Door
    * toggles a door with a button (open or closed), the next tick; Fireball goes through a door
    * open at least to 3/4, else hits it (a door breakable by force may give way) and explodes.
-   * On a wall, a fireball explodes on its own tile. Returns true if the projectile stops.
+   * On a wall, a fireball explodes on its own tile. A thrown item meets a door the same way as a
+   * fireball, without exploding (docs/051). Returns true if the projectile stops.
    */
   function impact(p, target) {
     if (p.spell === 'openDoor') emit('sound', { id: 'spell', level: p.level, x: p.x, y: p.y });
@@ -151,7 +161,7 @@ export function createMagic(dungeon, state, clock, hooks) {
       }
       if (detail.broken || doorStep(detail) <= 1) return false;
       const attack = impactAttack(p) + 1;
-      attackDoor(p.level, p.x, p.y, attack + rnd(attack), false);
+      attackDoor(p.level, p.x, p.y, attack + rnd(attack), false, p.spell ? 'fireball' : 'thrown');
     }
     if (p.spell === 'fireball') explode(p.level, p.x, p.y, p.energy);
     return true;

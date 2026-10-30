@@ -730,7 +730,8 @@ function fireActuators({ level, x, y }) {
 
 // Click on the wall or door in front of the party (mouse in the view, or Space); on a
 // creature in front, the item held by the cursor is thrown at it, or else the champion
-// strikes it with the first melee action of his action hand (docs/044).
+// strikes it with the first melee action of his action hand (docs/044). On a door, the item
+// held is thrown: it falls in front of the leaf, which it may break (ReDMCSB F375, docs/051).
 // `kind`: what the pointer designates in the view ('front': the wall or the door, even with a
 // creature under it; 'creature'); from the keyboard (none), a creature in front comes first.
 function clickFront(side = 'right', kind = null) {
@@ -740,12 +741,9 @@ function clickFront(side = 'right', kind = null) {
     const melee = sim.actions.find((a) => a.kind === 'melee');
     return melee ? doAction(melee.index) : say('Aucune action de frappe avec cet objet');
   }
-  const { target, fired, took, placed, hits, needed, broken, filled } = sim.clickFront();
+  if (sim.hand && sim.state.tileAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)?.type === 'door') return throwHeld(side);
+  const { target, fired, took, placed, filled } = sim.clickFront();
   if (filled) say(filled === 'waterskin' ? 'La fontaine remplit la gourde' : 'La fontaine remplit la flasque : Water Flask');
-  else if (broken) {
-    say('La porte vole en éclats');
-    game?.window.flash();
-  } else if (hits) say(`Coup sur la porte (${hits}/${needed})`);
   else if (took) say(`Pris : ${itemName(sim.hand)}`);
   else if (placed) say('Objet posé');
   else if (!fired) say(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
@@ -953,7 +951,7 @@ sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown, spell
 });
 // A fireball broke a door (docs/033).
 sim.on('doorBroken', ({ by }) => {
-  say(by === 'melee' ? 'La porte vole en éclats' : 'La boule de feu fait voler la porte en éclats');
+  say({ melee: 'La porte vole en éclats', thrown: 'L’objet lancé fait voler la porte en éclats' }[by] ?? 'La boule de feu fait voler la porte en éclats');
   game?.window.flash();
 });
 sim.on('itemStolen', ({ group, item }) => say(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));
@@ -967,11 +965,12 @@ sim.on('projectilesMoved', () => {
   });
 });
 sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
-sim.on('championDied', ({ champion, group, spell }) =>
-  say(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : spell ? 'brûlé par sa boule de feu' : 'écrasé par une porte'}`),
-);
-sim.on('championHit', ({ door, spell, damage }) => {
+const deathCause = ({ group, spell, fall, wall }) =>
+  group ? `tué par ${describeGroup(dungeon, group).name}` : spell ? 'brûlé par sa boule de feu' : fall ? 'dans sa chute' : wall ? 'contre un mur' : 'écrasé par une porte';
+sim.on('championDied', (event) => say(`${event.champion.name} est mort, ${deathCause(event)}`));
+sim.on('championHit', ({ door, spell, fall, damage }) => {
   if (door) say(`La porte se referme sur le groupe : ${damage} PV`);
+  if (fall) say(`Chute : ${damage} PV`);
   if (spell) {
     say(`La boule de feu explose sur le groupe : ${damage} PV`);
     game?.window.flash();
