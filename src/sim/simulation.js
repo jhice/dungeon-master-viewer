@@ -15,6 +15,7 @@ import { THROW_COST, championStrikes, creatureStrikes, creatureReaches, projecti
 import { createProjectiles } from './projectiles.js';
 import { addSymbol, deleteSymbol, castSpell } from './spells.js';
 import { emptyFlaskHand, fillFlask, drinkable, drinkPotion } from './potions.js';
+import { isWaterskin, drinkWaterskin, startingWater } from './water.js';
 import { createLight } from './light.js';
 import { createMagic } from './magic.js';
 import { createGrimoire } from './grimoire.js';
@@ -111,6 +112,7 @@ export function createSimulation(dungeon) {
   function startChampion() {
     champion = createChampion(dungeon);
     random = mulberry32(COMBAT_SEED);
+    champion.water = startingWater(random);
     const mirror = championMirror(dungeon);
     if (!mirror) return;
     const lying = state.itemsAt(mirror.level, mirror.x, mirror.y);
@@ -606,9 +608,9 @@ export function createSimulation(dungeon) {
       const result = logic.clickFront(party);
       // Nothing happens on a wall, a door or a closed fake wall: the hand knocks on it (thud). An
       // imaginary or vanished fake wall lets the hand through: no sound.
-      const { target, fired, took, placed, hits, broken } = result;
+      const { target, fired, took, placed, hits, broken, filled } = result;
       const solid = target === 'wall' || target === 'door' || (target === 'fakewall' && blockReason(state, party.level, ...front()) === 'fakewall');
-      if (solid && !fired && !took && !placed && !hits && !broken) sound('thud', party, true);
+      if (solid && !fired && !took && !placed && !hits && !broken && !filled) sound('thud', party, true);
       return result;
     },
     /** Items carried: [{ kind, index }]. */
@@ -675,17 +677,29 @@ export function createSimulation(dungeon) {
       return result;
     },
     /**
-     * The champion drinks the potion held by the cursor (click on his box, the mouth of DM);
-     * the flask stays in hand, empty. Returns null if the cursor holds nothing drinkable.
-     * @returns {{ item, name, effect: 'health'|'stamina'|'mana'|null, gained } | null}
+     * The champion drinks what the cursor holds (the mouth of DM, docs/050): a potion, whose
+     * flask stays in hand, empty; a sip of a waterskin. Returns null if the cursor holds nothing
+     * drinkable (an empty waterskin: { item, name, empty: true }).
+     * @returns {{ item, name, effect: 'health'|'stamina'|'mana'|'water'|null, gained, empty? } | null}
      */
     drink() {
       const item = state.hand;
-      if (champion.dead || item?.kind !== 'potion') return null;
-      const entry = dungeon.data.potions[item.index];
-      if (!drinkable(entry)) return null;
-      const name = entry.name;
-      const result = { item, name, ...drinkPotion(champion, entry) };
+      if (champion.dead || !item) return null;
+      let drunk;
+      let name;
+      if (isWaterskin(dungeon, item)) {
+        const entry = dungeon.data.miscellaneous[item.index];
+        name = entry.name;
+        drunk = drinkWaterskin(champion, entry);
+        if (!drunk) return { item, name, empty: true };
+      } else {
+        if (item.kind !== 'potion') return null;
+        const entry = dungeon.data.potions[item.index];
+        if (!drinkable(entry)) return null;
+        name = entry.name;
+        drunk = drinkPotion(champion, entry);
+      }
+      const result = { item, name, ...drunk };
       events.emit('inventoryChanged', { inventory: state.inventory, hand: state.hand });
       championChanged();
       sound('swallow', party, true);

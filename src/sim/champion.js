@@ -45,6 +45,7 @@ export function createChampion(dungeon, name = DEFAULT_CHAMPION) {
     experience: startingExperience(sheet),
     readyAt: 0, // tick from which he can act again (fatigue of the last action)
     symbols: [], // spell being composed: symbol indices per step, the power first (spells.js)
+    water: 1500, // 0..2048 (water.js); set by the simulation with its random part (F280)
     dead: false,
   };
 }

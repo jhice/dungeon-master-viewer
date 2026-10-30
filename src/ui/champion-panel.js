@@ -5,8 +5,7 @@
 // champion recovers from his last action (its fatigue, as in DM); after an action, the
 // damage done or the action's name shows for a moment above them, as the action area of
 // DM does. A hit taken shows the damage on the box. When the champion dies, a veil covers the view with a
-// "Recommencer" button. A click on the box (out of the hands) with a potion held by the
-// cursor makes the champion drink it: the mouth of DM's inventory (docs/031).
+// "Recommencer" button. The mouth, to drink, is under the item in hand of the game window (docs/050).
 
 const RESULT_MS = 900;
 const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
@@ -17,9 +16,8 @@ const HAND_LABELS = ['Main gauche', 'Main droite (action)'];
  * @param {(id: number) => void} options.onAction an action button (index of the action, action-info.js)
  * @param {(hand: number) => void} options.onHand a hand was clicked (0 left, 1 right)
  * @param {() => void} options.onRestart the button of the death veil
- * @param {() => void} options.onMouth the box was clicked, out of the hands (drink the cursor's potion)
  */
-export function createChampionPanel(container, { onAction, onHand, onRestart, onMouth }) {
+export function createChampionPanel(container, { onAction, onHand, onRestart }) {
   const panel = element('div', 'champion-panel');
   const box = element('div', 'champion-box');
   const name = element('div', 'champion-name');
@@ -50,10 +48,6 @@ export function createChampionPanel(container, { onAction, onHand, onRestart, on
   const wound = element('div', 'champion-wound');
   wound.hidden = true;
   box.append(name, body, wound);
-  box.title = 'Clic avec une potion au curseur : la boire';
-  box.addEventListener('click', (event) => {
-    if (!event.target.closest('.champion-hand')) onMouth();
-  });
 
   // Action panel: the actions of the action hand, or the result of the last one.
   const actions = element('div', 'champion-actions');
@@ -92,7 +86,7 @@ export function createChampionPanel(container, { onAction, onHand, onRestart, on
      */
     update(champion, handItems, actionList) {
       name.textContent = champion.name;
-      name.title = `${champion.name}, ${champion.title}`;
+      name.title = `${champion.name}, ${champion.title}\nEau : ${champion.water} / 2048`;
       setBar(health, champion.health, champion.maxHealth);
       setBar(stamina, champion.stamina, champion.maxStamina, 10);
       setBar(mana, champion.mana, champion.maxMana);

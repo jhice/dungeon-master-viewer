@@ -38,7 +38,7 @@ export function createState(dungeon) {
   // Sizes of the item pools of dungeon.json: entries past them were created during the game.
   const poolSizes = Object.fromEntries(Object.values(ITEM_POOLS).map((pool) => [pool, dungeon.data[pool].length]));
   // Fields of the item entries that the game changes in place, with their values in dungeon.json.
-  const originals = Object.entries({ potions: ['type', 'power', 'name'], weapons: ['charges', 'lit'] }).map(([pool, fields]) => [
+  const originals = Object.entries({ potions: ['type', 'power', 'name'], weapons: ['charges', 'lit'], miscellaneous: ['subtype'] }).map(([pool, fields]) => [
     dungeon.data[pool],
     dungeon.data[pool].map((entry) => Object.fromEntries(fields.map((f) => [f, entry[f]]))),
   ]);

@@ -8,6 +8,9 @@ const FUL_BOMB = 19; // thrown, not drunk
 const VI = 14;
 const MON = 11; // "Ma Potion"
 const EE = 13;
+const WATER = 15; // Water Flask (water.js)
+const WATER_FLASK_DRINK = 1600;
+const WATER_MAX = 2048;
 
 /** The hand (1 action, then 0 ready, F411) holding an empty flask, or -1. */
 export function emptyFlaskHand(dungeon, hands) {
@@ -26,8 +29,9 @@ export const drinkable = (entry) => entry.type !== EMPTY_FLASK && entry.type !==
 
 /**
  * The champion drinks the potion entry (F349): health (Vi), stamina (Ma) and mana (Ee) are coded,
- * the other potions are drunk without effect for now. The entry becomes an empty flask.
- * @returns {{ effect: 'health'|'stamina'|'mana'|null, gained: number }} gained: shown value
+ * the water of a Water Flask too (docs/050); the other potions are drunk without effect for now.
+ * The entry becomes an empty flask.
+ * @returns {{ effect: 'health'|'stamina'|'mana'|'water'|null, gained: number }} gained: shown value
  */
 export function drinkPotion(champion, entry) {
   const power = entry.power;
@@ -49,6 +53,10 @@ export function drinkPotion(champion, entry) {
     if (mana > champion.maxMana) mana -= (mana - Math.max(champion.mana, champion.maxMana)) >> 1;
     champion.mana = mana;
     [effect, gained] = ['mana', mana - before];
+  } else if (entry.type === WATER) {
+    const before = champion.water;
+    champion.water = Math.min(WATER_MAX, champion.water + WATER_FLASK_DRINK);
+    [effect, gained] = ['water', champion.water - before];
   }
   entry.type = EMPTY_FLASK;
   entry.name = 'Empty Flask';

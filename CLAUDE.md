@@ -39,7 +39,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-30, après la doc 049.
+> Mis à jour le 2026-10-30, après la doc 050.
 
 ### Données et visualiseur
 
@@ -86,7 +86,7 @@ Analyser le fichier XML en se concentrant d'abord sur
 - **Timeline fidèle à ReDMCSB (doc 026) :** les événements d'une même case au même tick fusionnent ; compteurs : `set` incrémente, `clear` décrémente.
 - **Portes animées (doc 028) :** crans 0 à 4, un par tick ; le groupe passe jusqu'à 1/4, une créature jusqu'à sa hauteur ; une porte qui se ferme sur quelqu'un remonte et le blesse ; bouton sur un montant fixe. Le premier cran tombe sur un tick : au tick suivant pour un clic ou un pas (doc 043).
 - **Sorts, G1 (doc 030) :** panneau de sorts à droite du cadre de Zed (`src/ui/spell-panel.js`), glyphes Atari ST (`spell-glyphs.js`), 25 sorts reconnus (`spell-info.js`, `src/sim/spells.js`), sans effet sauf la fatigue.
-- **Sorts, G2 (doc 031) :** les sorts de potion remplissent une flasque vide en main (`src/sim/potions.js`) ; clic sur le cadre de Zed avec une potion au curseur : la boire (santé, endurance, mana).
+- **Sorts, G2 (doc 031) :** les sorts de potion remplissent une flasque vide en main (`src/sim/potions.js`) ; la bouche (doc 050) boit la potion du curseur (santé, endurance, mana).
 - **Lumière, H1 (doc 032) :** modèle sans rendu (`src/sim/light.js`) : niveau 0 toujours éclairé, torches en main pondérées et usées tous les 512 ticks, lumière magique par crans ; affichée dans la ligne d'état du jeu.
 - **Sorts, G3 (doc 033) :** Open Door et Fireball en projectiles magiques (`src/sim/magic.js`, `projectiles.js`) : porte à bouton actionnée, porte cassée, créatures et groupe brûlés ; Torch ajoute de la lumière magique.
 - **Sorts, G4 (doc 034) :** grimoire des parchemins tenus (`src/sim/grimoire.js`, sorts reconnus dans le texte) ; infobulles détaillées des objets tenus (`itemDetails`, `item-info.js`).
@@ -98,8 +98,9 @@ Analyser le fichier XML en se concentrant d'abord sur
   - Plus d'ombres, de scintillement, de brouillard, de relief ni de lumière hémisphérique.
 - **Lumière arrêtée par les murs (doc 038) :** option du panneau (`occlusion`, `fp-occlusion.js`). Un masque par case et par lumière, calculé par rayons sur la grille, est lu par le shader des matériaux Lambert de la vue.
 - **Messages du jeu (doc 048) :** `say()` (`main.js`) les écrit dans la zone de messages de la simulation et dans la barre d'état ; les informations de débogage restent dans la barre d'état seule.
+- **Eau (doc 050) :** gourdes à 4 états (`src/sim/water.js`), fontaines qui remplissent gourde et flasque vide, comme DM ; bouche sous l'objet tenu (remplace le clic sur le cadre de Zed) ; jauge d'eau de Zed sans effet (faim et soif en attente).
 - **Durée d'un tick (doc 047) :** 220 ms (`TICK_MS`, `main.js`), soit 11 synchronisations verticales à 50 Hz, comme la boucle de jeu de DM en PAL.
-- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`, `node tools/test-map-tools.mjs`.
+- **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`, `node tools/test-map-tools.mjs`, `node tools/test-water.mjs`.
 
 ### En attente
 

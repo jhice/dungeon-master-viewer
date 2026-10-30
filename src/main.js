@@ -19,6 +19,7 @@ import { createGameWindow } from './ui/game-window.js';
 import { createChampionPanel } from './ui/champion-panel.js';
 import { createSpellPanel } from './ui/spell-panel.js';
 import { createSimulation } from './sim/simulation.js';
+import { isWaterskin } from './sim/water.js';
 import { DEFAULT_LIGHTING } from './render/first-person/lighting-settings.js';
 import { DEFAULT_AUDIO } from './audio/audio-settings.js';
 import { createAudio } from './audio/audio.js';
@@ -631,6 +632,7 @@ async function openGame() {
     // Inventory: a click takes the item in hand (the one held goes back); "Ranger" stows the hand.
     onSelectItem: (i) => sim.takeFromInventory(i),
     onStow: () => sim.stow(),
+    onMouth: drink,
   });
   try {
     const { createFirstPersonRenderer } = await import('./render/first-person/fp-renderer.js');
@@ -651,7 +653,6 @@ async function openGame() {
       onAction: doAction,
       onHand: (i) => sim.swapHand(i),
       onRestart: () => sim.reset(),
-      onMouth: drink,
     });
     const spells = createSpellPanel(win.viewport, {
       onSymbol: (i) => sim.addSymbol(i),
@@ -739,8 +740,9 @@ function clickFront(side = 'right', kind = null) {
     const melee = sim.actions.find((a) => a.kind === 'melee');
     return melee ? doAction(melee.index) : say('Aucune action de frappe avec cet objet');
   }
-  const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
-  if (broken) {
+  const { target, fired, took, placed, hits, needed, broken, filled } = sim.clickFront();
+  if (filled) say(filled === 'waterskin' ? 'La fontaine remplit la gourde' : 'La fontaine remplit la flasque : Water Flask');
+  else if (broken) {
     say('La porte vole en éclats');
     game?.window.flash();
   } else if (hits) say(`Coup sur la porte (${hits}/${needed})`);
@@ -793,15 +795,17 @@ function throwHeld(side) {
   else if (result === 'thrown') say(`Lancé : ${itemName(item)}`);
 }
 
-// Click on the champion's box: he drinks the potion held by the cursor (docs/031).
+// The mouth (under the item in hand): the champion drinks what the cursor holds (docs/031, 050).
 function drink() {
   if (!sim.hand) return;
-  if (!sim.drink()) say(`${itemName(sim.hand)} : ne se boit pas`);
+  const result = sim.drink();
+  if (result?.empty) say(`${itemName(sim.hand)} : la gourde est vide`);
+  else if (!result) say(`${itemName(sim.hand)} : ne se boit pas`);
 }
 
 // The champion's box: bars, hands, actions of the action hand.
 function showChampion() {
-  const describe = (ref) => ref && { name: itemName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) };
+  const describe = (ref) => ref && { name: heldName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) };
   game?.panel.update(
     sim.champion,
     sim.hands.map(describe),
@@ -822,6 +826,11 @@ function clickFloor({ level, x, y, position, item }, side) {
 
 // Contents of a tile for the views: items lying there now and creature group standing there (simulation).
 const itemName = (ref) => describeItem(dungeon, ref).name;
+// In the inventory and the hands: a waterskin with its state (docs/050).
+const heldName = (ref) => {
+  const { name, note } = describeItem(dungeon, ref);
+  return isWaterskin(dungeon, ref) ? `${name} (${note})` : name;
+};
 // Name and details of an item, one per line (docs/034).
 const itemTooltip = (ref) => [itemName(ref), ...itemDetails(dungeon, ref)].join('\n');
 // A chest stowed once has given its contents to the inventory: it is shown empty
@@ -835,9 +844,9 @@ function contentsAt(level, x, y) {
 }
 
 function showInventory() {
-  const hand = sim.hand && { name: itemName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind], details: itemTooltip(sim.hand) };
+  const hand = sim.hand && { name: heldName(sim.hand), color: CATEGORY_COLORS[sim.hand.kind], details: itemTooltip(sim.hand) };
   game?.window.setInventory(
-    sim.inventory.map((ref) => ({ name: itemName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) })),
+    sim.inventory.map((ref) => ({ name: heldName(ref), color: CATEGORY_COLORS[ref.kind], details: itemTooltip(ref) })),
     hand,
   );
   game?.view.setHandCursor(hand?.color ?? null);
@@ -927,10 +936,11 @@ sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   say(`${who} lance ${words}${reason === 'unimplemented' ? ' · pas encore implémenté' : ''}`);
 });
 const championName = (champion) => champion.name[0] + champion.name.slice(1).toLowerCase();
-const DRINK_EFFECTS = { health: 'PV', stamina: 'endurance', mana: 'mana' };
-sim.on('potionDrunk', ({ champion, name, effect, gained }) =>
-  say(`${championName(champion)} boit ${name} : ${effect ? `+${gained} ${DRINK_EFFECTS[effect]}` : 'effet pas encore implémenté'}`),
-);
+const DRINK_EFFECTS = { health: 'PV', stamina: 'endurance', mana: 'mana', water: 'eau' };
+// Water (docs/050): the gauge of the champion follows, out of 2048 (no thirst yet).
+const drinkEffect = (champion, effect, gained) =>
+  !effect ? 'effet pas encore implémenté' : `+${gained} ${DRINK_EFFECTS[effect]}${effect === 'water' ? ` (${champion.water} / 2048)` : ''}`;
+sim.on('potionDrunk', ({ champion, name, effect, gained }) => say(`${championName(champion)} boit ${name} : ${drinkEffect(champion, effect, gained)}`));
 // What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
 sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown, spell }) => {
   game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');

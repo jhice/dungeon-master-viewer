@@ -6,7 +6,7 @@
 // (http://dmweb.free.fr/games/dungeon-master/solutions/items/), extracted from DM for
 // Atari ST; the actions, their minimum skill level and charge: "Actions and Combos".
 
-import { ITEM_POOLS } from './contents.js';
+import { ITEM_POOLS, WATERSKIN_STATES } from './contents.js';
 import { parseCombo } from './action-info.js';
 
 // A combo (action-info.js, parseCombo): actions, `:n` minimum skill level, `*` needs a charge.
@@ -229,7 +229,9 @@ export function itemInfo(dungeon, { kind, index }) {
       ammunition: AMMUNITION[type],
     };
   }
-  const weight = WEIGHT[kind]?.get(type) ?? 1;
+  let weight = WEIGHT[kind]?.get(type) ?? 1;
+  // A waterskin weighs 0.2 kg more per sip it holds (ReDMCSB F140).
+  if (kind === 'miscellaneous' && type === WATERSKIN) weight += 0.2 * (dungeon.data.miscellaneous[index].subtype ?? 0);
   const combo = COMBO[kind]?.get(type) ?? [];
   return { weight, strength: 0, kinetic: 0, combo, weapon: false, throwable: combo.some((c) => c.action.name === 'Throw') };
 }
@@ -237,6 +239,8 @@ export function itemInfo(dungeon, { kind, index }) {
 const POWER_SYMBOLS = ['Lo', 'Um', 'On', 'Ee', 'Pal', 'Mon'];
 const TORCH = 2;
 const EMPTY_FLASK = 20;
+const WATER_FLASK = 15;
+const WATERSKIN = 1; // miscellaneous type
 const kg = (weight) => `${weight.toFixed(1).replace('.', ',')} kg`;
 
 /**
@@ -251,8 +255,13 @@ export function itemDetails(dungeon, ref) {
   const lines = [];
   if (ref.kind === 'scroll') lines.push(...(dungeon.data.texts[entry.text]?.text ?? '(illisible)').split('\n'));
   if (ref.kind === 'potion') {
-    if (entry.type === EMPTY_FLASK) lines.push('Flasque vide : un sort de potion la remplit');
+    if (entry.type === EMPTY_FLASK) lines.push('Flasque vide : un sort de potion ou une fontaine la remplit');
+    else if (entry.type === WATER_FLASK) lines.push('Eau : se boit (bouche)');
     else if (entry.power) lines.push(`Puissance ${entry.power} (${POWER_SYMBOLS[Math.min(5, Math.max(1, Math.floor(entry.power / 40)) - 1)]})`);
+  }
+  if (ref.kind === 'miscellaneous' && entry.type === WATERSKIN) {
+    lines.push(`Gourde ${WATERSKIN_STATES[entry.subtype ?? 0]} (${entry.subtype ?? 0} gorgée${entry.subtype > 1 ? 's' : ''} sur 3)`);
+    lines.push('Se boit (bouche) ; une fontaine la remplit');
   }
   if (ref.kind === 'weapon' && entry.type === TORCH) {
     lines.push(entry.charges ? `${entry.charges} charge${entry.charges > 1 ? 's' : ''} sur 15, ${entry.lit ? 'allumée' : 'éteinte'}` : 'Consumée');

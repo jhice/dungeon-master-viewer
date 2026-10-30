@@ -16,9 +16,10 @@ const MESSAGE_MS = 12000; // before a message fades out
  * @param {() => void} [options.onReset] back to the start position
  * @param {(index: number) => void} [options.onSelectItem] an item of the inventory was clicked: take it in hand
  * @param {() => void} [options.onStow] the "Ranger" button: the item in hand goes into the inventory
+ * @param {() => void} [options.onMouth] the mouth of the champion: he drinks what the cursor holds (docs/050)
  * @returns {{ viewport: HTMLElement, setStatus(text), message(text), setInventory(items, hand), flash(), dispose() }}
  */
-export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onStow } = {}) {
+export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onSelectItem, onStow, onMouth } = {}) {
   const win = document.createElement('section');
   win.className = 'game-window';
   win.setAttribute('aria-label', 'Simulation');
@@ -37,16 +38,22 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
   const messages = document.createElement('div');
   messages.className = 'game-messages';
   messages.setAttribute('aria-live', 'polite');
-  // Hand and inventory of the party: the item in hand and the "Ranger" button, then one
-  // chip per item of the inventory (click = take it in hand).
+  // Hand and inventory of the party: the item in hand with the mouth of the champion below it
+  // (as DM's inventory), the "Ranger" button, then one chip per item of the inventory
+  // (click = take it in hand).
   const inventory = document.createElement('div');
   inventory.className = 'game-inventory';
+  const handColumn = document.createElement('div');
+  handColumn.className = 'game-hand-column';
   const handSlot = document.createElement('span');
   handSlot.className = 'game-hand';
+  const mouth = button('👄 Bouche', 'Bouche de Zed : boire l’objet tenu (potion, gourde)', onMouth);
+  mouth.classList.add('game-mouth');
+  handColumn.append(handSlot, mouth);
   const stowButton = button('Ranger', 'Ranger l’objet tenu dans l’inventaire (clic droit dans la vue)', onStow);
   const chips = document.createElement('div');
   chips.className = 'game-items';
-  inventory.append(handSlot, stowButton, chips);
+  inventory.append(handColumn, stowButton, chips);
   win.append(bar, viewport, messages, inventory);
   document.body.append(win);
 
@@ -109,6 +116,7 @@ export function createGameWindow({ layout, onLayoutChange, onClose, onReset, onS
       handSlot.classList.toggle('is-empty', !hand);
       handSlot.style.setProperty('--c', hand?.color ?? 'transparent');
       stowButton.disabled = !hand;
+      mouth.disabled = !hand;
       chips.replaceChildren(
         ...items.map((item, i) => {
           const chip = button(item.name, `${item.details ?? item.name}\n(clic : prendre avec le curseur)`, () => onSelectItem?.(i));

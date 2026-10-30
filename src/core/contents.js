@@ -39,6 +39,9 @@ export const SUBCELL_LABELS = ['NO', 'NE', 'SE', 'SO'];
 export const FACES = ['N', 'E', 'S', 'W'];
 export const FACE_LABELS = ['face N', 'face E', 'face S', 'face O'];
 
+/** States of a waterskin (miscellaneous type 1) by charge count, as DM describes it (ReDMCSB F342, docs/050). */
+export const WATERSKIN_STATES = ['vide', 'presque vide', 'presque pleine', 'pleine'];
+
 /** Name and extra info of an item reference ({ kind, index }). */
 export function describeItem(dungeon, { kind, index, position }) {
   const entry = dungeon.data[ITEM_POOLS[kind]][index];
@@ -55,6 +58,7 @@ export function describeItem(dungeon, { kind, index, position }) {
     if (!entry.charges) item.note = 'consumée';
     else if (entry.lit) item.note += ', allumée';
   }
+  if (kind === 'miscellaneous' && entry.type === 1) item.note = WATERSKIN_STATES[entry.subtype ?? 0];
   if (entry.items?.length) item.contents = entry.items.map((ref) => describeItem(dungeon, ref));
   return item;
 }

@@ -16,7 +16,8 @@
 
 import { FACINGS, SIDE_DELTAS } from '../core/dungeon.js';
 import { itemIdOf } from '../core/item-ids.js';
-import { isAlcove } from '../core/ornaments.js';
+import { isAlcove, shownOrnament } from '../core/ornaments.js';
+import { fillAtFountain } from './water.js';
 import { resolveItemArrival, creatureDoorHeight } from './rules.js';
 import { decodeChampion } from '../core/texts.js';
 import { creatureInfo } from '../core/creature-info.js';
@@ -468,7 +469,7 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
    * a lock ("Specific item / Removed") keeps it. An item holder (type 13, torch holder)
    * takes the item it expects from the hand, or gives it back to an empty hand.
    * @param {object} p party
-   * @returns {{ target: string, fired: number, took?: number, placed?: boolean, hits?: number, broken?: boolean }}
+   * @returns {{ target: string, fired: number, took?: number, placed?: boolean, hits?: number, broken?: boolean, filled?: 'waterskin'|'flask'|null }}
    */
   function clickFront(p) {
     const [dx, dy] = SIDE_DELTAS[p.facing];
@@ -481,6 +482,10 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     const face = (FACINGS.indexOf(p.facing) + 2) % 4; // the face looking at the party
     // As shown before this click: a button revealing an alcove does not hand over its items at once.
     const alcove = isAlcove(dungeon, p.level, x, y, face, state.actuatorsAt);
+    // A fountain fills the waterskin or the empty flask in hand, then the wall is touched (F377, docs/050).
+    const fountain = !alcove && shownOrnament(dungeon, p.level, x, y, face, state.actuatorsAt) === 'Fountain';
+    const filled = fountain && state.hand ? fillAtFountain(dungeon, state.hand) : null;
+    if (filled) changedInventory();
     const lying = state.itemsAt(p.level, x, y);
     const matches = (item, a) => Boolean(item) && itemIdOf(dungeon, item) === a.data;
     let placed = false;
@@ -515,9 +520,9 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     }
     clock.flush();
     const fired = firedCount;
-    if (placed || took) return { target: 'wall', fired, placed, took };
+    if (placed || took) return { target: 'wall', fired, placed, took, filled };
 
-    if (!alcove) return { target: 'wall', fired, took: 0 }; // items behind a mirror, a button…: out of reach
+    if (!alcove) return { target: 'wall', fired, took: 0, filled }; // items behind a mirror, a button…: out of reach
     if (state.hand) {
       intoWall(p.level, x, y, face);
       return { target: 'wall', fired, placed: true };
