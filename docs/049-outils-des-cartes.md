@@ -17,6 +17,20 @@
 - **Fermeture :** un choix, un clic ailleurs, Échap, la molette ou la perte du focus.
 - **Code :** `src/ui/context-menu.js` (générique) ; option `onContextMenu(info, event)` des renderers 2D et 3D ; `openTileMenu()` dans `main.js` ; `collectAll()` et `fireAll()` dans `src/sim/logic.js`.
 
+### Limite : actuators à objet (porte-torche, alcôve)
+
+« Activer » et « Ramasser » sont deux commandes séparées. Quand l'actuator d'une case est lié à un objet, il faut les deux pour garder un état cohérent :
+
+- **Porte-torche** (niveau 0, (3, 14)) : l'actuator 7 est un « Item storage » (type 13) avec une rotation locale. En jeu, un clic main vide prend la torche **et** fait tourner l'actuator, ce qui affiche le porte-torche vide.
+  - « Activer » fait seulement tourner l'actuator : le porte-torche paraît vide, mais la torche reste dans le mur.
+  - « Ramasser » prend seulement la torche : le porte-torche paraît encore plein.
+  - Les deux commandes ensemble donnent l'état du jeu. Une seule laisse un décalage, qui inverse la suite des clics dans la vue.
+- **Alcôve** (niveau 0, (4, 18)) : son seul actuator (620) est « Inactive » (type 0, sans action). Il ne fait que porter le décor de l'alcôve. « Activer » ne fait rien, mais compte quand même un actuator, dans le menu et dans le message. Ce qu'il faut ici, c'est « Ramasser ».
+
+Pistes, pas encore faites :
+- ne pas compter les actuators « Inactive » (type 0) dans le menu ;
+- pour un « Item storage », faire jouer à « Activer » le clic complet : prendre ou poser l'objet, puis tourner.
+
 ## 2. Valeurs par défaut
 
 - Bouton en bas du panneau. Il remet toutes les valeurs du panneau :
