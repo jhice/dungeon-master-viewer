@@ -121,6 +121,17 @@
   color: var(--accent, #e0b050);
 }
 
+/* Rulers hidden (panel option): the grid alone. */
+.hide-rulers .dom-frame {
+  --ruler-h: 0px;
+  --ruler-w: 0px;
+}
+
+.hide-rulers .ruler,
+.hide-rulers .ruler-corner {
+  display: none;
+}
+
 /* Scrolling to the party or a highlighted tile: clear of the rulers. */
 .dom-view .tile {
   scroll-margin: calc(var(--ruler-h) * 2 + var(--cell)) calc(var(--ruler-w) * 2 + var(--cell));

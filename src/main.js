@@ -57,6 +57,7 @@ const prefs = loadPreferences({
   frame: 'local',
   autoFit: true, // 2D/ASCII: fit the zoom to the level after each level change (local frame)
   alwaysTooltip: true, // tooltip even on empty tiles (tile info of the status bar)
+  showRulers: true, // 2D: coordinates on the top and left edges
   cell: null,
   showStates: true,
   showItems: true,
@@ -73,6 +74,7 @@ const prefs = loadPreferences({
   audio: {}, // sounds (docs/041), over DEFAULT_AUDIO
 });
 if (!RENDERERS[prefs.renderer]) prefs.renderer = 'dom';
+view.classList.toggle('hide-rulers', !prefs.showRulers);
 prefs.level = Math.min(Math.max(0, prefs.level), dungeon.levelCount - 1);
 
 let renderer = null;
@@ -301,12 +303,19 @@ function showInfo(text) {
   status.textContent = text;
 }
 
+// A message for the player (in-game): in the message area of the game window, as in DM,
+// and in the status bar.
+function say(text) {
+  showInfo(text);
+  game?.window.message(text);
+}
+
 // Zoom for the CSS renderers: --cell drives the tile size (2D) and the font size (ASCII).
 function fitCell() {
   const b = dungeon.bounds;
   const map = dungeon.level(renderer?.currentLevel ?? prefs.level);
   // The 2D view adds rulers (one or two tracks, about a tile each) on the left and top.
-  const rulers = prefs.renderer === 'dom' ? (prefs.frame === 'global' ? 2 : 1) : 0;
+  const rulers = prefs.renderer === 'dom' && prefs.showRulers ? (prefs.frame === 'global' ? 2 : 1) : 0;
   const cols = (prefs.frame === 'global' ? b.maxX - b.minX : map.width) + rulers;
   const rows = (prefs.frame === 'global' ? b.maxY - b.minY : map.height) + rulers;
   // The right-hand panels overlay the view: keep the map beside them.
@@ -461,6 +470,7 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'frameGlobal', label: 'Repère global', shortcut: 'G' });
     schema.push({ type: 'checkbox', key: 'autoFit', label: 'Auto-ajustement (repère local)' });
   }
+  if (prefs.renderer === 'dom') schema.push({ type: 'checkbox', key: 'showRulers', label: 'Règles (coordonnées sur les bords)' });
   return [...schema, ...(renderer.settingsSchema ?? []), ...LIGHTING_SCHEMA, ...AUDIO_SCHEMA];
 }
 
@@ -474,6 +484,7 @@ const panelValues = () => ({
   frameGlobal: prefs.frame === 'global',
   alwaysTooltip: prefs.alwaysTooltip,
   autoFit: prefs.autoFit,
+  showRulers: prefs.showRulers,
   ...renderer.settings,
   ...lighting(),
   ...audioSettings(),
@@ -485,13 +496,19 @@ function onPanelChange(allChanges) {
   const audioChanges = Object.fromEntries(Object.entries(allChanges).filter(([key]) => key in DEFAULT_AUDIO));
   if (Object.keys(audioChanges).length) changeAudio(audioChanges);
   const changes = Object.fromEntries(Object.entries(allChanges).filter(([key]) => !(key in DEFAULT_LIGHTING) && !(key in DEFAULT_AUDIO)));
-  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, ...settings } = changes;
+  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, showRulers, ...settings } = changes;
   // Simple viewer preferences (no immediate effect beyond the next hover / level change).
   for (const [key, value] of Object.entries({ alwaysTooltip, autoFit })) {
     if (value === undefined) continue;
     prefs[key] = value;
     savePreferences(prefs);
     if (key === 'autoFit' && value && prefs.frame === 'local') setCell(null);
+  }
+  if (showRulers !== undefined) {
+    prefs.showRulers = showRulers;
+    savePreferences(prefs);
+    view.classList.toggle('hide-rulers', !showRulers);
+    if (prefs.cell === null) setCell(null);
   }
   if (showStates !== undefined) setShowStates(showStates);
   if (showItems !== undefined) setLayer('showItems', showItems);
@@ -663,16 +680,16 @@ function clickFront(side = 'right', kind = null) {
   if (kind !== 'front' && sim.state.groupAt(sim.party.level, sim.party.x + dx, sim.party.y + dy)) {
     if (sim.hand) return throwHeld(side);
     const melee = sim.actions.find((a) => a.kind === 'melee');
-    return melee ? doAction(melee.index) : showInfo('Aucune action de frappe avec cet objet');
+    return melee ? doAction(melee.index) : say('Aucune action de frappe avec cet objet');
   }
   const { target, fired, took, placed, hits, needed, broken } = sim.clickFront();
   if (broken) {
-    showInfo('La porte vole en éclats');
+    say('La porte vole en éclats');
     game?.window.flash();
-  } else if (hits) showInfo(`Coup sur la porte (${hits}/${needed})`);
-  else if (took) showInfo(`Pris : ${itemName(sim.hand)}`);
-  else if (placed) showInfo('Objet posé');
-  else if (!fired) showInfo(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
+  } else if (hits) say(`Coup sur la porte (${hits}/${needed})`);
+  else if (took) say(`Pris : ${itemName(sim.hand)}`);
+  else if (placed) say('Objet posé');
+  else if (!fired) say(target === 'wall' || target === 'door' ? 'Rien ne se passe' : 'Rien à actionner devant');
 }
 
 // An action of the action hand (docs/044), by its index. What a strike or a shot does to a
@@ -706,7 +723,7 @@ function doAction(index) {
   }[result];
   if (!words) return;
   if (words[0]) game?.panel.showResult(words[0]);
-  if (words[1]) showInfo(words[1]);
+  if (words[1]) say(words[1]);
 }
 
 // A click with an item held by the cursor, out of reach (or on a creature): it is thrown
@@ -715,14 +732,14 @@ function throwHeld(side) {
   if (!sim.hand) return;
   const { result, item } = sim.throwHeld(side);
   game?.panel.setReady(sim.fatigue === 0);
-  if (result === 'exhausted') showInfo('Trop fatigué');
-  else if (result === 'thrown') showInfo(`Lancé : ${itemName(item)}`);
+  if (result === 'exhausted') say('Trop fatigué');
+  else if (result === 'thrown') say(`Lancé : ${itemName(item)}`);
 }
 
 // Click on the champion's box: he drinks the potion held by the cursor (docs/031).
 function drink() {
   if (!sim.hand) return;
-  if (!sim.drink()) showInfo(`${itemName(sim.hand)} : ne se boit pas`);
+  if (!sim.drink()) say(`${itemName(sim.hand)} : ne se boit pas`);
 }
 
 // The champion's box: bars, hands, actions of the action hand.
@@ -742,7 +759,7 @@ function clickFloor({ level, x, y, position, item }, side) {
   if (sim.hand) {
     if (!sim.drop(level, x, y, position)) throwHeld(side); // out of reach: thrown there
   } else if (item && !sim.pickUp(level, x, y, item)) {
-    showInfo('Hors de portée');
+    say('Hors de portée');
   }
 }
 
@@ -831,49 +848,49 @@ sim.on('lightChanged', (light) => {
 // A torch in hand lost a charge: its name in the hands and its note change.
 sim.on('torchesWorn', ({ torches }) => {
   showInventory();
-  if (torches.some((t) => !t.charges)) showInfo('Une torche s’est consumée');
+  if (torches.some((t) => !t.charges)) say('Une torche s’est consumée');
 });
 sim.on('championChanged', showChampion);
 // Spell area (docs/030): the line of symbols changed; a spell was cast (G1: recognised, no effect yet).
 sim.on('symbolsChanged', ({ champion }) => game?.spells.update(champion, sim.knownSpells));
 // A scroll held for the first time: its spells go into the grimoire (docs/034).
 sim.on('grimoireChanged', ({ learned }) => {
-  if (learned.length) showInfo(`Grimoire : ${learned.map((s) => `${s.name} (${s.symbols.join(' ')})`).join(', ')}`);
+  if (learned.length) say(`Grimoire : ${learned.map((s) => `${s.name} (${s.symbols.join(' ')})`).join(', ')}`);
   game?.spells.update(sim.champion, sim.knownSpells);
 });
 sim.on('spellCast', ({ champion, spell, power, reason, item }) => {
   game?.panel.setReady(sim.fatigue === 0);
   const who = championName(champion);
-  if (!spell) return showInfo(`${who} a prononcé un sort incompréhensible`);
+  if (!spell) return say(`${who} a prononcé un sort incompréhensible`);
   // The spell is named only when the grimoire knows it (docs/034); else its symbols alone.
   const symbols = `${SYMBOLS[0][power - 1]} ${spell.symbols.join(' ')}`;
   const words = sim.knownSpells.includes(spell) ? `${spell.name} (${symbols})` : symbols;
-  if (reason === 'needsFlask') return showInfo(`${who} a besoin d’une flasque vide en main pour cette potion (${symbols})`);
-  if (reason === 'potion') return showInfo(`${who} lance ${words} : la flasque devient ${itemName(item)}`);
-  showInfo(`${who} lance ${words}${reason === 'unimplemented' ? ' · pas encore implémenté' : ''}`);
+  if (reason === 'needsFlask') return say(`${who} a besoin d’une flasque vide en main pour cette potion (${symbols})`);
+  if (reason === 'potion') return say(`${who} lance ${words} : la flasque devient ${itemName(item)}`);
+  say(`${who} lance ${words}${reason === 'unimplemented' ? ' · pas encore implémenté' : ''}`);
 });
 const championName = (champion) => champion.name[0] + champion.name.slice(1).toLowerCase();
 const DRINK_EFFECTS = { health: 'PV', stamina: 'endurance', mana: 'mana' };
 sim.on('potionDrunk', ({ champion, name, effect, gained }) =>
-  showInfo(`${championName(champion)} boit ${name} : ${effect ? `+${gained} ${DRINK_EFFECTS[effect]}` : 'effet pas encore implémenté'}`),
+  say(`${championName(champion)} boit ${name} : ${effect ? `+${gained} ${DRINK_EFFECTS[effect]}` : 'effet pas encore implémenté'}`),
 );
 // What a strike or a thrown item did to a creature: the damage in the action area, a word in the status bar.
 sim.on('creatureHit', ({ result, damage, group, killed, destroyed, thrown, spell }) => {
   game?.panel.showResult(result === 'hit' ? String(damage) : result === 'immaterial' ? 'Sans effet' : 'Raté');
   const { name } = describeGroup(dungeon, group);
-  if (destroyed) showInfo(`${name} : groupe anéanti`);
-  else if (killed) showInfo(`${name} tué`);
-  else if (result === 'immaterial') showInfo(`${name} : immatériel, les coups le traversent`);
-  else if (thrown) showInfo(result === 'hit' ? `${name} touché : ${damage} PV` : `${name} : sans dégâts`);
-  else if (spell) showInfo(`${name} brûlé : ${damage} PV`);
+  if (destroyed) say(`${name} : groupe anéanti`);
+  else if (killed) say(`${name} tué`);
+  else if (result === 'immaterial') say(`${name} : immatériel, les coups le traversent`);
+  else if (thrown) say(result === 'hit' ? `${name} touché : ${damage} PV` : `${name} : sans dégâts`);
+  else if (spell) say(`${name} brûlé : ${damage} PV`);
 });
 // A fireball broke a door (docs/033).
 sim.on('doorBroken', ({ by }) => {
-  showInfo(by === 'melee' ? 'La porte vole en éclats' : 'La boule de feu fait voler la porte en éclats');
+  say(by === 'melee' ? 'La porte vole en éclats' : 'La boule de feu fait voler la porte en éclats');
   game?.window.flash();
 });
-sim.on('itemStolen', ({ group, item }) => showInfo(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));
-sim.on('groupFled', ({ group, reason }) => reason === 'fear' && showInfo(`${describeGroup(dungeon, group).name} : le groupe prend peur et s’enfuit`));
+sim.on('itemStolen', ({ group, item }) => say(`${describeGroup(dungeon, group).name} vous a volé : ${itemName(item)}`));
+sim.on('groupFled', ({ group, reason }) => reason === 'fear' && say(`${describeGroup(dungeon, group).name} : le groupe prend peur et s’enfuit`));
 // Items in flight: redrawn in the first-person view once per frame.
 let projectileFrame = 0;
 sim.on('projectilesMoved', () => {
@@ -884,18 +901,18 @@ sim.on('projectilesMoved', () => {
 });
 sim.on('championHit', ({ result, damage }) => result === 'hit' && game?.panel.wounded(damage));
 sim.on('championDied', ({ champion, group, spell }) =>
-  showInfo(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : spell ? 'brûlé par sa boule de feu' : 'écrasé par une porte'}`),
+  say(`${champion.name} est mort, ${group ? `tué par ${describeGroup(dungeon, group).name}` : spell ? 'brûlé par sa boule de feu' : 'écrasé par une porte'}`),
 );
 sim.on('championHit', ({ door, spell, damage }) => {
-  if (door) showInfo(`La porte se referme sur le groupe : ${damage} PV`);
+  if (door) say(`La porte se referme sur le groupe : ${damage} PV`);
   if (spell) {
-    showInfo(`La boule de feu explose sur le groupe : ${damage} PV`);
+    say(`La boule de feu explose sur le groupe : ${damage} PV`);
     game?.window.flash();
   }
 });
 sim.on('doorCrushed', ({ group, killed, destroyed }) => {
   const { name } = describeGroup(dungeon, group);
-  showInfo(destroyed ? `${name} : écrasé par la porte, groupe anéanti` : killed ? `${name} : ${killed} écrasé(s) par la porte` : `La porte se referme sur ${name}`);
+  say(destroyed ? `${name} : écrasé par la porte, groupe anéanti` : killed ? `${name} : ${killed} écrasé(s) par la porte` : `La porte se referme sur ${name}`);
 });
 
 // Creatures moved: their tiles are redrawn in 2D, only the creature markers of their level

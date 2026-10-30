@@ -39,13 +39,13 @@ Analyser le fichier XML en se concentrant d'abord sur
 
 ## Etat du projet
 
-> Mis à jour le 2026-10-29, après la doc 047.
+> Mis à jour le 2026-10-30, après la doc 048.
 
 ### Données et visualiseur
 
 - **Données :** le modèle `data/dungeon.json` est généré par `npm run build:data` (format : doc 002).
 - **Renderers :** leur contrat est dans `src/render/renderer.js`. Il y en a trois : ASCII (outil en ligne de commande), 2D (DOM/CSS), 3D (Three.js).
-  - La 2D affiche les coordonnées locales, et globales en repère global, sur les bords (doc 027).
+  - La 2D affiche les coordonnées locales, et globales en repère global, sur les bords (doc 027), en option dans le panneau (doc 048).
 - **Logique du donjon :** le graphe des actuators, `buildLogic()` dans `src/core/logic.js`, est décrit dans la doc 009.
 - **Docs :** toutes les docs sont dans `docs/`. À lire en priorité : 009 (logique) et 002 (format JSON) ; les sources sont dans 000.
 
@@ -96,6 +96,7 @@ Analyser le fichier XML en se concentrant d'abord sur
   - Panneau « Lumière (vue du jeu) » : intensité, portée, atténuation, lumière permanente, torches murales lumineuses ; défauts dans `lighting-settings.js`.
   - Plus d'ombres, de scintillement, de brouillard, de relief ni de lumière hémisphérique.
 - **Lumière arrêtée par les murs (doc 038) :** option du panneau (`occlusion`, `fp-occlusion.js`). Un masque par case et par lumière, calculé par rayons sur la grille, est lu par le shader des matériaux Lambert de la vue.
+- **Messages du jeu (doc 048) :** `say()` (`main.js`) les écrit dans la zone de messages de la simulation et dans la barre d'état ; les informations de débogage restent dans la barre d'état seule.
 - **Durée d'un tick (doc 047) :** 220 ms (`TICK_MS`, `main.js`), soit 11 synchronisations verticales à 50 Hz, comme la boucle de jeu de DM en PAL.
 - **Tests Node :** `node tools/test-creatures.mjs`, `node tools/test-combat.mjs`, `node tools/test-loot.mjs`, `node tools/test-logic.mjs`, `node tools/test-doors.mjs`, `node tools/test-spells.mjs`, `node tools/test-light.mjs`, `node tools/test-magic.mjs`, `node tools/test-sounds.mjs`.
 
