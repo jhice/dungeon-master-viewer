@@ -12,6 +12,7 @@ import { renderLegend } from './ui/legend.js';
 import { createControlPanel } from './ui/control-panel.js';
 import { createInventoryPanel } from './ui/inventory-panel.js';
 import { createTooltip } from './ui/tooltip.js';
+import { createContextMenu } from './ui/context-menu.js';
 import { createTextsPanel } from './ui/texts-panel.js';
 import { loadPreferences, savePreferences } from './ui/preferences.js';
 import { createGameWindow } from './ui/game-window.js';
@@ -37,7 +38,7 @@ const RENDERERS = {
   // Out of the R rotation (docs/012-simulation.md): kept for the command-line tool.
   ascii: { label: 'ASCII', hidden: true, create: (container, dungeon, opts) => createAsciiRenderer(container, dungeon, { ...opts, wide: true }) },
 };
-const BASE_HINT = 'Début/Fin · R renderer · clic : sélection (Échap) · I inventaire · J textes · P jeu · F y aller · Espace / clic dans la vue : actionner';
+const BASE_HINT = 'Début/Fin · R renderer · clic : sélection (Échap) · clic droit : menu · I inventaire · J textes · P jeu · F y aller · Espace / clic dans la vue : actionner';
 // ↑/↓ change the level outside the game, and move the party in the game.
 const LEVEL_HINT = { viewer: '↑/↓ ou Maj + molette : niveau', game: 'jeu : ZQSD + A/E (AZERTY), flèches, pavé num. · PgPréc/PgSuiv ou Maj + molette : niveau' };
 const MIN_CELL = 6;
@@ -51,20 +52,26 @@ const status = document.getElementById('status');
 const legend = document.getElementById('legend');
 
 const dungeon = await loadDungeon('./data/dungeon.json');
-const prefs = loadPreferences({
-  renderer: 'dom',
-  level: 0,
+// Values of the control panel, restored by its "Valeurs par défaut" button (with the
+// renderers' settings, the light and the sounds).
+const PANEL_DEFAULTS = {
   frame: 'local',
   autoFit: true, // 2D/ASCII: fit the zoom to the level after each level change (local frame)
   alwaysTooltip: true, // tooltip even on empty tiles (tile info of the status bar)
   showRulers: true, // 2D: coordinates on the top and left edges
-  cell: null,
   showStates: true,
   showItems: true,
   showCreatures: true,
   showMechanisms: true,
   showTexts: true,
   allLinks: false,
+  invincible: false, // test option: the champion loses no health
+};
+const prefs = loadPreferences({
+  renderer: 'dom',
+  level: 0,
+  cell: null,
+  ...PANEL_DEFAULTS,
   textsOpen: false,
   panelOpen: true,
   inventoryOpen: false,
@@ -92,6 +99,7 @@ side.append(controlsSlot);
 viewWrap.append(side);
 
 const tooltip = createTooltip();
+const tileMenu = createContextMenu();
 const creatureTypes = new Map(Object.entries(dungeon.data.catalog.creature).map(([type, name]) => [name, Number(type)]));
 const inventory = createInventoryPanel(side, buildInventory(dungeon), {
   levelCount: dungeon.levelCount,
@@ -142,6 +150,7 @@ async function mountRenderer() {
         onStepLevel: go,
         onSettingsChange: saveRendererSettings,
         onSelect: select,
+        onContextMenu: openTileMenu,
         onFollow: follow,
         tileAt: sim.state.tileAt, // tiles in their current state (simulation)
         contentsAt, // and the items lying there now
@@ -471,7 +480,14 @@ function panelSchema() {
     schema.push({ type: 'checkbox', key: 'autoFit', label: 'Auto-ajustement (repère local)' });
   }
   if (prefs.renderer === 'dom') schema.push({ type: 'checkbox', key: 'showRulers', label: 'Règles (coordonnées sur les bords)' });
-  return [...schema, ...(renderer.settingsSchema ?? []), ...LIGHTING_SCHEMA, ...AUDIO_SCHEMA];
+  schema.push({ type: 'checkbox', key: 'invincible', label: 'Invincibilité (Zed ne perd pas de PV)' });
+  return [
+    ...schema,
+    ...(renderer.settingsSchema ?? []),
+    ...LIGHTING_SCHEMA,
+    ...AUDIO_SCHEMA,
+    { type: 'buttons', items: [{ label: 'Valeurs par défaut', title: 'Remettre toutes les valeurs du panneau par défaut', action: resetPanel }] },
+  ];
 }
 
 const panelValues = () => ({
@@ -485,6 +501,7 @@ const panelValues = () => ({
   alwaysTooltip: prefs.alwaysTooltip,
   autoFit: prefs.autoFit,
   showRulers: prefs.showRulers,
+  invincible: prefs.invincible,
   ...renderer.settings,
   ...lighting(),
   ...audioSettings(),
@@ -496,7 +513,7 @@ function onPanelChange(allChanges) {
   const audioChanges = Object.fromEntries(Object.entries(allChanges).filter(([key]) => key in DEFAULT_AUDIO));
   if (Object.keys(audioChanges).length) changeAudio(audioChanges);
   const changes = Object.fromEntries(Object.entries(allChanges).filter(([key]) => !(key in DEFAULT_LIGHTING) && !(key in DEFAULT_AUDIO)));
-  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, showRulers, ...settings } = changes;
+  const { showStates, showItems, showCreatures, showMechanisms, showTexts, allLinks, frameGlobal, alwaysTooltip, autoFit, showRulers, invincible, ...settings } = changes;
   // Simple viewer preferences (no immediate effect beyond the next hover / level change).
   for (const [key, value] of Object.entries({ alwaysTooltip, autoFit })) {
     if (value === undefined) continue;
@@ -510,6 +527,11 @@ function onPanelChange(allChanges) {
     view.classList.toggle('hide-rulers', !showRulers);
     if (prefs.cell === null) setCell(null);
   }
+  if (invincible !== undefined) {
+    prefs.invincible = invincible;
+    savePreferences(prefs);
+    sim.invincible = invincible;
+  }
   if (showStates !== undefined) setShowStates(showStates);
   if (showItems !== undefined) setLayer('showItems', showItems);
   if (showCreatures !== undefined) setLayer('showCreatures', showCreatures);
@@ -518,6 +540,18 @@ function onPanelChange(allChanges) {
   if (allLinks !== undefined) setAllLinks(allLinks);
   if (frameGlobal !== undefined) setFrame(frameGlobal);
   if (Object.keys(settings).length) changeSettings(settings);
+}
+
+// "Valeurs par défaut": every value of the panel (viewer, every renderer, light, sounds).
+function resetPanel() {
+  Object.assign(prefs, PANEL_DEFAULTS, { settings: {}, lighting: {}, audio: {} });
+  savePreferences(prefs);
+  view.classList.toggle('hide-rulers', !prefs.showRulers);
+  sim.invincible = prefs.invincible;
+  game?.view.setLighting(DEFAULT_LIGHTING);
+  audio.setSettings(DEFAULT_AUDIO);
+  // The renderer is rebuilt with its default settings (and the frame), the panel with it.
+  mountRenderer().then(() => showInfo('Panneau : valeurs par défaut'));
 }
 
 // Key -> toggle of a renderer checkbox setting declaring that shortcut (L, E in 3D).
@@ -572,6 +606,7 @@ window.addEventListener('resize', () => renderer && !renderer.zoom && prefs.cell
 // One simulation shared by every view: the first-person window, and the party
 // marker of the 2D/3D renderers, whose shown level follows the party.
 const sim = createSimulation(dungeon);
+sim.invincible = prefs.invincible;
 // Duration of a game tick (actuator delays are in ticks): DM's game loop advances every 11
 // vertical blanks (ReDMCSB MAIN.C), 220 ms on a 50 Hz PAL screen, as the Amiga 3.6 of our sounds (docs/047).
 const TICK_MS = (11 * 1000) / 50;
@@ -659,15 +694,37 @@ function closeGame() {
 }
 
 // F: the party jumps to the selected tile (to test a place directly), facing unchanged.
-async function teleportToSelection() {
+function teleportToSelection() {
   if (!selection) return showInfo('F : sélectionnez d’abord une case (clic)');
-  const target = selection;
+  return teleportTo(selection);
+}
+async function teleportTo(target) {
   if (!game) await openGame();
   const blocked = sim.teleport(target.level, target.x, target.y);
-  if (blocked) return showInfo(`F : case infranchissable (${BLOCK_LABELS[blocked]})`);
+  if (blocked) return showInfo(`Téléportation : case infranchissable (${BLOCK_LABELS[blocked]})`);
   // The party is there: the selection has done its job.
-  selection = null;
-  refreshLinks();
+  if (selection) select(selection);
+}
+
+// Right click on a tile of the 2D/3D maps: test tools on that tile.
+function openTileMenu(info, event) {
+  tooltip.hide();
+  const { level, x, y } = info;
+  const items = sim.state.itemsAt(level, x, y).length;
+  const actuators = sim.state.actuatorsAt(level, x, y).length;
+  tileMenu.show(event.clientX, event.clientY, `Niveau ${level} (${x}, ${y}) · ${info.type}`, [
+    { label: 'Se téléporter ici (F)', action: () => teleportTo(info) },
+    { label: `Ramasser les objets (${items})`, disabled: !items, action: () => collectItems(info) },
+    { label: `Activer les actuators (${actuators})`, disabled: !actuators, action: () => fireActuators(info) },
+  ]);
+}
+function collectItems({ level, x, y }) {
+  const count = sim.collectAll(level, x, y);
+  showInfo(`${count} objet(s) ramassé(s) dans l’inventaire`);
+}
+function fireActuators({ level, x, y }) {
+  const fired = sim.fireAll(level, x, y);
+  showInfo(fired ? `${fired} actuator(s) activé(s)` : 'Aucun actuator actif (désactivés après usage ?)');
 }
 
 // Click on the wall or door in front of the party (mouse in the view, or Space); on a

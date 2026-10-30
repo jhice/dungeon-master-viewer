@@ -53,6 +53,7 @@ export function createSimulation(dungeon) {
   let party = createParty(dungeon.start);
   let champion;
   let random;
+  let invincible = false; // test option: the champion takes hits but loses no health
   const logic = createLogic(dungeon, state, clock, {
     emit: events.emit,
     party: () => party,
@@ -125,6 +126,7 @@ export function createSimulation(dungeon) {
     const attackId = attackSound(group.type);
     if (attackId) sound(attackId, group);
     if (outcome.result === 'hit') soundLater('wounded', party); // F230: after the attack
+    if (outcome.result === 'hit' && invincible) outcome.damage = 0;
     if (outcome.result === 'hit') champion.health = Math.max(0, champion.health - outcome.damage);
     champion.dead = champion.health === 0;
     events.emit('championHit', { group, ...outcome });
@@ -160,6 +162,7 @@ export function createSimulation(dungeon) {
   // he dies at 0. DM plays the wounded sound only for the attacks of creatures (creatureAttacks).
   function woundChampion(damage, cause) {
     if (champion.dead) return;
+    if (invincible) damage = 0;
     champion.health = Math.max(0, champion.health - damage);
     champion.dead = champion.health === 0;
     events.emit('championHit', { group: null, ...cause, result: 'hit', damage });
@@ -557,6 +560,17 @@ export function createSimulation(dungeon) {
     },
     command,
     teleport,
+    /** Test option: the champion loses no health (creatures, doors, spells, walls). */
+    get invincible() {
+      return invincible;
+    },
+    set invincible(enabled) {
+      invincible = Boolean(enabled);
+    },
+    /** Test tool (map menu): every item lying on a tile, alcoves included, goes into the inventory; returns their number. */
+    collectAll: (level, x, y) => logic.collectAll(party, level, x, y),
+    /** Test tool (map menu): fires every actuator of a tile as triggered; returns how many acted. */
+    fireAll: (level, x, y) => logic.fireAll(level, x, y),
     /** The champion (createChampion(), champion.js): read only for the views. */
     get champion() {
       return champion;

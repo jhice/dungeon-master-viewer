@@ -390,6 +390,33 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
     return true;
   }
 
+  /** Test tool: every item lying on a tile (floor or alcoves of a wall) goes into the inventory, chests with their contents. */
+  function collectAll(p, level, x, y) {
+    const lying = state.itemsAt(level, x, y);
+    const count = lying.length;
+    if (!count) return 0;
+    floorChange(level, x, y, p, p, () => {
+      for (const { kind, index } of lying.splice(0)) {
+        state.inventory.push({ kind, index });
+        if (kind === 'container' && !state.emptiedChests.has(index)) {
+          state.emptiedChests.add(index);
+          for (const content of dungeon.data.containers[index].items ?? []) state.inventory.push({ kind: content.kind, index: content.index });
+        }
+      }
+    });
+    changedItems(level, x, y);
+    changedInventory();
+    return count;
+  }
+
+  /** Test tool: fires every actuator of a tile as triggered, whatever its condition (a hold actuator sends set); returns how many acted. */
+  function fireAll(level, x, y) {
+    firedCount = 0;
+    for (const { index } of [...state.actuatorsAt(level, x, y)]) fire(index, true);
+    clock.flush();
+    return firedCount;
+  }
+
   /** Takes an item of the inventory in hand; the item held before goes back into the inventory. */
   function takeFromInventory(p, i) {
     const item = state.inventory[i];
@@ -580,6 +607,8 @@ export function createLogic(dungeon, state, clock, { emit, party, onOpenedUnderP
       floorChange(to.level, to.x, to.y, from, to);
     },
     clickFront,
+    collectAll,
+    fireAll,
     pickUp,
     drop,
     stow,

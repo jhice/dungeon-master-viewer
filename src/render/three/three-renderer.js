@@ -42,6 +42,7 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
  * @param {object} [options.settings] { levelGap, wallHeight, links, labels }, see DEFAULT_SETTINGS
  * @param {{ items?: boolean, creatures?: boolean, mechanisms?: boolean }} [options.layers] layers shown (default: all)
  * @param {(info: object) => void} [options.onSelect] a tile was clicked (without dragging)
+ * @param {(info: object, event: PointerEvent) => void} [options.onContextMenu] a tile was right-clicked (without panning)
  * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
  * @param {(settings: object) => void} [options.onSettingsChange] settings changed by the renderer itself (key F)
  * @param {(info: object|null) => void} [options.onHover]
@@ -53,7 +54,7 @@ const DISPLAY_MODE_LABELS = { focus: 'niveau courant mis en avant', all: 'tous l
 export function createThreeRenderer(
   container,
   dungeon,
-  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onStepLevel, onSettingsChange, tileAt, contentsAt } = {},
+  { showStates = true, settings: initial, layers: initialLayers, onHover, onInfo, onRequestLevel, onSelect, onContextMenu, onStepLevel, onSettingsChange, tileAt, contentsAt } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...initial };
   const layers = { items: true, creatures: true, mechanisms: true, texts: true, ...initialLayers };
@@ -421,13 +422,14 @@ export function createThreeRenderer(
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
-  // Click = pointer released close to where it was pressed (otherwise it is an orbit drag).
+  // Click = pointer released close to where it was pressed (otherwise it is an orbit drag);
+  // the right button, released without panning, opens the context menu.
   let downAt = null;
   const onPointerDown = (event) => {
-    downAt = event.button === 0 ? [event.clientX, event.clientY] : null;
+    downAt = event.button === 0 || event.button === 2 ? { button: event.button, x: event.clientX, y: event.clientY } : null;
   };
   const onPointerUp = (event) => {
-    if (!downAt || Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) > 4) return;
+    if (!downAt || event.button !== downAt.button || Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y) > 4) return;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
@@ -435,7 +437,10 @@ export function createThreeRenderer(
       group.visible && (mode === 'all' || i === currentLevel) ? meshes.filter((m) => m.isInstancedMesh && m.visible) : [],
     );
     const hit = raycaster.intersectObjects(pickable, false)[0];
-    if (hit) onSelect?.(hit.object.userData.tiles[hit.instanceId]);
+    if (!hit) return;
+    const info = hit.object.userData.tiles[hit.instanceId];
+    if (downAt.button === 0) onSelect?.(info);
+    else onContextMenu?.(info, event);
   };
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
@@ -486,6 +491,7 @@ export function createThreeRenderer(
       applyDisplayMode();
     },
     settingsSchema: SETTINGS_SCHEMA,
+    defaultSettings: { ...DEFAULT_SETTINGS },
     get settings() {
       return { ...settings };
     },
@@ -497,7 +503,7 @@ export function createThreeRenderer(
       camera.position.copy(controls.target).add(offset.setLength(length));
     },
     resetView,
-    keyHint: 'souris : orbite / zoom / clic droit déplacer · M mode',
+    keyHint: 'souris : orbite / zoom / clic droit glissé déplacer · M mode',
     keys: {
       // M (not F: F teleports the party to the selected tile, see main.js).
       m: () => {

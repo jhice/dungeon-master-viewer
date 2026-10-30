@@ -26,6 +26,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * @param {{ items?: boolean, creatures?: boolean, mechanisms?: boolean }} [options.layers] layers shown (default: all)
  * @param {(info: object|null) => void} [options.onHover] hovered tile, or null when leaving the grid
  * @param {(info: object) => void} [options.onSelect] a tile was clicked
+ * @param {(info: object, event: MouseEvent) => void} [options.onContextMenu] a tile was right-clicked
  * @param {(to: {level,x,y}) => void} [options.onFollow] a cross-level link label was clicked
  * @param {(delta: number) => void} [options.onStepLevel] Shift + wheel: +1 = level below, -1 = level above
  * @param {(level, x, y) => object} [options.tileAt] tile source (default: the dungeon; main.js passes the simulation state)
@@ -34,7 +35,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export function createDomRenderer(
   container,
   dungeon,
-  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onFollow, onStepLevel, tileAt = (l, x, y) => dungeon.tileAt(l, x, y), contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) } = {},
+  { frame = 'global', showStates = true, layers = {}, onHover, onSelect, onContextMenu, onFollow, onStepLevel, tileAt = (l, x, y) => dungeon.tileAt(l, x, y), contentsAt = (l, x, y) => tileContents(dungeon, l, x, y) } = {},
 ) {
   const grid = document.createElement('div');
   grid.className = 'dom-view';
@@ -255,7 +256,14 @@ export function createDomRenderer(
     const info = infoOf(event.target);
     if (info) onSelect?.(info);
   }
+  function onMenu(event) {
+    const info = infoOf(event.target);
+    if (!info || !onContextMenu) return;
+    event.preventDefault();
+    onContextMenu(info, event);
+  }
   const onLeave = () => onHover?.(null);
+  grid.addEventListener('contextmenu', onMenu);
   grid.addEventListener('pointerover', onPointer);
   grid.addEventListener('pointerleave', onLeave);
   grid.addEventListener('click', onClick);
@@ -315,6 +323,7 @@ export function createDomRenderer(
       grid.removeEventListener('pointerover', onPointer);
       grid.removeEventListener('pointerleave', onLeave);
       grid.removeEventListener('click', onClick);
+      grid.removeEventListener('contextmenu', onMenu);
       unbindShiftWheel();
       frameEl.remove();
     },
