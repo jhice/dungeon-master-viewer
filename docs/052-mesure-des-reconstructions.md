@@ -61,10 +61,20 @@ Autres mesures :
 
 - Aujourd'hui, chaque cran de porte, chaque objet ramassé ou posé, chaque levier bloque la page environ 100 ms. Une porte qui s'ouvre ou se ferme le fait 4 fois de suite, alors qu'un tick dure 220 ms (doc 047).
 - **Correctif simple, à faire d'abord :** garder les programmes de shaders en vie entre deux builds.
-  - Soit libérer l'ancien niveau après le premier rendu du nouveau (mesuré ci-dessus).
-  - Soit réutiliser les matériaux d'un build à l'autre, ce qui est plus propre et évite aussi de recréer les matériaux.
+  - Soit libérer l'ancien niveau après le premier rendu du nouveau (mesuré ci-dessus). **C'est la solution retenue (§ 7).**
+  - Soit réutiliser les matériaux d'un build à l'autre, ce qui est plus propre mais touche `level-meshes.js`, `fp-decor.js` et le plafond.
 - **Ensuite**, une reconstruction coûte quelques ms. Les mises à jour ciblées (portes, objets, instances dormantes) ne gagneraient plus que 2 à 6 ms par changement : elles ne sont pas nécessaires pour l'instant. Regrouper les `updateTile` par frame reste utile quand plusieurs portes bougent dans le même tick.
 
 ## 6. Observation annexe
 
 - Au démarrage avec un profil vide et la 3D sélectionnée, `openGame()` peut finir avant `mountRenderer()`, qui n'est pas attendu (`main.js`, dernières lignes). `updateHint()` lit alors `renderer.keyHint` alors que `renderer` vaut `null` : exception, et `showParty()` n'est pas appelé. C'est une course rare, non corrigée ici.
+
+## 7. Correctif : libération différée
+
+- Dans `fp-renderer.js`, `clear()` retire l'ancien niveau de la scène et le met dans `retired`. `render()` le libère juste après avoir dessiné le nouveau, qui tient alors les programmes de shaders. `dispose()` libère aussi ce qui reste.
+- Toute reconstruction est suivie d'un rendu (`setParty`, `updateTile`), donc un niveau retiré ne reste en mémoire que le temps d'un build.
+- **Mesuré sur le code corrigé** (GPU, mêmes conditions qu'au § 3) :
+  - reconstruction d'un niveau : 1,4 à 6,5 ms (médianes), au plus 8,8 ms ;
+  - changement de niveau : 4 à 37 ms ;
+  - `sim.reset()` : 38 ms.
+- **Pas de fuite :** après 100 reconstructions de suite, `renderer.info` compte toujours 7 programmes, 64 géométries et 19 textures.

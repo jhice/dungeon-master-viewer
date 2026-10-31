@@ -214,17 +214,28 @@ export function createFirstPersonRenderer(
     occlusion.setMasks(lightMasks(map.width, map.height, opaque, lights.sources()), map.width, map.height);
   }
 
+  // The old level leaves the scene at once, but is disposed only after the next render (docs/052):
+  // Three.js destroys a shader program when its last material is disposed, and the new level,
+  // with the same materials, would compile them all again (about 100 ms per rebuild).
+  let retired = []; // built levels out of the scene, disposed by the next render
   function clear() {
     if (!built) return;
     scene.remove(built.group);
-    disposeLevelMeshes(built.meshes);
-    disposeLevelMeshes(built.ceiling);
-    // Decor textures stay in the decor's cache.
-    for (const mesh of built.decorMeshes) {
-      mesh.geometry.dispose();
-      mesh.material.dispose();
-    }
+    retired.push(built);
     built = null;
+  }
+
+  function disposeRetired() {
+    for (const old of retired) {
+      disposeLevelMeshes(old.meshes);
+      disposeLevelMeshes(old.ceiling);
+      // Decor textures stay in the decor's cache.
+      for (const mesh of old.decorMeshes) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
+    }
+    retired = [];
   }
 
   // Items in flight: a small cube each, at the centre of its sub-tile, at hand height.
@@ -273,6 +284,7 @@ export function createFirstPersonRenderer(
   function render() {
     if (occlusion.enabled && masksStale && built) updateMasks();
     renderer.render(scene, camera);
+    if (retired.length) disposeRetired(); // the new level holds the shader programs now
   }
 
   function resize() {
@@ -442,6 +454,7 @@ export function createFirstPersonRenderer(
       renderer.domElement.removeEventListener('pointerleave', onLeave);
       tooltip.remove();
       clear();
+      disposeRetired();
       occlusion.dispose();
       decor.dispose();
       for (const texture of [...Object.values(textures), ...Object.values(ceilingTextures)]) texture.dispose();
