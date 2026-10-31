@@ -67,7 +67,9 @@ Autres mesures :
 
 ## 6. Observation annexe
 
-- Au démarrage avec un profil vide et la 3D sélectionnée, `openGame()` peut finir avant `mountRenderer()`, qui n'est pas attendu (`main.js`, dernières lignes). `updateHint()` lit alors `renderer.keyHint` alors que `renderer` vaut `null` : exception, et `showParty()` n'est pas appelé. C'est une course rare, non corrigée ici.
+- Au démarrage avec un profil vide et la 3D sélectionnée, `openGame()` peut finir avant `mountRenderer()`, qui n'est pas attendu (`main.js`, dernières lignes). `updateHint()` lit alors `renderer.keyHint` alors que `renderer` vaut `null` : exception, et `showParty()` n'est pas appelé. C'est une course rare.
+- **Corrigé :** `renderer` vaut `null` pendant chaque remontage (démarrage, `R`, repère, reset, valeurs par défaut), pas seulement au démarrage. `updateHint()` ne fait donc rien tant qu'il n'y a pas de renderer : `mountRenderer()` l'appelle une fois le renderer prêt, puis place le groupe. `showParty()` était déjà protégée.
+- **Vérification :** quatre démarrages à profil vide, avec la 3D et le jeu ouvert, s'ouvrent sans erreur. La course ne s'est pas reproduite pendant ces essais, ni avec ni sans le correctif, car elle dépend de l'ordre de chargement des modules. Elle avait été observée une fois, lors de la première mesure.
 
 ## 7. Correctif : libération différée
 

@@ -188,6 +188,7 @@ async function mountRenderer() {
 }
 
 function updateHint() {
+  if (!renderer) return; // being mounted: mountRenderer() writes the hint once it is ready
   const own = renderer.keyHint ?? 'G repère · +/− zoom · 0 ajuster';
   hint.textContent = `${LEVEL_HINT[game ? 'game' : 'viewer']} · ${BASE_HINT} · ${own}`;
 }
@@ -691,7 +692,7 @@ function closeGame() {
   prefs.playing = false;
   savePreferences(prefs);
   renderer?.setParty?.(null);
-  if (renderer) updateHint();
+  updateHint();
 }
 
 // F: the party jumps to the selected tile (to test a place directly), facing unchanged.
